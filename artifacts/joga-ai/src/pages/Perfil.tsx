@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Share2, TrendingUp, ChevronRight, Shield, LogOut, Link2 } from "lucide-react";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link } from "wouter";
@@ -139,6 +139,11 @@ export default function Perfil() {
   const userId = useUserId();
   const { profile, refresh, needsSetup } = useUserProfile();
   const [showSetup, setShowSetup] = useState(false);
+  const [setupFinished, setSetupFinished] = useState(false);
+
+  useEffect(() => {
+    setSetupFinished(profile.profileComplete);
+  }, [userId, profile.profileComplete]);
 
   const player = profileToPlayerCard(profile);
 
@@ -158,14 +163,52 @@ export default function Perfil() {
   return (
     <JogaPage theme="dark" padded={false} className="pb-28">
       <ProfileSetupDialog
-        open={showSetup || needsSetup}
-        onOpenChange={setShowSetup}
+        open={!setupFinished && (showSetup || needsSetup)}
+        onOpenChange={(next) => {
+          setShowSetup(next);
+          if (!next && profile.profileComplete) setSetupFinished(true);
+        }}
         dismissible={profile.profileComplete}
         profile={profile}
-        onComplete={() => void refresh()}
+        onComplete={() => {
+          setSetupFinished(true);
+          setShowSetup(false);
+          void refresh();
+        }}
       />
 
-      {!authLoading && !isLinked && (
+      {!authLoading && !isLinked && !profile.profileComplete && (
+        <div className="px-4 pt-4">
+          <JogaCard
+            variant="arena"
+            padding="md"
+            className="border-emerald-400/25 bg-emerald-400/8"
+          >
+            <div className="flex items-start gap-3">
+              <Link2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-[0.18em]">
+                  Monta a tua carta
+                </p>
+                <p className="text-white/70 text-sm mt-1 leading-relaxed">
+                  Escolhe nome, posição e foto abaixo. Conta só é precisa para partidas e comunidades.
+                </p>
+                <JogaButton
+                  variant="primary"
+                  size="sm"
+                  className="mt-3 gap-1.5"
+                  onClick={() => setShowSetup(true)}
+                >
+                  Começar
+                  <ChevronRight className="w-4 h-4" />
+                </JogaButton>
+              </div>
+            </div>
+          </JogaCard>
+        </div>
+      )}
+
+      {!authLoading && !isLinked && profile.profileComplete && (
         <div className="px-4 pt-4">
           <JogaCard
             variant="arena"
@@ -173,18 +216,18 @@ export default function Perfil() {
             className="border-amber-400/25 bg-amber-400/8 joga-tap"
             onClick={() => openAuth({
               mode: "register",
-              title: "Cria a tua conta",
-              description: "Modo visitante: explora o site. Para ter perfil, carta e evolução, regista-te grátis.",
+              title: "Guardar na nuvem",
+              description: "Cria conta para sincronizar a carta e entrar em peladas com a malta.",
             })}
           >
             <div className="flex items-start gap-3">
               <Link2 className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-amber-300 text-[10px] font-bold uppercase tracking-[0.18em]">
-                  Modo visitante
+                  Carta neste dispositivo
                 </p>
                 <p className="text-white/70 text-sm mt-1 leading-relaxed">
-                  Cria conta para montar a tua carta, entrar em comunidades e organizar peladas.
+                  Cria conta quando quiseres guardar na nuvem e jogar online.
                 </p>
                 <JogaButton variant="gold" size="sm" className="mt-3 gap-1.5">
                   Criar conta / Entrar
@@ -229,13 +272,7 @@ export default function Perfil() {
                 variant="ghost"
                 size="sm"
                 className="rounded-full px-3"
-                onClick={() => {
-                  if (!isLinked) {
-                    openAuth({ mode: "register", title: "Cria a tua carta" });
-                    return;
-                  }
-                  setShowSetup(true);
-                }}
+                onClick={() => setShowSetup(true)}
                 data-testid="button-edit-card"
               >
                 Editar carta

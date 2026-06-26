@@ -11,7 +11,7 @@ import {
   logout,
   isAccountLinked,
 } from "@/lib/auth";
-import { markProfileAsLinked } from "@/lib/userRepository";
+import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
 import { isFirebaseConfigured } from "@/lib/firebase";
 
 type AuthState = {
@@ -71,6 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsubscribe = onUserChanged((user) => {
       const linked = user ? isAccountLinked() : false;
+      if (user) {
+        migrateLocalProfileIfNeeded(getLocalUserId(), user.uid);
+      }
       if (user && linked) {
         markProfileAsLinked(user.uid).catch(console.warn);
       }

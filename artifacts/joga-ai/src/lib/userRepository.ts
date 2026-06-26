@@ -62,6 +62,66 @@ function writeLocalProfile(profile: UserProfile) {
   localStorage.setItem(localProfileKey(profile.uid), JSON.stringify(profile));
 }
 
+/** Quando o Firebase liga, o uid muda — traz o perfil local para o uid novo */
+export function migrateLocalProfileIfNeeded(fromUserId: string, toUserId: string): void {
+  if (!fromUserId || !toUserId || fromUserId === toUserId) return;
+
+  const from = readLocalProfile(fromUserId);
+  if (!from) return;
+
+  const to = readLocalProfile(toUserId);
+  const toHasData =
+    to?.profileComplete ||
+    Boolean(to?.displayName?.trim()) ||
+    Boolean(to?.photoUrl);
+
+  if (toHasData) return;
+
+  writeLocalProfile({ ...from, uid: toUserId });
+}
+
+function mergeProfiles(
+  userId: string,
+  seed: UserProfile,
+  local: UserProfile | null,
+  remote: Partial<UserProfile> | null,
+): UserProfile {
+  const base = remote
+    ? {
+        ...seed,
+        ...remote,
+        uid: userId,
+        profileComplete:
+          remote.profileComplete !== undefined
+            ? Boolean(remote.profileComplete)
+            : Boolean(String(remote.displayName ?? "").trim().length >= 2),
+        seasonStats: remote.seasonStats ?? seed.seasonStats,
+        attributes: remote.attributes ?? seed.attributes,
+        updatedAt: remote.updatedAt ?? new Date().toISOString(),
+      }
+    : local ?? { ...seed, uid: userId };
+
+  // Foto grande fica só no dispositivo — não sobrescrever com remoto vazio
+  if (local?.photoUrl && !base.photoUrl) {
+    base.photoUrl = local.photoUrl;
+  }
+
+  // Perfil completo local ganha se o remoto ainda estiver incompleto
+  if (local?.profileComplete && !base.profileComplete) {
+    return { ...local, uid: userId };
+  }
+
+  if (local?.profileComplete && base.profileComplete) {
+    const localTime = Date.parse(local.updatedAt ?? "") || 0;
+    const remoteTime = Date.parse(base.updatedAt ?? "") || 0;
+    if (localTime >= remoteTime) {
+      return { ...local, uid: userId, photoUrl: local.photoUrl ?? base.photoUrl };
+    }
+  }
+
+  return base;
+}
+
 /** Perfil inicial vazio — sem dados do mock Diogo */
 export function createIncompleteSeedProfile(
   userId: string,
@@ -103,26 +163,19 @@ export async function loadUserProfile(
     const snap = await getDoc(ref);
 
     if (!snap.exists()) {
-      const initial = { ...seed, uid: userId };
-      await setDoc(ref, { ...initial, createdAt: serverTimestamp() });
+      const initial = mergeProfiles(userId, seed, local, null);
+      const { photoUrl, ...forFirestore } = initial;
+      await setDoc(
+        ref,
+        { ...forFirestore, photoUrl: photoUrl && photoUrl.length < 400_000 ? photoUrl : undefined, createdAt: serverTimestamp() },
+        { merge: true },
+      );
       writeLocalProfile(initial);
       return initial;
     }
 
     const data = snap.data() as Partial<UserProfile>;
-    const profile: UserProfile = {
-      ...seed,
-      ...data,
-      uid: userId,
-      profileComplete:
-        data.profileComplete !== undefined
-          ? Boolean(data.profileComplete)
-          : Boolean(String(data.displayName ?? "").trim().length >= 2),
-      seasonStats: data.seasonStats ?? seed.seasonStats,
-      attributes: data.attributes ?? seed.attributes,
-      updatedAt: data.updatedAt ?? new Date().toISOString(),
-    };
-
+    const profile = mergeProfiles(userId, seed, local, data);
     writeLocalProfile(profile);
     return profile;
   } catch (err) {
@@ -167,9 +220,14 @@ export async function completeUserProfile(
   if (isFirebaseConfigured()) {
     try {
       const ref = doc(db, "users", userId);
+      const { photoUrl, ...forFirestore } = updated;
       await setDoc(
         ref,
-        { ...updated, updatedAt: serverTimestamp() },
+        {
+          ...forFirestore,
+          photoUrl: photoUrl && photoUrl.length < 400_000 ? photoUrl : undefined,
+          updatedAt: serverTimestamp(),
+        },
         { merge: true },
       );
     } catch (err) {
@@ -202,8 +260,10 @@ export async function updateUserProfile(
 
   if (isFirebaseConfigured()) {
     try {
+      const { photoUrl, ...forFirestore } = updated;
       await updateDoc(doc(db, "users", userId), {
-        ...updated,
+        ...forFirestore,
+        photoUrl: photoUrl && photoUrl.length < 400_000 ? photoUrl : undefined,
         updatedAt: serverTimestamp(),
       });
     } catch (err) {

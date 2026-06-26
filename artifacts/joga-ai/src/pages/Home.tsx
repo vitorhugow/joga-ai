@@ -16,37 +16,26 @@ const PITCH_SVG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='
 
 const STADIUM_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 320' preserveAspectRatio='xMidYMax meet'%3E%3Cg fill='rgba(0,0,0,0.18)'%3E%3Crect x='0' y='180' width='60' height='140'/%3E%3Crect x='55' y='160' width='50' height='160'/%3E%3Crect x='100' y='145' width='45' height='175'/%3E%3Crect x='140' y='135' width='40' height='185'/%3E%3Crect x='175' y='128' width='35' height='192'/%3E%3Crect x='168' y='60' width='8' height='75'/%3E%3Ccircle cx='172' cy='56' r='12'/%3E%3Crect x='590' y='128' width='35' height='192'/%3E%3Crect x='620' y='135' width='40' height='185'/%3E%3Crect x='655' y='145' width='45' height='175'/%3E%3Crect x='695' y='160' width='50' height='160'/%3E%3Crect x='740' y='180' width='60' height='140'/%3E%3Crect x='624' y='60' width='8' height='75'/%3E%3Ccircle cx='628' cy='56' r='12'/%3E%3Crect x='205' y='240' width='390' height='80'/%3E%3Cellipse cx='400' cy='240' rx='195' ry='30' /%3E%3C/g%3E%3C/svg%3E")`;
 
-function HeroCard({ player, overall, demo = false, onDemoTap }: {
+function HeroCard({ player }: {
   player: ReturnType<typeof profileToPlayerCard>;
-  overall: number;
-  demo?: boolean;
-  onDemoTap?: () => void;
 }) {
-  const inner = (
-    <div
-      className="active:scale-95 transition-transform cursor-pointer"
-      style={{ width: 108, flexShrink: 0 }}
-      onClick={demo ? onDemoTap : undefined}
-      role={demo ? "button" : undefined}
-    >
-      <PlayerCard
-        name={player.name}
-        position={player.position}
-        attributes={player.attributes}
-        shirtNumber={player.shirtNumber}
-        title={player.title}
-        photoUrl={player.photoUrl}
-        size="small"
-        className="w-full! max-w-full!"
-      />
-    </div>
-  );
-
-  if (demo) return <div data-testid="hero-player-card">{inner}</div>;
-
   return (
     <Link href="/perfil" data-testid="hero-player-card">
-      {inner}
+      <div
+        className="active:scale-95 transition-transform cursor-pointer"
+        style={{ width: 108, flexShrink: 0 }}
+      >
+        <PlayerCard
+          name={player.name}
+          position={player.position}
+          attributes={player.attributes}
+          shirtNumber={player.shirtNumber}
+          title={player.title}
+          photoUrl={player.photoUrl}
+          size="small"
+          className="w-full! max-w-full!"
+        />
+      </div>
     </Link>
   );
 }
@@ -87,7 +76,10 @@ export default function Home() {
     attributes: mockData.currentPlayer.attributes,
     seasonStats: mockData.currentPlayer.seasonStats,
   };
-  const player = isLinked ? profileToPlayerCard(profile) : demoPlayer;
+  const player =
+    isLinked || profile.profileComplete
+      ? profileToPlayerCard(profile)
+      : demoPlayer;
   const overall = calculateOverall(player.attributes);
 
   const [communities, setCommunities] = useState<Community[]>([]);
@@ -166,16 +158,7 @@ export default function Home() {
         </div>
 
         <div className="home-feature-card relative flex items-center justify-between gap-3 px-4">
-          <HeroCard
-            player={player}
-            overall={overall}
-            demo={!isLinked}
-            onDemoTap={() => openAuth({
-              mode: "register",
-              title: "Cria a tua carta",
-              description: "Estás em modo visitante. Regista-te para ter a tua carta e evoluir de verdade.",
-            })}
-          />
+          <HeroCard player={player} />
           <div className="flex-1 min-w-0">
             <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Em Destaque</p>
             <h1 className="font-display font-black text-white uppercase leading-none tracking-tight" style={{ fontSize: "1.25rem" }}>{player.name.split(" ")[0]}</h1>
@@ -202,24 +185,48 @@ export default function Home() {
 
       <div className="px-4 space-y-4 pt-4">
 
-        {!authLoading && !isLinked && (
+        {!authLoading && !isLinked && !profile.profileComplete && (
+          <JogaCard
+            variant="arena"
+            padding="md"
+            className="border-emerald-400/25 bg-emerald-400/8"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-[0.18em]">
+                  Experimenta a tua carta
+                </p>
+                <p className="text-white text-sm font-semibold mt-1">
+                  Vai ao Perfil para montar carta e foto — sem conta
+                </p>
+              </div>
+              <Link href="/perfil">
+                <JogaButton variant="primary" size="sm" className="shrink-0 px-4">
+                  Montar carta
+                </JogaButton>
+              </Link>
+            </div>
+          </JogaCard>
+        )}
+
+        {!authLoading && !isLinked && profile.profileComplete && (
           <JogaCard
             variant="arena"
             padding="md"
             className="border-amber-400/25 bg-amber-400/8 joga-tap"
             onClick={() => openAuth({
               mode: "register",
-              title: "Cria a tua conta grátis",
-              description: "Modo visitante: podes explorar o site. Para carta, jogos e comunidades, regista-te.",
+              title: "Guardar na nuvem",
+              description: "A tua carta está neste dispositivo. Cria conta para sincronizar e jogar com a malta.",
             })}
           >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-amber-300 text-[10px] font-bold uppercase tracking-[0.18em]">
-                  Modo visitante
+                  Carta local
                 </p>
                 <p className="text-white text-sm font-semibold mt-1">
-                  Cria conta para montar carta, jogos e comunidades
+                  Cria conta para guardar na nuvem e entrar em partidas
                 </p>
               </div>
               <JogaButton variant="gold" size="sm" className="shrink-0 px-4">

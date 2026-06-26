@@ -52,15 +52,21 @@ export function ProfileSetupDialog({
   const [cropOpen, setCropOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const syncedOnOpenRef = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      syncedOnOpenRef.current = false;
+      return;
+    }
+    if (syncedOnOpenRef.current) return;
+    syncedOnOpenRef.current = true;
     setDisplayName(profile?.displayName ?? "");
     setPosition(profile?.position ?? "AVA");
     setShirtNumber(String(profile?.shirtNumber ?? 10));
     setPhotoUrl(profile?.photoUrl);
     setError("");
-  }, [open, profile]);
+  }, [open, profile?.displayName, profile?.position, profile?.shirtNumber, profile?.photoUrl]);
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];

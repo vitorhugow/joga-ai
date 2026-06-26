@@ -20,6 +20,8 @@ export function useUserProfile() {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    const cached = getCachedProfile(userId);
+    if (cached) setProfile(cached);
     const next = await loadUserProfile(userId, seed);
     setProfile(next);
     return next;

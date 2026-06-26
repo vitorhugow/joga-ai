@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { ProfileSetupDialog } from "./ProfileSetupDialog";
 
-const SKIP_PATHS = ["/entrar"];
+const SKIP_PATHS = ["/entrar", "/demo-carta"];
 
 export function ProfileSetupGate() {
   const [location] = useLocation();

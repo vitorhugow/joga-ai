@@ -1,74 +1,89 @@
 import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
-import { Users, MapPin, Calendar, Trophy, ChevronLeft, Lock } from "lucide-react";
+import { Users, MapPin, ChevronLeft, Lock } from "lucide-react";
 import { Link } from "wouter";
-import { AppHeader } from "@/components/AppHeader";
-import { RankingList } from "@/components/RankingList";
 import { MatchCard } from "@/components/MatchCard";
 import { PlayerMiniCard } from "@/components/PlayerMiniCard";
-import { mockData } from "@/data/mockData";
-import { calculateOverall } from "@/lib/cardUtils";
-import { loadCommunity, loadAvailableMatches, type Community, type MatchListing } from "@/lib/communityRepository";
+import {
+  loadCommunity,
+  loadAvailableMatches,
+  loadCommunityMembers,
+  requestToJoin,
+  getJoinRequestStatus,
+  type Community,
+  type MatchListing,
+  type CommunityMember,
+  type JoinRequestStatus,
+} from "@/lib/communityRepository";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
+import { toast } from "@/hooks/use-toast";
 
 const gameTypeLabel: Record<string, string> = {
-  futsal: "Futsal", fut5: "Fut 5", fut7: "Fut 7", futebol11: "Futebol 11",
+  futsal: "Futsal",
+  fut5: "Fut 5",
+  fut7: "Fut 7",
+  futebol11: "Fut 11",
 };
-
-const communityDetails: Record<string, { description: string; matchType: string }> = {
-  "1": { description: "A maior comunidade de futebol de Lisboa. Jogamos todas as semanas no Parque das Nações.", matchType: "fut7" },
-  "2": { description: "Futsal competitivo no Porto. Bem-vindos jogadores de todos os níveis.", matchType: "futsal" },
-  "3": { description: "A comunidade mais desportiva de Lisboa. Futebol 11 no campo das Olaias.", matchType: "futebol11" },
-};
-
-const mockMembers = [
-  { id: "1", name: "Diogo Ferreira", position: "AVA", overall: calculateOverall(mockData.currentPlayer.attributes) },
-  ...mockData.players,
-];
-
-const rankingGolos = [
-  { rank: 1, name: "Bruno Fernandes", position: "MEI", overall: 74, value: 12, valueLabel: "Golos" },
-  { rank: 2, name: "Diogo Ferreira", position: "AVA", overall: calculateOverall(mockData.currentPlayer.attributes), value: 8, valueLabel: "Golos" },
-  { rank: 3, name: "Rui Patricio", position: "AVA", overall: 62, value: 5, valueLabel: "Golos" },
-];
-
-const rankingOverall = [
-  { rank: 1, name: "Bruno Fernandes", position: "MEI", overall: 74, value: 74, valueLabel: "Overall" },
-  { rank: 2, name: "Pedro Santos", position: "MEI", overall: 70, value: 70, valueLabel: "Overall" },
-  { rank: 3, name: "Miguel Costa", position: "GR", overall: 68, value: 68, valueLabel: "Overall" },
-];
-
-const rankingNotas = [
-  { rank: 1, name: "Pedro Santos", position: "MEI", overall: 70, value: "8.5", valueLabel: "Média" },
-  { rank: 2, name: "Bruno Fernandes", position: "MEI", overall: 74, value: "8.2", valueLabel: "Média" },
-  { rank: 3, name: "Diogo Ferreira", position: "AVA", overall: calculateOverall(mockData.currentPlayer.attributes), value: "7.8", valueLabel: "Média" },
-];
 
 export default function ComunidadePage() {
   const { requireLinked } = useAuthGate();
+  const { userId, isLinked } = useAuth();
+  const { profile } = useUserProfile();
   const [, params] = useRoute("/comunidades/:id");
-  const [activeTab, setActiveTab] = useState<"partidas" | "rankings" | "membros">("partidas");
-  const id = params?.id || "1";
+  const [activeTab, setActiveTab] = useState<"partidas" | "membros">("partidas");
+  const id = params?.id || "";
 
-  const fallbackCommunity = mockData.communities.find((c) => c.id === id) || mockData.communities[0];
-  const [community, setCommunity] = useState<Community>(() => fallbackCommunity as Community);
-  const [matches, setMatches] = useState<MatchListing[]>(() => mockData.availableMatches as MatchListing[]);
+  const [community, setCommunity] = useState<Community | null>(null);
+  const [matches, setMatches] = useState<MatchListing[]>([]);
+  const [members, setMembers] = useState<CommunityMember[]>([]);
+  const [joinStatus, setJoinStatus] = useState<JoinRequestStatus | null>(null);
+  const [joining, setJoining] = useState(false);
 
-  // Hidrata do Firestore em background
   useEffect(() => {
-    loadCommunity(id).then((c) => { if (c) setCommunity(c); });
-    loadAvailableMatches().then(setMatches);
-  }, [id]);
+    if (!id) return;
+    loadCommunity(id, userId).then(setCommunity);
+    loadAvailableMatches().then((all) =>
+      setMatches(all.filter((m) => m.communityId === id)),
+    );
+    loadCommunityMembers(id).then(setMembers);
+    if (userId) getJoinRequestStatus(id, userId).then(setJoinStatus);
+  }, [id, userId]);
 
-  const details = communityDetails[id] || communityDetails["1"];
-  const isPrivate = Boolean(community.isPrivate);
-  const isMember = community.isMember !== false;
-  const hasAccess = !isPrivate || isMember;
+  if (!community) {
+    return (
+      <JogaPage theme="dark" className="py-10 text-center">
+        <p className="text-white/50">A carregar comunidade…</p>
+      </JogaPage>
+    );
+  }
+
+  const isMember = community.isMember;
+  const hasAccess = !community.isPrivate || isMember;
+  const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
+
+  async function handleJoin() {
+    if (!requireLinked({ mode: "register", title: "Cria conta para entrar na comunidade" })) {
+      return;
+    }
+    if (isMember || joinPending) return;
+
+    setJoining(true);
+    try {
+      await requestToJoin(id, userId, profile.displayName || "Jogador");
+      setJoinStatus("pending");
+      toast({ title: "Pedido enviado", description: "O administrador vai rever o teu pedido." });
+    } catch {
+      toast({ title: "Erro ao pedir entrada", variant: "destructive" });
+    } finally {
+      setJoining(false);
+    }
+  }
 
   const tabs = [
     { key: "partidas", label: "Partidas" },
-    { key: "rankings", label: "Rankings" },
     { key: "membros", label: "Membros" },
   ] as const;
 
@@ -83,12 +98,18 @@ export default function ComunidadePage() {
           />
         )}
         <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
-        <Link href="/comunidades" className="joga-tap absolute top-4 left-4 w-9 h-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/15" data-testid="button-back">
+        <Link
+          href="/comunidades"
+          className="joga-tap absolute top-4 left-4 w-9 h-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/15"
+          data-testid="button-back"
+        >
           <ChevronLeft className="w-5 h-5 text-white" />
         </Link>
         <div className="absolute bottom-4 left-4 right-4">
-          <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">{community.name}</h1>
-          <div className="flex items-center gap-3 mt-1">
+          <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">
+            {community.name}
+          </h1>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
             <div className="flex items-center gap-1 text-white/80 text-xs">
               <MapPin className="w-3 h-3" />
               <span>{community.city}</span>
@@ -105,36 +126,52 @@ export default function ComunidadePage() {
       </div>
 
       <div className="px-4 pt-4 space-y-4">
-        {/* Description */}
-        <p className="text-white/55 text-sm leading-relaxed">{details.description}</p>
+        {!isMember && isLinked && (
+          <JogaButton
+            variant="primary"
+            size="lg"
+            data-testid="button-join-community"
+            disabled={joining || joinPending}
+            onClick={() => void handleJoin()}
+          >
+            {joinPending ? "Pedido pendente" : "Pedir para entrar"}
+          </JogaButton>
+        )}
 
-        {/* Join Button */}
-        <JogaButton
-          variant="primary"
-          size="lg"
-          data-testid="button-join-community"
-          onClick={() => requireLinked({
-            mode: "register",
-            title: "Cria conta para entrar na comunidade",
-            description: "Visitantes podem ver a comunidade. Para pedir entrada, regista-te grátis.",
-          })}
-        >
-          {hasAccess ? "Pedir para Entrar" : "Solicitar aprovação"}
-        </JogaButton>
+        {!isLinked && (
+          <JogaButton
+            variant="primary"
+            size="lg"
+            onClick={() =>
+              requireLinked({
+                mode: "register",
+                title: "Cria conta para entrar na comunidade",
+              })
+            }
+          >
+            Entrar com conta para pedir acesso
+          </JogaButton>
+        )}
 
-        {!hasAccess && (
-          <div className="rounded-2xl p-5 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="private-community-locked">
-            <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)" }}>
+        {community.isPrivate && !hasAccess && (
+          <div
+            className="rounded-2xl p-5 text-center"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+            data-testid="private-community-locked"
+          >
+            <div
+              className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+              style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)" }}
+            >
               <Lock className="w-7 h-7 text-amber-400" />
             </div>
             <h2 className="font-display font-black text-white text-xl">Comunidade Privada</h2>
             <p className="text-sm mt-2" style={{ color: "rgba(255,255,255,0.48)" }}>
-              Envia um pedido de aprovação para veres jogos internos, rankings e estatísticas desta comunidade.
+              O teu pedido precisa de aprovação para ver partidas e membros.
             </p>
           </div>
         )}
 
-        {/* Tabs */}
         <div className="flex gap-2 flex-wrap" style={{ display: hasAccess ? "flex" : "none" }}>
           {tabs.map((tab) => (
             <JogaChip
@@ -147,30 +184,32 @@ export default function ComunidadePage() {
           ))}
         </div>
 
-        {/* Tab Content */}
         {hasAccess && activeTab === "partidas" && (
           <div className="space-y-3">
-            {matches.map((m) => (
-              <MatchCard key={m.id} {...m} returnTo={`/comunidades/${id}`} />
-            ))}
-          </div>
-        )}
-
-        {hasAccess && activeTab === "rankings" && (
-          <div className="space-y-4">
-            <RankingList title="Top Overall" entries={rankingOverall} />
-            <RankingList title="Artilheiros" entries={rankingGolos} />
-            <RankingList title="Melhores Notas" entries={rankingNotas} />
+            {matches.length === 0 ? (
+              <p className="text-white/40 text-sm text-center py-8">Sem partidas nesta comunidade.</p>
+            ) : (
+              matches.map((m) => <MatchCard key={m.id} {...m} returnTo={`/comunidades/${id}`} />)
+            )}
           </div>
         )}
 
         {hasAccess && activeTab === "membros" && (
           <div className="space-y-3">
-            {mockMembers.map((m) => (
-              <JogaCard key={m.id} variant="arena">
-                <PlayerMiniCard name={m.name} position={m.position} overall={m.overall} />
-              </JogaCard>
-            ))}
+            {members.length === 0 ? (
+              <p className="text-white/40 text-sm text-center py-8">Sem membros listados.</p>
+            ) : (
+              members.map((m) => (
+                <JogaCard key={m.userId} variant="arena">
+                  <PlayerMiniCard
+                    name={m.displayName}
+                    position={m.role === "admin" ? "ADM" : "MEM"}
+                    overall={0}
+                    subtitle={m.role === "admin" ? "Administrador" : "Membro"}
+                  />
+                </JogaCard>
+              ))
+            )}
           </div>
         )}
       </div>

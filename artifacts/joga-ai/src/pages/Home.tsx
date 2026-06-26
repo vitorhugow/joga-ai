@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { profileToPlayerCard } from "@/lib/userRepository";
-import { mockData } from "@/data/mockData";
+import { toast } from "@/hooks/use-toast";
 import { PlayerCard } from "@/components/PlayerCard";
 import { JogaLogo } from "@/components/brand";
 import { JogaCard, JogaChip, JogaPage, JogaButton } from "@/components/joga";
@@ -64,22 +64,10 @@ function CommunityPill({ c }: { c: { id: string; name: string; memberCount: numb
 }
 
 export default function Home() {
-  const { isLinked, loading: authLoading } = useAuth();
+  const { isLinked, loading: authLoading, userId } = useAuth();
   const { openAuth, requireLinked } = useAuthGate();
   const { profile, needsSetup } = useUserProfile();
-  const demoPlayer = {
-    name: mockData.currentPlayer.name,
-    position: mockData.currentPlayer.position,
-    shirtNumber: mockData.currentPlayer.shirtNumber,
-    title: mockData.currentPlayer.title,
-    photoUrl: undefined as string | undefined,
-    attributes: mockData.currentPlayer.attributes,
-    seasonStats: mockData.currentPlayer.seasonStats,
-  };
-  const player =
-    isLinked || profile.profileComplete
-      ? profileToPlayerCard(profile)
-      : demoPlayer;
+  const player = profileToPlayerCard(profile);
   const overall = calculateOverall(player.attributes);
 
   const [communities, setCommunities] = useState<Community[]>([]);
@@ -87,11 +75,11 @@ export default function Home() {
 
   // Hidrata comunidades e partidas do Firestore em background
   useEffect(() => {
-    loadCommunities().then(setCommunities);
+    loadCommunities(userId).then(setCommunities);
     loadAvailableMatches().then((matches) => {
       setAvailable(matches.filter((m) => m.spotsRemaining !== "Lotado"));
     });
-  }, []);
+  }, [userId]);
 
   const [rankingTab, setRankingTab] = useState<"overall" | "notas" | "golos">("overall");
 
@@ -102,24 +90,15 @@ export default function Home() {
   ] as const;
 
   const rankingSets = {
-    overall: [
-      { rank: 1, name: "Bruno Fernandes", position: "MEI", value: 74, isMe: false },
-      { rank: 2, name: "Pedro Santos", position: "MEI", value: 70, isMe: false },
-      { rank: 3, name: "Miguel Costa", position: "GR", value: 68, isMe: false },
-      { rank: 4, name: player.name, position: player.position, value: overall, isMe: true },
-    ],
-    notas: [
-      { rank: 1, name: "Pedro Santos", position: "MEI", value: 8.6, isMe: false },
-      { rank: 2, name: "Bruno Fernandes", position: "MEI", value: 8.3, isMe: false },
-      { rank: 3, name: player.name, position: player.position, value: 7.9, isMe: true },
-      { rank: 4, name: "Miguel Costa", position: "GR", value: 7.5, isMe: false },
-    ],
-    golos: [
-      { rank: 1, name: "Bruno Fernandes", position: "MEI", value: 12, isMe: false },
-      { rank: 2, name: player.name, position: player.position, value: player.seasonStats.goals, isMe: true },
-      { rank: 3, name: "Rui Patrício", position: "AVA", value: 5, isMe: false },
-      { rank: 4, name: "Pedro Santos", position: "MEI", value: 3, isMe: false },
-    ],
+    overall: profile.profileComplete
+      ? [{ rank: 1, name: player.name, position: player.position, value: overall, isMe: true }]
+      : [],
+    notas: profile.profileComplete && profile.seasonStats.matches > 0
+      ? [{ rank: 1, name: player.name, position: player.position, value: "—", isMe: true }]
+      : [],
+    golos: profile.profileComplete && profile.seasonStats.goals > 0
+      ? [{ rank: 1, name: player.name, position: player.position, value: player.seasonStats.goals, isMe: true }]
+      : [],
   };
 
   const ranking = rankingSets[rankingTab];
@@ -145,7 +124,12 @@ export default function Home() {
         <div className="relative flex items-center justify-between px-5 pt-5 pb-4">
           <JogaLogo variant="full" size="md" className="max-w-[180px]" />
           <div className="flex items-center gap-2">
-            <button className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.1)" }}>
+            <button
+              type="button"
+              className="w-9 h-9 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(255,255,255,0.1)" }}
+              onClick={() => toast({ title: "Em breve", description: "Notificações chegam numa próxima versão." })}
+            >
               <Bell className="w-4 h-4 text-white" />
             </button>
             <Link href="/premium">
@@ -335,7 +319,7 @@ export default function Home() {
             </h2>
             <Link href="/comunidades"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todas <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-1 -mx-4 px-4">
+          <div className="flex gap-6 overflow-x-auto pb-1 -mx-4 px-4">
             {communities.map((c) => <CommunityPill key={c.id} c={c} />)}
             <Link href="/comunidades">
               <div className="shrink-0 flex flex-col items-center gap-2 active:scale-95 transition-transform">
@@ -421,7 +405,11 @@ export default function Home() {
               ))}
             </div>
             <div>
-              {ranking.map((r, idx) => (
+              {ranking.length === 0 ? (
+                <p className="px-4 py-6 text-center text-white/40 text-sm">
+                  Ainda não há ranking — joga peladas para apareceres aqui.
+                </p>
+              ) : ranking.map((r, idx) => (
                 <div
                   key={r.rank}
                   className="px-4 py-3 flex items-center gap-3"

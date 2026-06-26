@@ -3,30 +3,20 @@ import { Share2, TrendingUp, ChevronRight, Shield, LogOut, Link2 } from "lucide-
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
-import { mockData } from "@/data/mockData";
-import { calculateOverall } from "@/lib/cardUtils";
 import { profileToPlayerCard } from "@/lib/userRepository";
+import { loadMyCommunities, type Community } from "@/lib/communityRepository";
+import { calculateOverall } from "@/lib/cardUtils";
 import { useUserId, useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
+import { toast } from "@/hooks/use-toast";
 
 /* ─── Pitch SVG texture ─── */
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
-const badges = [
-  { id: "1", name: "Artilheiro",  icon: "⚽", rarity: "gold",   desc: "5 golos"         },
-  { id: "2", name: "MVP",         icon: "🏆", rarity: "gold",   desc: "Melhor em campo" },
-  { id: "3", name: "Fiel",        icon: "🎖️",  rarity: "silver", desc: "12 presenças"    },
-  { id: "4", name: "Playmaker",   icon: "🎯", rarity: "silver", desc: "3 assists"       },
-  { id: "5", name: "Regular",     icon: "📅", rarity: "bronze", desc: "10 jogos"        },
-];
-
-const pastCards = [
-  { season: "2024/25", overall: 63, position: "AVA", current: true  },
-  { season: "2023/24", overall: 58, position: "AVA", current: false },
-  { season: "2022/23", overall: 55, position: "AVA", current: false },
-];
+type BadgeItem = { id: string; name: string; icon: string; rarity: "gold" | "silver" | "bronze"; desc: string };
+type PastCardItem = { season: string; overall: number; position: string; current: boolean };
 
 /* ─── Stat tile ─── */
 function StatTile({ icon, label, value, accent }: {
@@ -71,7 +61,7 @@ function AttrBar({ label, value }: { label: string; value: number }) {
 }
 
 /* ─── Badge hex ─── */
-function BadgeTile({ b }: { b: typeof badges[0] }) {
+function BadgeTile({ b }: { b: BadgeItem }) {
   const { grad, glow, label } =
     b.rarity === "gold"
       ? { grad: "linear-gradient(135deg, #fef3c7, #fbbf24, #d97706)", glow: "rgba(251,191,36,0.3)", label: "Ouro" }
@@ -103,7 +93,7 @@ function BadgeTile({ b }: { b: typeof badges[0] }) {
 }
 
 /* ─── Past card mini ─── */
-function MiniEpoca({ card }: { card: typeof pastCards[0] }) {
+function MiniEpoca({ card }: { card: PastCardItem }) {
   const accent = card.position === "DEF" ? "#60a5fa" : card.position === "MEI" ? "#c084fc" : card.position === "GR" ? "#fbbf24" : "#4ade80";
   return (
     <div className="flex flex-col items-center gap-2" data-testid={`past-card-${card.season}`}>
@@ -140,16 +130,27 @@ export default function Perfil() {
   const { profile, refresh, needsSetup } = useUserProfile();
   const [showSetup, setShowSetup] = useState(false);
   const [setupFinished, setSetupFinished] = useState(false);
+  const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");
+  const [isCardExpanded, setIsCardExpanded] = useState(false);
+  const [myCommunities, setMyCommunities] = useState<Community[]>([]);
 
   useEffect(() => {
     setSetupFinished(profile.profileComplete);
   }, [userId, profile.profileComplete]);
 
+  useEffect(() => {
+    if (!userId) return;
+    loadMyCommunities(userId).then(setMyCommunities);
+  }, [userId]);
+
   const player = profileToPlayerCard(profile);
 
   const overall = calculateOverall(player.attributes);
-  const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");
-  const [isCardExpanded, setIsCardExpanded] = useState(false);
+
+  const badges: BadgeItem[] = [];
+  const pastCards: PastCardItem[] = profile.profileComplete
+    ? [{ season: "Atual", overall, position: player.position, current: true }]
+    : [];
 
   const attrs = [
     { label: "Ritmo",       value: player.attributes.ritmo },
@@ -160,10 +161,33 @@ export default function Perfil() {
     { label: "Defesa",      value: player.attributes.defesa },
   ];
 
+  async function shareCard() {
+    const url = `${window.location.origin}/perfil`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Carta ${player.name} — Joga AI`,
+          text: `Vê a minha carta no Joga AI (OVR ${overall})`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast({ title: "Link copiado!", description: "Cola e partilha com a malta." });
+      }
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      toast({
+        title: "Não foi possível partilhar",
+        description: "Tenta copiar o link manualmente.",
+        variant: "destructive",
+      });
+    }
+  }
+
   return (
     <JogaPage theme="dark" padded={false} className="pb-28">
       <ProfileSetupDialog
-        open={!setupFinished && (showSetup || needsSetup)}
+        open={showSetup || (!setupFinished && needsSetup)}
         onOpenChange={(next) => {
           setShowSetup(next);
           if (!next && profile.profileComplete) setSetupFinished(true);
@@ -282,6 +306,7 @@ export default function Perfil() {
                 size="sm"
                 className="rounded-full px-4"
                 data-testid="button-share-card"
+                onClick={() => void shareCard()}
               >
                 <Share2 className="w-3.5 h-3.5" />
                 Partilhar
@@ -416,26 +441,29 @@ export default function Perfil() {
 
           {activeTab === "estatisticas" && (
             <div className="px-4 py-4">
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { icon: "⭐", label: "Média/Jogo",  v: "7.4"  },
-                  { icon: "📅", label: "Presenças",   v: "12/14"},
-                  { icon: "🏅", label: "Melhor nota", v: "9.5"  },
-                  { icon: "🏆", label: "MVPs",        v: String(player.seasonStats.mvp) },
-                  { icon: "🎯", label: "Hat-tricks",  v: "1"    },
-                  { icon: "⚠️", label: "Faltas",      v: "6"    },
-                ].map((s) => (
-                  <div key={s.label} className="rounded-xl p-3 flex flex-col items-center gap-1.5 text-center border border-white/8" style={{ background: "rgba(255,255,255,0.04)" }}>
-                    <span className="text-xl">{s.icon}</span>
-                    <p className="font-display font-black text-white text-xl leading-none">{s.v}</p>
-                    <p className="text-white/35 text-[9px] font-semibold uppercase tracking-wide leading-tight">{s.label}</p>
-                  </div>
-                ))}
-              </div>
+              {player.seasonStats.matches === 0 ? (
+                <p className="text-white/40 text-sm text-center py-6">Sem estatísticas ainda. Joga a tua primeira pelada!</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { icon: "⚽", label: "Golos", v: String(player.seasonStats.goals) },
+                    { icon: "🎯", label: "Assist.", v: String(player.seasonStats.assists) },
+                    { icon: "📅", label: "Jogos", v: String(player.seasonStats.matches) },
+                    { icon: "🏆", label: "MVPs", v: String(player.seasonStats.mvp) },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl p-3 flex flex-col items-center gap-1.5 text-center border border-white/8" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      <span className="text-xl">{s.icon}</span>
+                      <p className="font-display font-black text-white text-xl leading-none">{s.v}</p>
+                      <p className="text-white/35 text-[9px] font-semibold uppercase tracking-wide leading-tight">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </JogaCard>
 
+        {badges.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-black text-white text-lg">Distintivos</h2>
@@ -445,18 +473,24 @@ export default function Perfil() {
             {badges.map((b) => <BadgeTile key={b.id} b={b} />)}
           </div>
         </div>
+        )}
 
+        {pastCards.length > 0 && (
         <div>
           <h2 className="font-display font-black text-white text-lg mb-3">Épocas</h2>
           <div className="flex gap-4 overflow-x-auto pb-1">
             {pastCards.map((card) => <MiniEpoca key={card.season} card={card} />)}
           </div>
         </div>
+        )}
 
         <div>
           <h2 className="font-display font-black text-white text-lg mb-3">Comunidades</h2>
+          {myCommunities.length === 0 ? (
+            <p className="text-white/40 text-sm">Ainda não pertences a nenhuma comunidade.</p>
+          ) : (
           <div className="flex gap-2.5 overflow-x-auto pb-1">
-            {mockData.communities.slice(0, 3).map((c) => (
+            {myCommunities.slice(0, 6).map((c) => (
               <Link key={c.id} href={`/comunidades/${c.id}`} className="joga-tap shrink-0">
                 <JogaCard variant="arena" className="flex items-center gap-2.5 py-3!" data-testid={`community-tag-${c.id}`}>
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 joga-btn-primary">
@@ -470,6 +504,7 @@ export default function Perfil() {
               </Link>
             ))}
           </div>
+          )}
         </div>
 
         {/* ════════════════════════════════════

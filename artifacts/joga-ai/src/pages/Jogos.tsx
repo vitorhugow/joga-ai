@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
 import { loadAvailableMatches, type MatchListing } from "@/lib/communityRepository";
 import { useAuthGate } from "@/contexts/AuthGateContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaChip, JogaPage } from "@/components/joga";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -15,6 +16,7 @@ const typeLabels: Record<string, string> = { todos: "Todos", futsal: "Futsal", f
 
 export default function Jogos() {
   const { requireLinked } = useAuthGate();
+  const { isLinked } = useAuth();
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("todas");
   const [typeFilter, setTypeFilter] = useState("todos");
@@ -47,11 +49,12 @@ export default function Jogos() {
             <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.22em]">Descobre</p>
             <h1 className="font-display font-black text-white text-2xl tracking-tight leading-tight">Jogos</h1>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (requireLinked({ mode: "register", title: "Cria conta para organizar partidas" })) {
-                window.location.href = "/criar-partida";
+          <Link
+            href={isLinked ? "/criar-partida" : "#"}
+            onClick={(e) => {
+              if (!isLinked) {
+                e.preventDefault();
+                requireLinked({ mode: "register", title: "Cria conta para organizar partidas" });
               }
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-2xl active:scale-95 transition-transform"
@@ -60,7 +63,7 @@ export default function Jogos() {
           >
             <Plus className="w-4 h-4 text-emerald-400" />
             <span className="text-emerald-400 text-sm font-bold">Criar</span>
-          </button>
+          </Link>
         </div>
 
         <div className="relative px-5 pb-10">
@@ -121,14 +124,22 @@ export default function Jogos() {
           {available.length === 0 ? (
             <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <p className="text-white/50 text-sm">Nenhum jogo encontrado.</p>
-              <JogaButton
-                variant="primary"
-                size="sm"
-                className="mt-3"
-                onClick={() => requireLinked({ mode: "register", title: "Cria conta para organizar partidas" })}
-              >
-                Criar partida
-              </JogaButton>
+              {isLinked ? (
+                <Link href="/criar-partida" className="inline-block mt-3">
+                  <JogaButton variant="primary" size="sm">
+                    Criar partida
+                  </JogaButton>
+                </Link>
+              ) : (
+                <JogaButton
+                  variant="primary"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => requireLinked({ mode: "register", title: "Cria conta para organizar partidas" })}
+                >
+                  Criar partida
+                </JogaButton>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Shield, Trophy } from "lucide-react";
-import { mockData } from "@/data/mockData";
+import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
 import { loadEvolutionHistory, type EvolutionRecord } from "@/lib/evolutionStorage";
 import { loadEvolutionFromFirestore } from "@/lib/evolutionRepository";
@@ -22,13 +22,13 @@ function formatDate(iso: string) {
 }
 
 export default function Evolucao() {
-  const me = mockData.currentPlayer;
+  const { userId: authUserId } = useAuth();
   const [history, setHistory] = useState<EvolutionRecord[]>(() => loadEvolutionHistory());
   const [pendingMatch, setPendingMatch] = useState(() => loadPostMatch());
-  const userId = currentMatchUserId();
+  const matchUserId = currentMatchUserId();
   const pendingMatchId = resolveMatchId({ storedMatchId: pendingMatch?.matchId });
   const pendingExpired = isPostMatchExpired(pendingMatch);
-  const hasVoted = hasUserVotedInSession(userId, pendingMatchId);
+  const hasVoted = hasUserVotedInSession(matchUserId, pendingMatchId);
   const showPendingVote = Boolean(
     pendingMatch &&
       !pendingExpired &&
@@ -37,7 +37,7 @@ export default function Evolucao() {
       pendingMatch.status !== "concluida",
   );
 
-  const latest = history.find((r) => r.playerId === me.id) ?? history[0] ?? null;
+  const latest = history.find((r) => r.playerId === authUserId) ?? history[0] ?? null;
 
   useEffect(() => {
     const refresh = () => setPendingMatch(loadPostMatch());
@@ -51,10 +51,10 @@ export default function Evolucao() {
   }, []);
 
   useEffect(() => {
-    loadEvolutionFromFirestore(userId).then((remote) => {
+    loadEvolutionFromFirestore(authUserId).then((remote) => {
       if (remote.length > 0) setHistory(remote);
     });
-  }, [userId]);
+  }, [authUserId]);
 
   return (
     <JogaPage theme="dark" className="py-5">

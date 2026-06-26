@@ -14,10 +14,16 @@ export function useUserProfile() {
     [userId, isLinked],
   );
 
-  const [profile, setProfile] = useState<UserProfile>(
-    () => getCachedProfile(userId) ?? seed,
+  const [profile, setProfile] = useState<UserProfile>(() =>
+    createIncompleteSeedProfile("", true),
   );
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (authLoading || !userId) return;
+    const cached = getCachedProfile(userId);
+    if (cached) setProfile(cached);
+  }, [authLoading, userId]);
 
   const refresh = useCallback(async () => {
     const cached = getCachedProfile(userId);
@@ -28,7 +34,7 @@ export function useUserProfile() {
   }, [userId, seed]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !userId) return;
     setLoading(true);
     loadUserProfile(userId, seed)
       .then(setProfile)

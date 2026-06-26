@@ -12,8 +12,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { mockData } from "@/data/mockData";
-import { calculateOverall } from "@/lib/cardUtils";
+import { loadMatchFromFirestore } from "@/lib/matchRepository";
+import { loadPreMatch } from "@/lib/preMatchStorage";
 import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
@@ -71,27 +71,6 @@ const posColors: Record<string, string> = {
   MEI: "#c084fc",
   GR: "#fbbf24",
 };
-
-const initialPlayers: Player[] = [
-  { id: "1", name: "Diogo Ferreira", position: "AVA", overall: calculateOverall(mockData.currentPlayer.attributes), paid: true, isMe: true },
-  { id: "2", name: "João Silva", position: "DEF", overall: 65, paid: true },
-  { id: "3", name: "Pedro Santos", position: "MEI", overall: 70, paid: false },
-  { id: "4", name: "Miguel Costa", position: "GR", overall: 68, paid: true },
-  { id: "5", name: "Rui Patrício", position: "AVA", overall: 62, paid: false },
-  { id: "6", name: "Bruno Fernandes", position: "MEI", overall: 74, paid: true },
-  { id: "7", name: "Carlos Sousa", position: "DEF", overall: 60, paid: true },
-  { id: "8", name: "André Lima", position: "MEI", overall: 63, paid: false },
-  { id: "9", name: "Tiago Rocha", position: "DEF", overall: 61, paid: true },
-  { id: "10", name: "Nuno Alves", position: "AVA", overall: 64, paid: true },
-  { id: "11", name: "Fábio Martins", position: "MEI", overall: 66, paid: false },
-];
-
-const communityPlayers: Player[] = [
-  { id: "c1", name: "Gonçalo Pereira", position: "DEF", overall: 58, paid: false },
-  { id: "c2", name: "Márcio Oliveira", position: "MEI", overall: 61, paid: false },
-  { id: "c3", name: "Leandro Gomes", position: "AVA", overall: 64, paid: false },
-  { id: "c4", name: "Samuel Costa", position: "GR", overall: 60, paid: false },
-];
 
 const formations = {
   fut5: {
@@ -306,9 +285,52 @@ export default function PreJogo() {
     setMatchDetails(loadMatchDetails(matchId));
   }, [matchId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateRoster() {
+      const remote = await loadMatchFromFirestore(matchId);
+      const pre = loadPreMatch();
+      const sourcePlayers =
+        remote?.matchId === matchId && remote.players?.length
+          ? remote.players
+          : pre?.players ?? [];
+
+      if (cancelled) return;
+
+      setPlayers(
+        sourcePlayers.map((p) => ({
+          id: p.id,
+          name: p.name,
+          position: p.position,
+          overall: p.overall,
+          paid: p.paid ?? false,
+          isMe: p.isMe,
+          manual: p.manual,
+        })),
+      );
+
+      if (remote?.matchId === matchId) {
+        setGameMode(remote.gameMode ?? "fut5");
+        setTeamCount(remote.teamCount ?? 2);
+        setPlayerTeams(remote.playerTeams ?? {});
+      } else if (pre) {
+        setGameMode(pre.gameMode);
+        setTeamCount(pre.teamCount);
+        setPlayerTeams(pre.playerTeams ?? {});
+        setAssignments(pre.assignments ?? {});
+      }
+    }
+
+    void hydrateRoster();
+    return () => {
+      cancelled = true;
+    };
+  }, [matchId]);
+
   const [gameMode, setGameMode] = useState<GameMode>("fut5");
   const [teamCount, setTeamCount] = useState<2 | 3 | 4>(2);
-  const [players, setPlayers] = useState<Player[]>(initialPlayers);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [manualName, setManualName] = useState("");
   const [showCommunityList, setShowCommunityList] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("teams");
@@ -810,11 +832,7 @@ export default function PreJogo() {
     return list.sort((a, b) => Number(b.paid) - Number(a.paid));
   }, [players, playerTeams, sortMode]);
 
-  const communityPlayersNotInMatch = communityPlayers.filter(
-    (communityPlayer) =>
-      !players.some((player) => player.id === communityPlayer.id) &&
-      communityPlayer.name.toLowerCase().includes(manualName.toLowerCase())
-  );
+  const communityPlayersNotInMatch: Player[] = [];
 
   const totalPaid = players.filter((player) => player.paid).length;
   const benchCount = teamBuckets.BENCH.length;

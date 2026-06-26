@@ -223,7 +223,7 @@ export function ProfileSetupDialog({
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Ex: Diogo Ferreira"
+              placeholder="Ex: O teu nome"
               className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50"
               data-testid="input-setup-name"
               autoFocus

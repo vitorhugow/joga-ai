@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { toast } from "@/hooks/use-toast";
 
 type OpenAuthOptions = {
   mode?: "login" | "register";
@@ -26,6 +27,7 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
   const { isLinked, loading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<OpenAuthOptions>({});
+  const loadingToastShown = useRef(false);
 
   const openAuth = useCallback((opts?: OpenAuthOptions) => {
     setOptions(opts ?? {});
@@ -34,7 +36,19 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
 
   const requireLinked = useCallback(
     (opts?: OpenAuthOptions) => {
-      if (authLoading) return false;
+      if (authLoading) {
+        if (!loadingToastShown.current) {
+          loadingToastShown.current = true;
+          toast({
+            title: "A carregar sessão…",
+            description: "Aguarda um momento e tenta outra vez.",
+          });
+          window.setTimeout(() => {
+            loadingToastShown.current = false;
+          }, 3000);
+        }
+        return false;
+      }
       if (isLinked) return true;
       openAuth(opts);
       return false;

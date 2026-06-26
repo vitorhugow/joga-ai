@@ -11,6 +11,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isCommunityAdmin(communityId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/communities/$(communityId)).data.adminId == request.auth.uid;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId);
@@ -44,7 +49,28 @@ service cloud.firestore {
 
     match /communities/{communityId} {
       allow read: if isSignedIn();
-      allow write: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.adminId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid;
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && (
+          memberId == request.auth.uid
+          || isCommunityAdmin(communityId)
+        );
+        allow update, delete: if isCommunityAdmin(communityId);
+      }
+
+      match /joinRequests/{requestUserId} {
+        allow read: if isSignedIn() && (
+          requestUserId == request.auth.uid
+          || isCommunityAdmin(communityId)
+        );
+        allow create, update: if isSignedIn() && requestUserId == request.auth.uid;
+        allow delete: if false;
+      }
     }
   }
 }

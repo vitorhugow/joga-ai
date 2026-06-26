@@ -20,6 +20,13 @@ const LS_ANON_ID_KEY = "joga-ai-current-user-id-v3";
 
 const googleProvider = new GoogleAuthProvider();
 
+export class AuthAccountSwitchError extends Error {
+  constructor(message = "Esta conta Google já existe. Os dados da sessão anterior podem não transferir.") {
+    super(message);
+    this.name = "AuthAccountSwitchError";
+  }
+}
+
 // ─── Sessão anónima ───────────────────────────────────────────────────────────
 
 /**
@@ -50,12 +57,14 @@ export async function signInWithGoogle(): Promise<UserCredential> {
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
   if (auth.currentUser?.isAnonymous) {
-    // Upgrade preserva o mesmo uid Firebase → perfil e partidas em users/{uid} e matches/*
     try {
       return await linkWithPopup(auth.currentUser, googleProvider);
-    } catch {
-      // Se já existe conta Google, faz login normal
-      return signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? "";
+      if (code === "auth/credential-already-in-use" || code === "auth/email-already-in-use") {
+        throw new AuthAccountSwitchError();
+      }
+      throw err;
     }
   }
 
@@ -100,8 +109,12 @@ export async function loginWithEmail(
     const credential = EmailAuthProvider.credential(email, password);
     try {
       return await linkWithCredential(auth.currentUser, credential);
-    } catch {
-      return signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? "";
+      if (code === "auth/credential-already-in-use" || code === "auth/email-already-in-use") {
+        throw new AuthAccountSwitchError();
+      }
+      throw err;
     }
   }
 
@@ -140,6 +153,24 @@ export async function resetPassword(email: string): Promise<void> {
 export async function logout(): Promise<void> {
   if (!isFirebaseConfigured()) return;
   await signOut(auth);
+  try {
+    await signInAnonymously(auth);
+  } catch (err) {
+    console.warn("[auth] signInAnonymously após logout:", err);
+  }
+}
+
+/** Só usar quando onAuthStateChanged devolver user === null */
+export async function signInAnonymousSession(): Promise<string> {
+  if (!isFirebaseConfigured()) return getLocalUserId();
+  if (auth.currentUser) return auth.currentUser.uid;
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user.uid;
+  } catch (err) {
+    console.warn("[auth] signInAnonymousSession falhou:", err);
+    return getLocalUserId();
+  }
 }
 
 // ─── Helpers síncronos ────────────────────────────────────────────────────────

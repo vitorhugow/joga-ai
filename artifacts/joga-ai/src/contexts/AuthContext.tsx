@@ -1,7 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { User } from "firebase/auth";
 import {
-  ensureAnonymousAuth,
   onUserChanged,
   getLocalUserId,
   signInWithGoogle,
@@ -10,24 +9,18 @@ import {
   resetPassword,
   logout,
   isAccountLinked,
+  signInAnonymousSession,
 } from "@/lib/auth";
 import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
 import { isFirebaseConfigured } from "@/lib/firebase";
 
 type AuthState = {
-  /** uid Firebase ou UUID local */
   userId: string;
-  /** User Firebase (null se não configurado ou offline) */
   firebaseUser: User | null;
-  /** true enquanto a auth está a ser inicializada */
   loading: boolean;
-  /** true se a sessão Firebase está activa */
   isFirebase: boolean;
-  /** true se a conta tem email/Google (não anónima) */
   isLinked: boolean;
-  /** displayName do utilizador */
   displayName: string | null;
-  /** Métodos de autenticação */
   signInWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, name?: string) => Promise<void>;
@@ -49,11 +42,32 @@ const AuthContext = createContext<AuthState>({
   logout: async () => {},
 });
 
+function applyUserState(user: User | null, localUserId: string) {
+  const linked = user ? isAccountLinked() : false;
+  if (user) {
+    migrateLocalProfileIfNeeded(localUserId, user.uid);
+  }
+  if (user && linked) {
+    markProfileAsLinked(user.uid).catch(console.warn);
+  }
+  return {
+    userId: user ? user.uid : localUserId,
+    firebaseUser: user,
+    loading: false,
+    isFirebase: Boolean(user),
+    isLinked: linked,
+    displayName: user?.displayName ?? null,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const localUserIdRef = useRef(getLocalUserId());
+  const bootstrappedRef = useRef(false);
+
   const [state, setState] = useState<Omit<AuthState,
     "signInWithGoogle" | "loginWithEmail" | "registerWithEmail" | "resetPassword" | "logout"
   >>({
-    userId: getLocalUserId(),
+    userId: localUserIdRef.current,
     firebaseUser: null,
     loading: true,
     isFirebase: false,
@@ -63,28 +77,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
-      setState((s) => ({ ...s, loading: false }));
+      setState((s) => ({ ...s, loading: false, userId: localUserIdRef.current }));
       return;
     }
 
-    ensureAnonymousAuth().catch(console.warn);
+    const unsubscribe = onUserChanged(async (user) => {
+      if (!bootstrappedRef.current) {
+        bootstrappedRef.current = true;
+        if (!user) {
+          await signInAnonymousSession();
+          return;
+        }
+      }
 
-    const unsubscribe = onUserChanged((user) => {
-      const linked = user ? isAccountLinked() : false;
-      if (user) {
-        migrateLocalProfileIfNeeded(getLocalUserId(), user.uid);
-      }
-      if (user && linked) {
-        markProfileAsLinked(user.uid).catch(console.warn);
-      }
-      setState({
-        userId: user ? user.uid : getLocalUserId(),
-        firebaseUser: user,
-        loading: false,
-        isFirebase: Boolean(user),
-        isLinked: linked,
-        displayName: user?.displayName ?? null,
-      });
+      setState(applyUserState(user, localUserIdRef.current));
     });
 
     return unsubscribe;
@@ -106,14 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     logout: async () => {
       await logout();
-      setState((s) => ({
-        ...s,
-        userId: getLocalUserId(),
-        firebaseUser: null,
-        isFirebase: false,
-        isLinked: false,
-        displayName: null,
-      }));
     },
   };
 

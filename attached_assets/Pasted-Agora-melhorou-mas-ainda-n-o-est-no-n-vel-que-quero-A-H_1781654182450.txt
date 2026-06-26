@@ -1,0 +1,153 @@
+Agora melhorou, mas ainda não está no nível que quero.
+
+A Home já está num caminho melhor. NÃO mexas na Home agora.
+
+Quero focar apenas na tela de Perfil e principalmente na Carta do Jogador.
+
+IMPORTANTE:
+- Não mexer na lógica.
+- Não mexer em Supabase.
+- Não mexer em navegação.
+- Não mexer na Home.
+- Não criar funcionalidades novas.
+- Trabalhar apenas no visual do Perfil e da Carta.
+
+PROBLEMA ATUAL:
+A tela de Perfil ainda parece incompleta.
+A carta ainda parece um placeholder.
+O boneco branco genérico tira totalmente a sensação premium.
+A carta ainda não parece um item valioso de football game.
+O perfil ainda não parece um modo carreira de jogador.
+
+OBJETIVO:
+Refazer visualmente a Carta do Jogador e melhorar a composição da tela de Perfil para parecer um app mobile real, premium e desportivo.
+
+1. CARTA DO JOGADOR — REFAZER COM MAIS QUALIDADE
+
+Quero que a carta pareça muito mais premium.
+
+A carta atual tem:
+- boneco genérico;
+- fundo simples;
+- pouca profundidade;
+- pouca sensação de item raro;
+- pouca personalidade.
+
+Quero trocar isso por uma carta mais trabalhada, com:
+
+- Moldura premium mais elegante.
+- Fundo com textura de relva/estádio/gradiente desportivo.
+- Brilho subtil.
+- Profundidade.
+- Sombra suave.
+- Acabamento de carta colecionável.
+- Overall grande e muito bem posicionado.
+- Posição bem visível.
+- Bandeira pequena.
+- Nome forte.
+- Atributos bem alinhados.
+- Detalhes dourados/verdes/azuis.
+- Efeito visual de carta rara, mas sem exagero.
+
+Se não houver foto real do jogador, NÃO usar boneco branco genérico.
+Usar um placeholder premium melhor:
+- silhueta de futebolista mais elegante;
+- ou avatar estilizado;
+- ou área de foto com gradiente e ícone discreto;
+- algo que pareça intencional, não provisório.
+
+A carta precisa parecer algo que o jogador queira partilhar no Instagram.
+
+2. COMPOSIÇÃO DA TELA DE PERFIL
+
+A tela de Perfil não pode ser só uma carta gigante e números embaixo.
+
+Quero que pareça uma tela de “modo carreira” ou “perfil de jogador”.
+
+Estrutura desejada:
+
+A. Topo
+- Header com “O Meu Perfil”.
+- Botão Partilhar mais elegante.
+- Fundo superior com textura de relva/campo.
+- Melhor integração da carta com o fundo.
+
+B. Carta
+- Carta centralizada e impactante.
+- Pode ficar um pouco menor se for necessário para caber melhor a tela.
+- O importante é parecer premium, não apenas grande.
+
+C. Mini resumo do jogador
+Logo abaixo ou junto da carta, adicionar uma faixa visual com:
+- Nome: Diogo Ferreira
+- Posição: AVA
+- Título: Matador
+- Overall: 63
+- Temporada atual
+
+D. Cards de estatísticas
+Os cards de Jogos, Golos, Assistências e MVP estão bons, mas podem ficar mais premium.
+Melhorar:
+- sombras;
+- ícones;
+- cores;
+- alinhamento;
+- acabamento visual.
+
+E. Área de atributos
+Melhorar o bloco de atributos.
+Quero que pareça uma secção de game stats:
+- barras mais bonitas;
+- números mais fortes;
+- labels mais organizadas;
+- espaçamento melhor;
+- sensação mais premium.
+
+F. Badges / Distintivos
+Adicionar/mostrar uma secção visual de distintivos no perfil:
+- Regular
+- Matador
+- Playmaker
+- Fair Play
+- MVP
+
+Esses distintivos devem parecer pequenos emblemas colecionáveis, não apenas texto.
+
+G. Botão principal
+Adicionar um botão principal premium:
+“Ver evolução”
+
+O botão deve parecer botão de app real, não botão simples.
+
+3. ESTILO VISUAL
+
+Quero:
+- app claro;
+- desportivo;
+- premium;
+- moderno;
+- estilo videogame de futebol;
+- mais profundidade;
+- mais textura;
+- mais acabamento;
+- menos cara de IA.
+
+Não quero:
+- boneco genérico branco;
+- carta vazia;
+- blocos secos;
+- layout com cara de protótipo;
+- excesso de espaço morto;
+- visual de dashboard.
+
+4. ENTREGA
+
+Refaz apenas:
+- componente da Carta do Jogador;
+- tela de Perfil;
+- cards de stats do Perfil;
+- atributos;
+- badges;
+- botão “Ver evolução”.
+
+Não mexer no resto.

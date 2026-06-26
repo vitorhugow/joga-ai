@@ -1,0 +1,410 @@
+/* Joga AI Player Card — versão limpa e estável */
+
+.joga-new-player-card-wrap {
+  display: inline-flex;
+  flex: 0 0 auto;
+  line-height: 1;
+  filter:
+    drop-shadow(0 24px 42px rgba(0, 0, 0, 0.42))
+    drop-shadow(0 0 28px rgba(245, 190, 65, 0.22));
+}
+
+.joga-new-player-card-wrap--small {
+  width: 104px;
+}
+
+.joga-new-player-card-wrap--profile {
+  width: clamp(340px, 54vw, 470px);
+}
+
+/* Perfil / modal: conteúdo ligeiramente mais alto — stats afastados da borda dourada */
+.joga-new-player-card-wrap--profile .joga-new-card-inner {
+  padding: 11.6% 8.5% 12.8%;
+}
+
+.joga-new-player-card-wrap--profile .joga-new-card-top-mark {
+  top: 4.2%;
+}
+
+.joga-new-player-card-wrap--profile .joga-new-card-header {
+  margin-top: 1.2%;
+}
+
+.joga-new-player-card-wrap--profile .joga-new-card-brand {
+  margin-top: -3.1%;
+}
+
+.joga-new-player-card-wrap--profile .joga-new-card-name {
+  margin-top: 5.9%;
+}
+
+.joga-new-player-card-wrap--profile .joga-new-card-name-line {
+  margin: 4.1% auto 4.5%;
+}
+
+.joga-new-player-card-wrap--profile .joga-new-card-stats {
+  row-gap: 8%;
+  padding-bottom: 1.1%;
+}
+
+.joga-new-player-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 650 / 900;
+  padding: 8px;
+  isolation: isolate;
+  background: linear-gradient(135deg, #ffe786 0%, #bd8321 22%, #fff1a8 42%, #9d650d 65%, #ffd66b 100%);
+  clip-path: polygon(
+    8% 0%,
+    92% 0%,
+    100% 8%,
+    100% 88%,
+    50% 100%,
+    0% 88%,
+    0% 8%
+  );
+  border-radius: 38px 38px 0 0;
+  container-type: inline-size;
+}
+
+.joga-new-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 13% 8.5% 11%;
+  overflow: hidden;
+  color: #f8d66b;
+  background:
+    radial-gradient(circle at 70% 12%, rgba(255, 221, 112, 0.18), transparent 30%),
+    radial-gradient(circle at 15% 22%, rgba(255, 185, 45, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(251, 203, 80, 0.18) 0%, transparent 22%),
+    linear-gradient(180deg, #17150d 0%, #070806 52%, #111006 100%);
+  clip-path: inherit;
+}
+
+.joga-new-card-inner::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  z-index: 0;
+  pointer-events: none;
+  border: 1.5px solid rgba(255, 221, 112, 0.75);
+  clip-path: inherit;
+}
+
+.joga-new-card-inner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, transparent 0 44%, rgba(255,255,255,.12) 47%, transparent 51%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.045) 0 1px, transparent 1px 9px),
+    radial-gradient(circle at 50% 38%, rgba(255, 206, 80, 0.15), transparent 38%);
+  opacity: .68;
+}
+
+.joga-new-card-top-mark {
+  position: absolute;
+  top: 4.7%;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  line-height: 0;
+}
+
+.joga-new-card-top-mark-img {
+  display: block;
+  height: clamp(18px, 6.6cqw, 34px);
+  width: auto;
+  object-fit: contain;
+}
+
+.joga-new-card-header {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 27% 1fr;
+  gap: 3.6%;
+  height: 42%;
+  margin-top: 3%;
+}
+
+.joga-new-card-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5.5%;
+  min-width: 0;
+  padding: 8% 5%;
+  background:
+    linear-gradient(180deg, rgba(255, 210, 86, 0.12), rgba(0, 0, 0, 0.05)),
+    linear-gradient(180deg, rgba(23, 20, 10, 0.9), rgba(8, 8, 5, 0.96));
+  border-right: 1px solid rgba(255, 213, 88, .27);
+}
+
+.joga-new-card-overall {
+  text-align: center;
+}
+
+.joga-new-card-overall strong {
+  display: block;
+  font-family: Oswald, Inter, sans-serif;
+  font-size: clamp(42px, 18cqw, 82px);
+  font-weight: 900;
+  line-height: .8;
+  letter-spacing: -.04em;
+  color: #f9d960;
+}
+
+/* OVR removido de todas as cartas */
+.joga-new-card-overall span {
+  display: none !important;
+}
+
+.joga-new-card-position {
+  font-family: Oswald, Inter, sans-serif;
+  font-size: clamp(24px, 10cqw, 46px);
+  font-weight: 900;
+  letter-spacing: -.03em;
+  color: #f9d960;
+}
+
+.joga-new-card-divider {
+  width: 68%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 220, 100, .8), transparent);
+}
+
+.joga-new-card-flag {
+  width: 76%;
+  aspect-ratio: 1.55;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(255, 220, 90, .65);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .34);
+  object-fit: cover;
+}
+
+.joga-new-card-flag-green {
+  width: 38%;
+  background: #006600;
+}
+
+.joga-new-card-flag-red {
+  width: 62%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #cc0000;
+}
+
+.joga-new-card-flag-red span {
+  width: 34%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 227, 82, .9);
+  background: rgba(255, 227, 82, .18);
+}
+
+.joga-new-card-photo {
+  position: relative;
+  align-self: stretch;
+  overflow: hidden;
+  border-radius: 8% 8% 4% 4%;
+  border: 3px solid rgba(255, 218, 100, .88);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.55),
+    0 12px 20px rgba(0,0,0,.35);
+  background: linear-gradient(135deg, #f8fafc, #111827);
+}
+
+.joga-new-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.joga-new-card-brand {
+  position: relative;
+  z-index: 3;
+  width: 86%;
+  min-height: 12%;
+  margin: -2.4% auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1% 1.5%;
+  background: linear-gradient(180deg, #fff0a2, #c78a22 58%, #94620f);
+  clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%);
+  box-shadow: 0 5px 12px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.55);
+}
+
+.joga-new-card-brand-logo {
+  display: block;
+  width: auto;
+  height: clamp(32px, 12.5cqw, 62px);
+  max-width: 97%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.joga-new-card-name {
+  position: relative;
+  z-index: 2;
+  margin-top: 7.5%;
+  color: #f8d66b;
+  font-family: Oswald, Inter, sans-serif;
+  font-size: clamp(26px, 10cqw, 48px);
+  font-weight: 900;
+  line-height: .95;
+  letter-spacing: -.02em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.joga-new-card-name-line {
+  position: relative;
+  z-index: 2;
+  height: 1px;
+  margin: 5.5% auto 5.5%;
+  width: 88%;
+  background: linear-gradient(90deg, transparent, rgba(255, 214, 92, .75), transparent);
+}
+
+.joga-new-card-stats {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  row-gap: 10%;
+  padding: 0 5.5%;
+}
+
+.joga-new-card-stat {
+  min-width: 0;
+  text-align: center;
+  font-family: Oswald, Inter, sans-serif;
+  color: #f8d66b;
+}
+
+.joga-new-card-stat strong {
+  display: block;
+  font-size: clamp(28px, 10.5cqw, 50px);
+  font-weight: 900;
+  line-height: .88;
+  letter-spacing: -.05em;
+}
+
+.joga-new-card-stat span {
+  display: block;
+  margin-top: 8%;
+  font-size: clamp(13px, 5cqw, 24px);
+  font-weight: 900;
+}
+
+.joga-new-card-stat:nth-child(2),
+.joga-new-card-stat:nth-child(5),
+.joga-new-card-stat:nth-child(3),
+.joga-new-card-stat:nth-child(6) {
+  border-left: 1px solid rgba(255, 214, 92, .28);
+}
+
+/* MINIATURA DO INÍCIO: somente OVER + FOTO + NOME */
+.joga-new-player-card-wrap--small {
+  width: 104px !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-player-card {
+  padding: 5px !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-inner {
+  padding: 13% 10% 12% !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-top-mark,
+.joga-new-player-card-wrap--small .joga-new-card-position,
+.joga-new-player-card-wrap--small .joga-new-card-divider,
+.joga-new-player-card-wrap--small .joga-new-card-flag,
+.joga-new-player-card-wrap--small .joga-new-card-brand,
+.joga-new-player-card-wrap--small .joga-new-card-name-line,
+.joga-new-player-card-wrap--small .joga-new-card-stats {
+  display: none !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-header {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 68% !important;
+  margin-top: 0 !important;
+  gap: 7px !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-side {
+  height: auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border-right: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-overall strong {
+  font-size: 31px !important;
+  line-height: .82 !important;
+  letter-spacing: 0 !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-photo {
+  width: 78% !important;
+  height: 48px !important;
+  margin: 0 auto !important;
+  align-self: center !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-name {
+  margin-top: 9px !important;
+  font-size: 11px !important;
+  line-height: .9 !important;
+  white-space: normal !important;
+}
+
+.joga-profile-card-stage {
+  min-height: clamp(560px, 64vh, 690px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px 42px;
+  overflow: visible;
+}
+
+@media (max-width: 520px) {
+  .joga-new-player-card-wrap--profile {
+    width: min(92vw, 390px);
+  }
+
+  .joga-profile-card-stage {
+    min-height: 540px;
+    padding-top: 10px;
+  }
+}
+
+/* Mini card do Início: sem canto arredondado interno */
+.joga-new-player-card-wrap--small .joga-new-player-card {
+  border-radius: 0 !important;
+}
+
+.joga-new-player-card-wrap--small .joga-new-card-inner {
+  border-radius: 0 !important;
+}

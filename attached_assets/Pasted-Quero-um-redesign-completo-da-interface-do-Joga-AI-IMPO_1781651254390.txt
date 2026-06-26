@@ -1,0 +1,112 @@
+Quero um redesign completo da interface do Joga AI.
+
+IMPORTANTE:
+Nesta etapa, não quero que mexas na lógica, backend, Supabase, estrutura de dados nem regras do app.
+Quero mexer apenas na interface visual (UI), layout, componentes, estilo e experiência visual.
+
+Usa a imagem de referência que enviei como principal direção visual.
+
+PROBLEMA ATUAL:
+A interface atual está com cara de app genérico criado por IA / dashboard padrão / estilo Claude.
+Os botões, os cards, os layouts e a navegação ainda não parecem um app real de futebol.
+Quero que a interface pareça um app premium de videojogo de futebol.
+
+OBJETIVO DESTA ETAPA:
+Transformar o Joga AI numa interface com cara de app real, muito polida, moderna, premium e com identidade visual forte.
+
+DIREÇÃO VISUAL OBRIGATÓRIA:
+- Inspirar-se na sensação visual de apps/jogos de futebol premium.
+- Interface clara.
+- Visual muito mais “produto final” e muito menos “wireframe gerado por IA”.
+- Cartas de jogador como elemento principal.
+- Menus, botões e cards com aparência de app mobile real.
+- Visual com relva, estádio, painéis, placar, energia de jogo e modo carreira.
+- Design mais próximo de um app desportivo premium.
+- Muito mais personalidade visual.
+- Aparência de produto pronto para App Store.
+
+O QUE NÃO QUERO:
+- Não quero visual genérico de dashboard SaaS.
+- Não quero cards sem personalidade.
+- Não quero botões simples com cara de protótipo.
+- Não quero listas secas com muito texto e pouco design.
+- Não quero aparência de admin panel.
+- Não quero estilo “feito por IA” com layout demasiado padrão.
+- Não quero estilo escuro/cyberpunk como base.
+
+O QUE QUERO NOS COMPONENTES:
+1. HOME
+- Hero principal com carta do jogador em destaque.
+- Blocos bem visuais para “Próximo jogo”, “Comunidades”, “Jogos disponíveis” e “Ranking semanal”.
+- Cartões com profundidade, sombras suaves, bordas arredondadas, boa hierarquia visual.
+- Navegação inferior bem desenhada, parecida com app mobile real.
+- Mais destaque visual para o jogador e para a experiência de jogo.
+
+2. CARTA DO JOGADOR
+- A carta tem de parecer uma carta premium de football game.
+- Grande, bonita, com moldura, brilho leve, imagem forte do jogador e overall em destaque.
+- Atributos organizados de forma muito visual.
+- Deve ser algo que a pessoa queira partilhar no Instagram.
+- Criar estilos de carta mais trabalhados, com acabamento premium.
+
+3. PERFIL
+- Mistura de carta + estatísticas + badges + evolução.
+- Melhor composição visual.
+- Menos cara de formulário e mais cara de perfil de jogador/game profile.
+
+4. COMUNIDADES
+- Cards mais bonitos para as comunidades.
+- Mostrar escudo/ícone, membros, cidade e tipo de jogo de forma mais visual.
+- Menos texto cru e mais blocos bem desenhados.
+
+5. PRÉ-JOGO
+- O mini campo tem de parecer um relvado real estilizado.
+- Os jogadores devem aparecer em bolhas/cartões posicionados no campo.
+- Os botões de ação como “Iniciar jogo” e “Gerir equipa” devem parecer botões premium.
+
+6. JOGO AO VIVO
+- O placar tem de parecer placar de jogo de futebol.
+- O topo deve ter um visual forte com equipas, score, cronómetro e estado ao vivo.
+- Os botões de ação (golo, assistência, defesa, cartão, falta) devem ser bem desenhados, grandes, coloridos e com ícones.
+- O feed de eventos deve ser muito mais bonito e escaneável.
+
+7. PÓS-JOGO
+- Deve parecer tela de resultado / resumo de partida.
+- Votação por estrelas com visual melhor.
+- MVP com destaque visual.
+- Resumo da evolução do jogador de forma mais apelativa.
+
+8. PREMIUM
+- A secção premium deve parecer aspiracional.
+- Mostrar mockups de cartas premium, benefícios e visual mais “game pass” / “modo premium”.
+
+ESTILO DE DESIGN:
+- Mobile-first.
+- Muito polido.
+- Mais espaçamento e hierarquia.
+- Tipografia forte.
+- Ícones consistentes.
+- Gradientes suaves.
+- Verde futebol, branco, dourado, azul e roxo como cores de apoio.
+- Visual claro e desportivo.
+- Sensação de app de videojogo desportivo premium.
+- Manter identidade própria, sem copiar marcas reais.
+
+INSTRUÇÃO MUITO IMPORTANTE:
+Não quero que cries novas funcionalidades agora.
+Quero que pegues na estrutura atual e faças um redesign visual profundo para que pareça um app real e premium.
+
+ENTREGA ESPERADA:
+- Melhorar apenas UI/UX.
+- Manter telas já existentes.
+- Manter navegação.
+- Melhorar aparência de:
+  - Home
+  - Carta do jogador
+  - Perfil
+  - Comunidades
+  - Pré-jogo
+  - Jogo ao vivo
+  - Pós-jogo
+  - Premium
+- Criar uma interface muito mais próxima da imagem de referência que enviei.

@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
+
+      match /evolution/{recordId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    match /matches/{matchId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.organizerId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.organizerId == request.auth.uid
+        || resource.data.currentPlayerId == request.auth.uid
+      );
+      allow delete: if false;
+
+      match /auditors/{docId} {
+        allow read, write: if isSignedIn();
+      }
+
+      match /votes/{userId} {
+        allow read: if isSignedIn();
+        allow create, update: if isOwner(userId);
+        allow delete: if false;
+      }
+    }
+
+    match /communities/{communityId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+  }
+}

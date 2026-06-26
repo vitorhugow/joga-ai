@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "W5EboX-mdIChWe4nTEhHp"
+uri = "file://joga-ai-source.zip"
+type = "unspecified"
+title = "joga-ai-source.zip — Código-fonte completo"

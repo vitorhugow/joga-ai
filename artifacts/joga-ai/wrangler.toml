@@ -1,0 +1,6 @@
+# Cloudflare Pages — deploy manual com Wrangler (opcional)
+# Ver docs/CLOUDFLARE_PAGES_DEPLOY.md
+
+name = "joga-ai"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist/public"

@@ -1,0 +1,234 @@
+Quero um redesign forte e reconstrução visual da Home e da tela de Perfil do Joga AI.
+
+IMPORTANTE:
+Não quero pequenas melhorias.
+Não quero ajustes superficiais.
+Não quero manter o estilo atual.
+Quero reconstruir visualmente estas telas do zero, mantendo apenas a lógica e os dados simulados.
+
+Nesta etapa:
+- não mexer em backend
+- não mexer em Supabase
+- não mexer em regras
+- não mexer em navegação geral
+- não criar novas funcionalidades
+- focar apenas em UI/UX da Home e do Perfil
+
+PROBLEMA ATUAL:
+A interface ainda está com cara de protótipo gerado por IA.
+Ainda parece um app genérico.
+Os cards, botões, carta do jogador, blocos e layout ainda não parecem um app real premium de futebol.
+
+OBJETIVO:
+Quero que a Home e o Perfil tenham aparência de app mobile real, moderno, polido, premium e com sensação de videojogo de futebol.
+
+Usa como objetivo visual a imagem de referência que enviei anteriormente.
+Não quero apenas “inspiração”.
+Quero aproximar a composição, a qualidade visual, a hierarquia e a sensação geral do design de referência.
+
+REGRAS IMPORTANTES:
+- Reconstruir a UI destas telas do zero.
+- Não reaproveitar o estilo atual dos componentes.
+- Criar componentes novos se necessário.
+- Melhorar muito tipografia, espaçamento, sombras, hierarquia e composição.
+- Se necessário, substituir a estrutura HTML/CSS atual destas duas telas por uma estrutura mais forte.
+- O resultado deve parecer produto final, não wireframe.
+
+====================================
+1. HOME — DIREÇÃO EXATA
+====================================
+
+Quero uma Home com cara de hub principal de um app de futebol premium.
+
+Estrutura desejada:
+
+A. HERO SUPERIOR
+- Um grande bloco visual no topo.
+- Fundo com relva / estádio / gradiente verde premium.
+- Logo Joga AI no topo esquerdo.
+- Botão Premium no topo direito.
+- Uma mini carta do jogador ou carta resumida à esquerda.
+- À direita ou no centro: nome do jogador em destaque.
+- Mostrar estatísticas resumidas como golos, assistências e jogos.
+- Deve parecer um hero forte e não apenas um header comum.
+
+B. CARD DE JOGO AO VIVO
+- Um card largo e forte logo abaixo do hero.
+- Cor forte (vermelho premium ou coral desportivo).
+- Texto “Ao Vivo”.
+- Nome das equipas.
+- Placar em grande.
+- Tempo de jogo.
+- Deve parecer muito visual e importante.
+
+C. AÇÕES RÁPIDAS
+- Criar 2 cards grandes lado a lado:
+  - Criar partida
+  - Encontrar jogos
+- Cada card com ícone grande e texto claro.
+- Estilo arredondado, com profundidade e sombra suave.
+- Devem parecer botões premium.
+
+D. SECÇÃO PRÓXIMO JOGO
+- Título forte.
+- Card bonito com:
+  - nome do jogo
+  - local
+  - tipo de jogo
+  - data/hora
+  - vagas disponíveis
+  - mini avatares circulares dos participantes
+- Melhor aparência visual e melhor espaçamento.
+
+E. SECÇÃO COMUNIDADES
+- Mostrar cards/ícones mais bonitos.
+- Não quero quadrados simples.
+- Quero cards pequenos mais premium com identidade visual.
+- Exibir nome e estilo mais bonito.
+
+F. BOTTOM NAVIGATION
+- Refazer completamente a navegação inferior.
+- Quero que pareça app real.
+- Fundo branco ou claro.
+- Ícones mais consistentes.
+- Item ativo mais forte.
+- Mais refinamento visual.
+
+ESTILO DA HOME:
+- Muito mais polida.
+- Muito mais parecida com app real.
+- Menos blocos secos.
+- Mais identidade.
+- Mais profundidade visual.
+- Mais “cara de produto”.
+
+====================================
+2. PERFIL — DIREÇÃO EXATA
+====================================
+
+A tela de Perfil precisa ser uma das mais bonitas do app.
+
+Quero que a carta do jogador seja o elemento visual mais forte.
+
+A. CABEÇALHO
+- Título “O Meu Perfil”.
+- Botão de partilha.
+- Layout limpo.
+- Mais espaçamento.
+- Melhor hierarquia.
+
+B. CARTA DO JOGADOR
+Reconstruir totalmente a carta atual.
+
+Quero:
+- uma carta premium muito mais bonita;
+- moldura mais trabalhada;
+- melhor composição;
+- visual de card de football game;
+- overall bem grande;
+- posição;
+- bandeira;
+- nome completo do jogador;
+- atributos na carta ou abaixo dela de forma integrada;
+- textura premium;
+- brilho subtil;
+- profundidade;
+- sombra suave;
+- aparência de item valioso.
+
+IMPORTANTE:
+A carta atual com boneco genérico não serve.
+Se não houver foto real do jogador, usar um placeholder muito melhor, com visual mais premium ou uma silhueta melhor integrada.
+Idealmente usar uma imagem/placeholder de futebolista mais elegante e bem enquadrada.
+
+Quero que a carta pareça algo que o utilizador iria partilhar no Instagram.
+
+C. STATS RESUMIDOS
+Logo abaixo da carta:
+- jogos
+- golos
+- assistências
+- MVP
+
+Refazer esses blocos para parecerem mini cards premium.
+Hoje estão simples demais.
+
+D. SECÇÃO ATRIBUTOS
+- Refazer o bloco de atributos.
+- Melhor layout.
+- Barras muito mais bonitas.
+- Melhor espaçamento.
+- Melhor contraste.
+- Design mais elegante.
+- Deve parecer secção de stats de jogo.
+
+E. SECÇÃO ESTATÍSTICAS DA ÉPOCA
+Se ainda não existir bem resolvida, adicionar melhor:
+- jogos
+- golos
+- assistências
+- média
+- MVPs
+- presenças
+
+F. BADGES / DISTINTIVOS
+- Criar uma secção de badges visualmente mais rica.
+- Pequenos selos, emblemas, medalhas ou distintivos.
+- Não quero apenas texto simples.
+
+G. AÇÃO PRINCIPAL
+- Um botão premium tipo:
+  - Ver evolução
+  - Ver histórico
+  - Comparar
+- Estilo muito melhor que botão genérico.
+
+====================================
+3. ESTILO VISUAL OBRIGATÓRIO
+====================================
+
+- Visual claro
+- premium
+- desportivo
+- moderno
+- mobile-first
+- inspiração em videojogo de futebol
+- sem copiar marcas reais
+- sem estilo escuro como base
+- sem aparência de dashboard SaaS
+- sem cara de protótipo de IA
+
+Paleta sugerida:
+- verde futebol
+- branco
+- cinzas claros
+- dourado suave
+- azul
+- roxo em detalhes
+
+Quero:
+- painéis claros
+- sombras suaves
+- gradientes elegantes
+- bordas arredondadas
+- tipografia forte
+- muito mais hierarquia visual
+- mais profundidade
+- mais acabamento de produto real
+
+====================================
+4. INSTRUÇÃO FINAL
+====================================
+
+Não quero melhorias pequenas.
+Quero reconstrução visual forte da Home e do Perfil.
+
+Entrega esperada:
+- Home totalmente mais moderna e premium
+- Perfil totalmente mais moderno e premium
+- Carta do jogador com muito mais impacto visual
+- UI com aparência de app real e não protótipo gerado por IA
+
+Não avançar para outras fases.
+Não mexer em comunidades, pré-jogo, jogo ao vivo ou Supabase.
+Mexer apenas em Home e Perfil.

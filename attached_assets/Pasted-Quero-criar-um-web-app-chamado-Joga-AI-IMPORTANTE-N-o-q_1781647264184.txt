@@ -1,0 +1,717 @@
+Quero criar um web app chamado Joga AI.
+
+IMPORTANTE:
+Não quero que tentes construir tudo de uma vez de forma confusa. Quero que cries o projeto por fases, com uma base bem organizada, para depois irmos evoluindo módulo por módulo.
+
+Nome do projeto:
+Joga AI
+
+Frase central:
+“Evolui o teu perfil, encontra jogos e gere a tua equipa.”
+
+Idioma:
+Português de Portugal.
+
+Objetivo:
+Criar uma plataforma para jogadores de futebol amador/social em Portugal organizarem partidas, entrarem em comunidades, encontrarem jogos disponíveis, registarem estatísticas em jogo ao vivo, votarem no pós-jogo e evoluírem uma carta individual de jogador com Overall e atributos.
+
+Stack desejada:
+- Frontend em React + Vite.
+- Interface mobile-first e responsiva.
+- Supabase para backend, autenticação e base de dados.
+- Supabase Auth para login.
+- Supabase Postgres para dados.
+- Supabase Storage futuramente para fotos dos jogadores, capas, imagens e exportações.
+- Não usar Firebase/Firestore.
+- Não usar marcas, logos, nomes, ícones, fontes, menus ou elementos copiados de FIFA, EAFC, UFC ou qualquer marca real.
+- A inspiração visual pode ser apenas a sensação de videogame de futebol premium, com identidade própria.
+
+DIREÇÃO VISUAL:
+Quero que o Joga AI tenha estilo de videogame de futebol moderno, parecido na sensação com EAFC/FIFA 24, mas com identidade própria.
+
+Não quero estilo escuro/neon como base.
+
+Quero:
+- Visual claro, premium e esportivo.
+- Fundos com relva, estádio, luz de arena e textura de campo.
+- Cards coloridos e modernos.
+- Cartas de jogador grandes, bonitas e muito destacadas.
+- Painéis claros ou translúcidos com detalhes verdes, dourados, azuis e roxos.
+- Botões com aparência de videogame.
+- Layout de modo carreira / futebol game.
+- Tela de jogo ao vivo com placar bonito.
+- Tela de pós-jogo parecida com resumo de partida.
+- Mini campo bem visual.
+- Rankings com aparência competitiva.
+- Navegação muito intuitiva.
+- Menus com energia de videojogo de futebol premium.
+- Aparência moderna, desportiva e elegante.
+- O visual deve lembrar um football game premium, mas sem copiar diretamente qualquer produto real.
+
+Evitar:
+- Base escura pesada.
+- Cyberpunk.
+- Neon excessivo.
+- Estilo genérico de app financeiro.
+- Layouts copiados.
+- Logos ou elementos protegidos.
+
+A carta do jogador deve ser um dos elementos visuais mais fortes do app.
+Ela tem de ser bonita o suficiente para a pessoa querer partilhá-la no Instagram.
+
+FASE 1 — Criar primeiro MVP visual com dados simulados
+Antes de ligar login e Supabase, cria uma versão visual navegável com dados simulados. O objetivo da Fase 1 é validar o visual, as telas e o fluxo.
+
+Telas obrigatórias da Fase 1:
+1. Home / Dashboard.
+2. Perfil do jogador com carta evolutiva.
+3. Comunidades.
+4. Página de comunidade com rankings.
+5. Criar partida.
+6. Pré-jogo com lista de confirmados e mini campo.
+7. Jogo ao vivo com cronómetro, placar e eventos.
+8. Pós-jogo com votação e validação das estatísticas.
+9. Jogos disponíveis.
+10. Premium.
+11. Campos, apenas como aba futura / em breve.
+
+Componentes reutilizáveis que quero:
+- PlayerCard
+- PlayerMiniCard
+- AttributeList
+- CommunityCard
+- MatchCard
+- RankingList
+- MiniPitch
+- LiveMatchPanel
+- MatchEventButton
+- PostMatchVoting
+- PremiumCard
+- BottomNavigation
+- AppHeader
+- StatBadge
+- PlayerBadge
+- SectionHeader
+- LeaderboardCard
+- MatchSummaryCard
+
+Detalhes do design:
+- Toda lista de jogadores deve mostrar mini foto, mini carta ou overall ao lado do nome.
+- O mini campo tem de parecer um mini relvado.
+- O placar do jogo ao vivo tem de parecer um placar de videogame de futebol.
+- O pós-jogo deve parecer uma tela de resultado.
+- O perfil do jogador deve parecer uma mistura de carta + modo carreira + estatísticas.
+- O dashboard deve ser bem visual e fácil de usar no telemóvel.
+- Criar componentes organizados e não tudo num ficheiro gigante.
+- Usar dados simulados coerentes.
+
+FASE 2 — Organizar regras da carta em ficheiros separados
+Depois da primeira versão visual, cria ficheiros/funções separados para as regras da carta:
+- calculateOverall
+- generateInitialAttributes
+- applyMatchStatsToCard
+- applyGoalkeeperStatsToCard
+- validateStats
+- convertStarsToRating
+
+Não quero sistema de XP.
+A evolução é direta nos atributos.
+
+REGRA DO OVERALL:
+- O Overall é a média dos 6 atributos da carta.
+- O resultado deve ser arredondado para baixo.
+- Todos começam com Overall 55.
+- Os atributos iniciais devem variar aleatoriamente e de forma equilibrada por posição.
+- A média inicial deve ser 55.
+- A soma inicial dos 6 atributos deve ser 330.
+- Dois jogadores da mesma posição não devem nascer exatamente iguais.
+
+JOGADORES DE LINHA:
+Atributos:
+- Ritmo
+- Finalização
+- Passe
+- Defesa
+- Drible
+- Físico
+
+Evolução dos jogadores de linha:
+- Presença / partida confirmada: +1 Ritmo.
+- Golo: +1 Finalização.
+- Assistência: +1 Passe.
+- Defesa / intervenção validada: +1 Defesa.
+- Nota final maior que 7: +1 Drible.
+- Votação pós-jogo feita: +1 Físico.
+- Cartão: -1 Físico.
+- Falta: -1 Físico.
+- MVP: +1 em todos os atributos.
+
+GUARDA-REDES:
+Atributos:
+- Reflexos
+- Posicionamento
+- Passe
+- Saída
+- Defesa
+- Físico
+
+Evolução do guarda-redes:
+- Presença / partida confirmada: +1 Reflexos.
+- Nota final maior que 7: +1 Posicionamento.
+- Assistência: +1 Passe.
+- Golo: +1 Saída.
+- Defesa / intervenção validada: +1 Defesa.
+- Votação pós-jogo feita: +1 Físico.
+- Cartão: -1 Físico.
+- Falta: -1 Físico.
+- MVP: +1 em todos os atributos.
+
+IMPORTANTE:
+- Não existe “falta grave”.
+- As penalizações são apenas cartão e falta.
+- O jogador que vota no pós-jogo ganha +1 Físico.
+- O MVP ganha +1 em todos os 6 atributos.
+- O Overall é sempre a média final arredondada para baixo.
+
+FASE 3 — Criar estrutura Supabase
+Só depois do MVP visual estar organizado, preparar ligação com Supabase.
+
+Quero que cries a estrutura pensando em:
+- Supabase Auth
+- Supabase Postgres
+- Row Level Security
+- estrutura escalável
+
+Tabelas iniciais desejadas:
+- profiles
+- player_cards
+- player_card_history
+- seasons
+- communities
+- community_members
+- community_join_requests
+- matches
+- match_players
+- match_teams
+- match_events
+- post_match_votes
+- stat_confirmations
+- badges
+- player_badges
+- premium_subscriptions
+- fields
+- payments_manual
+
+DESCRIÇÃO DAS TABELAS
+
+profiles:
+Guarda dados públicos do jogador.
+Campos:
+- id
+- user_id
+- name
+- username
+- photo_url
+- city
+- main_position
+- preferred_foot
+- created_at
+- updated_at
+
+player_cards:
+Guarda a carta atual da temporada.
+Campos:
+- id
+- profile_id
+- season_id
+- position_type
+- overall
+- attr_1_name
+- attr_1_value
+- attr_2_name
+- attr_2_value
+- attr_3_name
+- attr_3_value
+- attr_4_name
+- attr_4_value
+- attr_5_name
+- attr_5_value
+- attr_6_name
+- attr_6_value
+- card_skin
+- title
+- shirt_number
+- created_at
+- updated_at
+
+player_card_history:
+Guarda cartas de temporadas anteriores.
+Campos:
+- id
+- profile_id
+- season_id
+- final_overall
+- final_attributes_json
+- total_matches
+- total_goals
+- total_assists
+- total_saves
+- total_mvp
+- card_snapshot_url
+- created_at
+
+seasons:
+Campos:
+- id
+- name
+- starts_at
+- ends_at
+- is_current
+
+communities:
+Campos:
+- id
+- name
+- slug
+- city
+- description
+- cover_url
+- default_match_type
+- created_by
+- created_at
+- updated_at
+
+community_members:
+Campos:
+- id
+- community_id
+- profile_id
+- role
+- status
+- joined_at
+
+community_join_requests:
+Campos:
+- id
+- community_id
+- profile_id
+- status
+- message
+- created_at
+- reviewed_at
+- reviewed_by
+
+matches:
+Campos:
+- id
+- community_id nullable
+- created_by
+- title
+- city
+- location_name
+- address
+- match_type
+- match_level
+- starts_at
+- max_players
+- price_per_player
+- open_to_external_players
+- status
+- created_at
+- updated_at
+
+Observações:
+- community_id pode ser null porque também quero criar partidas fora de comunidades.
+- open_to_external_players deve vir true por padrão quando a partida for criada dentro de uma comunidade.
+
+match_players:
+Campos:
+- id
+- match_id
+- profile_id
+- status
+- team
+- position_on_pitch
+- attended
+- paid_status
+- created_at
+- updated_at
+
+match_teams:
+Campos:
+- id
+- match_id
+- name
+- color
+- score
+
+match_events:
+Eventos do jogo ao vivo.
+Campos:
+- id
+- match_id
+- minute
+- second
+- event_type
+- profile_id
+- assist_profile_id
+- team
+- value
+- is_provisional
+- created_by
+- created_at
+
+event_type pode ser:
+- goal
+- assist
+- save
+- card
+- foul
+- match_start
+- match_pause
+- match_resume
+- match_end
+
+post_match_votes:
+Campos:
+- id
+- match_id
+- voter_profile_id
+- voted_profile_id
+- stars
+- rating
+- created_at
+
+Regras:
+- stars vai de 0.5 a 5.
+- rating vai de 1 a 10.
+- Cada meia estrela equivale a 1 ponto.
+- Exemplo: 4 estrelas = nota 8.
+- Nota final maior que 7 gera evolução de Drible para jogadores de linha ou Posicionamento para guarda-redes.
+
+stat_confirmations:
+Campos:
+- id
+- match_id
+- target_profile_id
+- confirmer_profile_id
+- confirmed
+- correction_json
+- created_at
+
+Regras:
+- As estatísticas do jogo ao vivo são provisórias.
+- Só jogadores presentes podem confirmar.
+- Quando 3 jogadores presentes confirmam a mesma estatística, ela fica validada.
+- Depois de validada, atualiza a carta.
+
+badges:
+Campos:
+- id
+- name
+- description
+- rarity
+- icon_url
+- is_premium
+
+player_badges:
+Campos:
+- id
+- profile_id
+- badge_id
+- season_id
+- earned_at
+
+premium_subscriptions:
+Campos:
+- id
+- profile_id
+- status
+- starts_at
+- ends_at
+- source
+- created_at
+
+fields:
+Aba futura de campos / quadras.
+Campos:
+- id
+- name
+- city
+- address
+- field_type
+- covered
+- price_estimate
+- whatsapp
+- website
+- photo_url
+- is_partner
+- is_featured
+- created_at
+
+payments_manual:
+Pagamento manual apenas para o organizador controlar, sem pagamento real no app.
+Campos:
+- id
+- match_id
+- profile_id
+- amount
+- status
+- marked_by
+- created_at
+- updated_at
+
+FASE 4 — Supabase Auth
+Depois da estrutura visual e schema, implementar Supabase Auth.
+
+Funcionalidades:
+- Criar conta.
+- Login.
+- Logout.
+- Criar perfil após registo.
+- Criar carta inicial após criação do perfil.
+- Manter utilizador logado.
+- Proteger telas que exigem login.
+
+FASE 5 — Comunidades reais
+Implementar:
+- Criar comunidade.
+- Listar comunidades públicas.
+- Pedir entrada.
+- Admin aceitar / recusar pedido.
+- Jogador pode participar em várias comunidades.
+- Página da comunidade com ranking.
+- Página da comunidade com membros.
+- Página da comunidade com partidas.
+
+Regras:
+- Comunidades são públicas.
+- Entrada precisa aprovação.
+- Roles: admin e player.
+- Não precisa de capitães na primeira versão.
+
+FASE 6 — Partidas reais
+Implementar:
+- Criar partida dentro da comunidade.
+- Criar partida fora da comunidade.
+- Confirmar presença.
+- Sair da partida.
+- Lista de espera.
+- Pagamento manual.
+- Mini campo.
+- Organização das equipas.
+- Mostrar mini carta / overall ao lado de cada jogador.
+
+Tipos de jogo:
+- futsal
+- fut5
+- fut7
+- futebol11
+
+FASE 7 — Jogo ao vivo real
+Implementar tela de jogo ao vivo com:
+- Cronómetro.
+- Placar.
+- Botões para golo.
+- Botão para assistência.
+- Botão para defesa / intervenção.
+- Botão para cartão.
+- Botão para falta.
+- Lista de eventos.
+- Eventos provisórios.
+- Encerrar partida.
+
+IMPORTANTE:
+No Jogo ao Vivo tem que existir o campo / botão para marcar as estatísticas em tempo real:
+- Golos
+- Assistências
+- Defesas / intervenções
+- Cartões
+- Faltas
+
+Essas estatísticas depois serão validadas no pós-jogo.
+
+FASE 8 — Pós-jogo real
+Implementar:
+- Tela de votação.
+- Só jogadores presentes podem votar.
+- Votação de 0.5 a 5 estrelas.
+- Conversão de estrelas para nota 1 a 10.
+- Confirmação das estatísticas.
+- Correção de estatísticas se necessário.
+- Validação por 3 confirmações.
+- MVP.
+- Atualização da carta.
+- Histórico da partida.
+
+FASE 9 — Temporadas
+Implementar:
+- Temporada atual.
+- Temporada começa em agosto.
+- Estatísticas e rankings da temporada podem zerar em nova temporada.
+- Perfil guarda histórico de cartas anteriores.
+- player_card_history guarda cartas antigas.
+
+FASE 10 — Premium
+Criar tela e estrutura Premium.
+
+Premium deve incluir:
+- Cartas premium.
+- Skins especiais.
+- Exportar carta para story.
+- Carta para Instagram.
+- Estatísticas avançadas.
+- Estatísticas premium.
+- Comparativo com amigos.
+- Histórico completo de evolução.
+- Prioridade em jogos públicos.
+- Perfil com destaque.
+- Perfil mais bonito.
+- Número personalizado na carta.
+- Título personalizado: “Matador”, “Muralha”, “Maestro”.
+- Resumo mensal da temporada.
+- Carta especial no fim da época.
+- Top momentos.
+- Badges premium.
+
+IMPORTANTE:
+Premium não pode ser pay-to-win.
+O jogador não pode pagar para evoluir mais rápido.
+Premium deve ser visual, estatístico, social e de status.
+
+FASE 11 — Convites
+Implementar no futuro:
+- Link de convite.
+- Se o convidado criar conta e participar numa partida validada, quem convidou ganha 1 mês grátis de Premium.
+- Evitar abuso com contas falsas.
+
+FASE 12 — Campos
+Criar apenas estrutura inicial da aba Campos.
+Por enquanto, não implementar reserva real.
+
+No futuro:
+- Diretório de campos.
+- Filtros.
+- Parcerias.
+- Mensalidade para campos parceiros.
+- Destaque pago.
+- Reservas.
+
+TELAS PRINCIPAIS QUE QUERO VER BEM FEITAS
+
+HOME / DASHBOARD
+- Carta principal do jogador em destaque.
+- Próximo jogo.
+- Acesso rápido a comunidades.
+- Jogos disponíveis.
+- Ranking rápido.
+- Atalhos para criar partida e encontrar jogos.
+- Layout com cara de hub de videojogo de futebol.
+
+PERFIL DO JOGADOR
+- Carta grande.
+- Overall.
+- 6 atributos.
+- Estatísticas da temporada.
+- Badges.
+- Histórico.
+- Comunidades.
+- Cartas de temporadas anteriores.
+- Botão para partilhar carta.
+
+COMUNIDADES
+- Lista de comunidades públicas.
+- Cards bonitos.
+- Destaque de cidade, membros e tipo de jogo.
+- Botão para pedir entrada.
+
+PÁGINA DA COMUNIDADE
+- Capa.
+- Nome.
+- Cidade.
+- Próximas partidas.
+- Ranking de overalls.
+- Ranking de artilheiros.
+- Ranking de melhores notas.
+- Ranking de assistências.
+- Lista de membros com mini carta / overall.
+- Histórico de jogos.
+
+CRIAR PARTIDA
+- Criar dentro ou fora de comunidade.
+- Data.
+- Hora.
+- Local.
+- Tipo de futebol.
+- Número de jogadores.
+- Nível do jogo.
+- Valor por jogador opcional.
+- Abrir para outros jogadores.
+- Observações.
+
+PRÉ-JOGO
+- Lista de confirmados.
+- Lista de espera.
+- Status de pagamento manual.
+- Mini campo visual.
+- Organização das equipas.
+- Cores das equipas.
+- Botão iniciar jogo.
+
+JOGO AO VIVO
+- Cronómetro.
+- Placar.
+- Equipas.
+- Botões de evento.
+- Feed de eventos.
+- Visual estilo placar de videogame.
+
+PÓS-JOGO
+- Resultado final.
+- Resumo da partida.
+- Votação dos jogadores.
+- Confirmação das estatísticas.
+- MVP.
+- Evolução dos atributos.
+- Nova carta.
+
+JOGOS DISPONÍVEIS
+- Lista de jogos.
+- Vagas.
+- Lotados.
+- Lista de espera.
+- Filtros por cidade, tipo de jogo, nível e horário.
+- Visual limpo e rápido para entrar num jogo.
+
+PREMIUM
+- Mostrar claramente os benefícios.
+- Visual aspiracional.
+- Cartas premium.
+- Perfil premium.
+- Exportações.
+- Comparativos.
+- Top momentos.
+
+CAMPOS
+- Apenas estrutura futura.
+- Cards fictícios ou estado “em breve”.
+
+REGRAS GERAIS DO PROJETO
+- Não apagar funcionalidades sem avisar.
+- Não misturar tudo num único ficheiro gigante.
+- Criar componentes organizados.
+- Criar funções de regra de negócio separadas.
+- Usar dados simulados antes de ligar ao Supabase.
+- Quando ligar Supabase, manter fallback visual caso ainda não haja dados.
+- Escrever todos os textos em português de Portugal.
+- Priorizar mobile.
+- O app tem de parecer premium, bonito e intuitivo.
+- A carta do jogador tem de ser o elemento visual mais forte.
+- Evitar qualquer cópia direta de marcas conhecidas.
+- A inspiração visual deve ser a energia de um jogo de futebol premium, mas com identidade própria.
+
+PRIMEIRA TAREFA AGORA:
+Cria apenas a Fase 1: MVP visual navegável com dados simulados, usando React + Vite, componentes organizados e visual premium de videogame de futebol.
+
+Não implementar Supabase ainda.
+Mas já deixa o projeto preparado para receber Supabase nas próximas fases.

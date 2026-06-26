@@ -7,16 +7,26 @@
 - Publicar `firestore.rules`: `firebase deploy --only firestore:rules`
 - Domínio Cloudflare Pages autorizado em Firebase Auth → Settings → Authorized domains
 
-## Reset de conta (uma vez, antes de testar MVP limpo)
+## Reset de conta (Fase 1 — feito ✓)
 
-Para zerar dados de teste e remover conteúdo fictício antigo:
+Se apagaste **todos** os utilizadores em Authentication e a coleção `users` desapareceu do Firestore: **está tudo bem**. No Firestore as coleções vazias não aparecem na consola — não precisas de criar `users` à mão.
 
-1. **Firebase Console** → [Firestore](https://console.firebase.google.com/project/joga-ai-f7622/firestore):
-   - Apagar `users/{teu-uid}` (e subcoleção `evolution` se existir)
-   - Apagar `matches/*` que não queiras manter (ou todos para zerar)
-   - Apagar `communities/*` de teste (inclui subcoleções `members` e `joinRequests`)
-2. **No browser** do site publicado → DevTools → Application → Local Storage → apagar chaves `joga-ai-*`
-3. **Opcional:** Authentication → Users → apagar conta de teste e voltar a registar (só se quiseres uid novo)
+A app recria `users/{uid}` automaticamente no primeiro acesso, em `loadUserProfile()` (`src/lib/userRepository.ts`), quando:
+
+1. Abres o site (sessão anónima nova) **ou** fazes login Google/email
+2. A app carrega o perfil → grava o documento em Firestore
+
+### Passos depois do reset total
+
+1. **Browser** → DevTools → Application → Local Storage → apagar **todas** as chaves `joga-ai-*` (perfis antigos com uids apagados)
+2. Hard refresh: `Cmd+Shift+R`
+3. Abrir o site → montar carta ou ir a `/entrar` e registar de novo
+4. Confirmar no [Firestore](https://console.firebase.google.com/project/joga-ai-f7622/firestore): aparece `users/{novo-uid}`
+
+Opcional — zerar também partidas e comunidades de teste:
+
+- Apagar `matches/*`
+- Apagar `communities/*` (inclui `members` e `joinRequests`)
 
 Depois do reset, faz hard refresh (`Cmd+Shift+R`).
 
@@ -87,10 +97,10 @@ PORT=5173 BASE_PATH=/ pnpm run build
 pnpm exec tsc --noEmit
 ```
 
-Publicar regras Firestore:
+Publicar regras e índices Firestore:
 
 ```bash
-firebase deploy --only firestore:rules
+firebase deploy --only firestore
 ```
 
 Push para GitHub → deploy automático Cloudflare Pages.

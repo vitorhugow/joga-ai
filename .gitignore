@@ -37,6 +37,12 @@ yarn-error.log
 testem.log
 /typings
 
+# secrets — nunca subir para o GitHub
+.env
+.env.local
+.env.*.local
+**/.env.local
+
 # System Files
 .DS_Store
 Thumbs.db

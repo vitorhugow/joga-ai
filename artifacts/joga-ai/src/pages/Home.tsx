@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Plus, Search, ChevronRight, Trophy, Flame, Bell } from "lucide-react";
+import { Plus, Search, ChevronRight, Trophy, Flame } from "lucide-react";
 import { calculateOverall } from "@/lib/cardUtils";
 import { loadCommunities, loadAvailableMatches, type Community, type MatchListing } from "@/lib/communityRepository";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,6 +10,7 @@ import { profileToPlayerCard } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { PlayerCard } from "@/components/PlayerCard";
 import { JogaLogo } from "@/components/brand";
+import { NotificationsBell } from "@/components/NotificationsBell";
 import { JogaCard, JogaChip, JogaPage, JogaButton } from "@/components/joga";
 
 const PITCH_SVG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Cpath d='M40 0 L40 80' stroke='rgba(255,255,255,0.03)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='18' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -124,14 +125,7 @@ export default function Home() {
         <div className="relative flex items-center justify-between px-5 pt-5 pb-4">
           <JogaLogo variant="full" size="md" className="max-w-[180px]" />
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.1)" }}
-              onClick={() => toast({ title: "Em breve", description: "Notificações chegam numa próxima versão." })}
-            >
-              <Bell className="w-4 h-4 text-white" />
-            </button>
+            <NotificationsBell userId={userId} isLinked={isLinked} />
             <Link href="/premium">
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.5)" }} data-testid="button-premium-header">
                 <Flame className="w-3.5 h-3.5 text-amber-400" />

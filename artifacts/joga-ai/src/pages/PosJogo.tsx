@@ -173,7 +173,7 @@ export default function PosJogo() {
 
   const [, params] = useRoute("/partida/:id/pos-jogo");
   const [userId] = useState(currentMatchUserId);
-  const [data, setData] = useState<SavedPostMatch | null>(() => loadPostMatch());
+  const [data, setData] = useState<SavedPostMatch | null>(() => loadPostMatch(params?.id));
   const matchId = resolveMatchId({ storedMatchId: data?.matchId, routeMatchId: params?.id });
 
   // Hidrata dados do Firestore em background (não bloqueia render)
@@ -192,13 +192,11 @@ export default function PosJogo() {
   const [editMode, setEditMode] = useState(false);
   const [voteMode, setVoteMode] = useState(false);
   const [gainsMode, setGainsMode] = useState(() => {
-    const post = loadPostMatch();
-    const id = resolveMatchId({ storedMatchId: post?.matchId, routeMatchId: params?.id });
+    const id = resolveMatchId({ routeMatchId: params?.id });
     return hasUserVotedInSession(currentMatchUserId(), id);
   });
   const [ratings, setRatings] = useState<Record<string, number>>(() => {
-    const post = loadPostMatch();
-    const id = resolveMatchId({ storedMatchId: post?.matchId, routeMatchId: params?.id });
+    const id = resolveMatchId({ routeMatchId: params?.id });
     return createMatchFlowStore(id).readVoteDraft();
   });
   const [selectedGameId, setSelectedGameId] = useState("");

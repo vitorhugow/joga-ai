@@ -102,7 +102,7 @@ export default function AoVivo() {
   const [subIn, setSubIn] = useState("");
 
   useEffect(() => {
-    const data = loadPreMatch();
+    const data = loadPreMatch(matchId);
     setPreMatch(data);
 
     if (data) {
@@ -121,7 +121,7 @@ export default function AoVivo() {
 
     document.body.classList.add("joga-ai-ao-vivo-page");
     return () => document.body.classList.remove("joga-ai-ao-vivo-page");
-  }, []);
+  }, [matchId]);
 
   useEffect(() => {
     if (!isRunning) return;

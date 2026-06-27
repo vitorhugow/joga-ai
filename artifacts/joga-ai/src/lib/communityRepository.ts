@@ -8,12 +8,15 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  updateDoc,
   query,
   where,
   orderBy,
   limit,
   serverTimestamp,
   collectionGroup,
+  writeBatch,
+  increment,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 
@@ -50,6 +53,14 @@ export type CommunityMember = {
 };
 
 export type JoinRequestStatus = "pending" | "approved" | "rejected";
+
+export type AdminJoinRequest = {
+  communityId: string;
+  communityName: string;
+  userId: string;
+  displayName: string;
+  requestedAt?: string;
+};
 
 export type CreateCommunityInput = {
   name: string;
@@ -251,6 +262,97 @@ export async function getJoinRequestStatus(
   } catch {
     return null;
   }
+}
+
+/** Pedidos pendentes nas comunidades onde o utilizador é admin */
+export async function loadPendingJoinRequestsForAdmin(
+  adminId: string,
+): Promise<AdminJoinRequest[]> {
+  if (!isFirebaseConfigured() || !adminId) return [];
+
+  try {
+    const communitiesSnap = await getDocs(
+      query(collection(db, "communities"), where("adminId", "==", adminId)),
+    );
+
+    const requests: AdminJoinRequest[] = [];
+
+    for (const communityDoc of communitiesSnap.docs) {
+      const pendingSnap = await getDocs(
+        query(
+          collection(db, "communities", communityDoc.id, "joinRequests"),
+          where("status", "==", "pending"),
+        ),
+      );
+
+      for (const requestDoc of pendingSnap.docs) {
+        const data = requestDoc.data();
+        const requestedAt = data.requestedAt?.toDate?.()
+          ? data.requestedAt.toDate().toISOString()
+          : undefined;
+
+        requests.push({
+          communityId: communityDoc.id,
+          communityName: communityDoc.data().name ?? "Comunidade",
+          userId: requestDoc.id,
+          displayName: data.displayName ?? "Jogador",
+          requestedAt,
+        });
+      }
+    }
+
+    return requests.sort((a, b) => {
+      const aTime = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+      const bTime = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  } catch (err) {
+    console.warn("[communityRepository] loadPendingJoinRequestsForAdmin:", err);
+    return [];
+  }
+}
+
+export async function approveJoinRequest(
+  communityId: string,
+  userId: string,
+  displayName: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const batch = writeBatch(db);
+  const requestRef = doc(db, "communities", communityId, "joinRequests", userId);
+  const memberRef = doc(db, "communities", communityId, "members", userId);
+  const communityRef = doc(db, "communities", communityId);
+
+  batch.update(requestRef, {
+    status: "approved" as JoinRequestStatus,
+    reviewedAt: serverTimestamp(),
+  });
+
+  batch.set(memberRef, {
+    userId,
+    displayName: displayName.trim() || "Jogador",
+    role: "member",
+    joinedAt: serverTimestamp(),
+  });
+
+  batch.update(communityRef, {
+    memberCount: increment(1),
+  });
+
+  await batch.commit();
+}
+
+export async function rejectJoinRequest(
+  communityId: string,
+  userId: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  await updateDoc(doc(db, "communities", communityId, "joinRequests", userId), {
+    status: "rejected" as JoinRequestStatus,
+    reviewedAt: serverTimestamp(),
+  });
 }
 
 export async function loadCommunityMembers(communityId: string): Promise<CommunityMember[]> {

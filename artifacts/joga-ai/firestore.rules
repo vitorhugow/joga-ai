@@ -68,8 +68,12 @@ service cloud.firestore {
           requestUserId == request.auth.uid
           || isCommunityAdmin(communityId)
         );
-        allow create, update: if isSignedIn() && requestUserId == request.auth.uid;
-        allow delete: if false;
+        allow create: if isSignedIn() && requestUserId == request.auth.uid;
+        allow update: if isSignedIn() && (
+          requestUserId == request.auth.uid
+          || isCommunityAdmin(communityId)
+        );
+        allow delete: if isCommunityAdmin(communityId);
       }
     }
   }

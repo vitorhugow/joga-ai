@@ -24,8 +24,8 @@ import {
   type SavedPostMatch,
 } from "./postMatchStorage";
 
-import type { LivePlayer } from "./preMatchStorage";
-import { savePreMatch, type SavedPreMatch } from "./preMatchStorage";
+import type { LivePlayer, LiveTeamKey } from "./preMatchStorage";
+import { savePreMatch, loadPreMatch, type SavedPreMatch } from "./preMatchStorage";
 import type { MatchListing } from "./communityRepository";
 
 export type CreateMatchInput = {
@@ -171,6 +171,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
 
   const preMatch: SavedPreMatch = {
     version: 1,
+    matchId,
     gameMode,
     teamCount: 2,
     teamNames: saved.teamNames,
@@ -180,7 +181,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     savedAt: createdAt,
   };
 
-  savePreMatch(preMatch);
+  savePreMatch(preMatch, matchId);
   await saveMatchToFirestore(matchId, saved);
 
   const listing: MatchListing = {
@@ -249,6 +250,63 @@ export type MatchStatus =
   | "concluida"
   | "expirada";
 
+export type MatchRosterData = {
+  gameMode: "fut5" | "fut7";
+  teamCount: 2 | 3 | 4;
+  teamNames: Record<"A" | "B" | "C" | "D", string>;
+  players: LivePlayer[];
+  playerTeams: Record<string, LiveTeamKey>;
+  assignments: Record<string, string | null>;
+};
+
+/** Persiste o plantel da partida (local + Firestore) */
+export async function saveMatchRoster(
+  matchId: string,
+  roster: MatchRosterData,
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  const preMatch: SavedPreMatch = {
+    version: 1,
+    matchId,
+    gameMode: roster.gameMode,
+    teamCount: roster.teamCount,
+    teamNames: roster.teamNames,
+    players: roster.players,
+    playerTeams: roster.playerTeams,
+    assignments: roster.assignments,
+    savedAt: now,
+  };
+  savePreMatch(preMatch, matchId);
+
+  const existing = loadPostMatch(matchId) ?? (await loadMatchFromFirestore(matchId));
+  const currentPlayerId =
+    existing?.currentPlayerId ??
+    roster.players.find((player) => player.isMe)?.id ??
+    roster.players[0]?.id ??
+    "";
+
+  const updated: SavedPostMatch = {
+    version: 1,
+    matchId,
+    status: existing?.status ?? "configurando",
+    createdAt: existing?.createdAt ?? now,
+    expiresAt: existing?.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    savedAt: now,
+    gameMode: roster.gameMode,
+    teamCount: roster.teamCount,
+    teamNames: roster.teamNames,
+    players: roster.players,
+    playerTeams: roster.playerTeams,
+    assignments: roster.assignments,
+    currentPlayerId,
+    miniGames: existing?.miniGames ?? [],
+    votedUserIds: existing?.votedUserIds,
+  };
+
+  await saveMatchToFirestore(matchId, updated);
+}
+
 /** Salva ou actualiza o documento `matches/{matchId}` */
 export async function saveMatchToFirestore(
   matchId: string,
@@ -269,6 +327,7 @@ export async function saveMatchToFirestore(
       teamNames: data.teamNames,
       players: data.players,
       playerTeams: data.playerTeams,
+      assignments: data.assignments ?? {},
       currentPlayerId: data.currentPlayerId,
       miniGames: data.miniGames,
       createdAt: data.createdAt,
@@ -287,8 +346,8 @@ export async function updateMatchStatus(
   status: MatchStatus,
 ): Promise<void> {
   // Actualiza cache local
-  const local = loadPostMatch();
-  if (local && local.matchId === matchId) {
+  const local = loadPostMatch(matchId);
+  if (local) {
     savePostMatch({ ...local, status: status as SavedPostMatch["status"] });
   }
 
@@ -310,39 +369,114 @@ export async function updateMatchStatus(
 export async function loadMatchFromFirestore(
   matchId: string,
 ): Promise<SavedPostMatch | null> {
-  const local = loadPostMatch();
+  const local = loadPostMatch(matchId);
+  const pre = loadPreMatch(matchId);
 
-  if (!isFirebaseConfigured()) return local;
+  if (!isFirebaseConfigured()) {
+    return mergeMatchSources(matchId, null, local, pre);
+  }
 
   try {
     const ref = doc(db, "matches", matchId);
     const snap = await getDoc(ref);
-    if (!snap.exists()) return local;
+    if (!snap.exists()) {
+      return mergeMatchSources(matchId, null, local, pre);
+    }
 
     const remote = snap.data() as Omit<SavedPostMatch, "version">;
-    const merged: SavedPostMatch = {
+    const remoteMatch: SavedPostMatch = {
       version: 1,
       matchId: remote.matchId ?? matchId,
-      status: remote.status ?? local?.status ?? "aguardando_auditoria",
-      createdAt: remote.createdAt ?? local?.createdAt ?? new Date().toISOString(),
-      expiresAt: remote.expiresAt ?? local?.expiresAt ?? new Date().toISOString(),
-      savedAt: new Date().toISOString(),
-      gameMode: remote.gameMode ?? local?.gameMode ?? "fut5",
-      teamCount: remote.teamCount ?? local?.teamCount ?? 2,
-      teamNames: remote.teamNames ?? local?.teamNames ?? { A: "Equipa A", B: "Equipa B", C: "Equipa C", D: "Equipa D" },
-      players: remote.players ?? local?.players ?? [],
-      playerTeams: remote.playerTeams ?? local?.playerTeams ?? {},
-      currentPlayerId: remote.currentPlayerId ?? local?.currentPlayerId ?? "",
-      miniGames: remote.miniGames ?? local?.miniGames ?? [],
+      status: remote.status ?? "configurando",
+      createdAt: remote.createdAt ?? new Date().toISOString(),
+      expiresAt: remote.expiresAt ?? new Date().toISOString(),
+      savedAt: remote.savedAt ?? new Date().toISOString(),
+      gameMode: remote.gameMode ?? "fut5",
+      teamCount: remote.teamCount ?? 2,
+      teamNames: remote.teamNames ?? { A: "Equipa A", B: "Equipa B", C: "Equipa C", D: "Equipa D" },
+      players: remote.players ?? [],
+      playerTeams: remote.playerTeams ?? {},
+      assignments: remote.assignments ?? {},
+      currentPlayerId: remote.currentPlayerId ?? "",
+      miniGames: remote.miniGames ?? [],
+      votedUserIds: remote.votedUserIds,
     };
 
-    // Actualiza cache local com dados do Firestore
-    savePostMatch(merged);
+    const merged = mergeMatchSources(matchId, remoteMatch, local, pre);
+    if (merged) savePostMatch(merged);
     return merged;
   } catch (err) {
     console.warn("[matchRepository] loadMatchFromFirestore:", err);
-    return local;
+    return mergeMatchSources(matchId, null, local, pre);
   }
+}
+
+function parseSavedAt(value?: string) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function mergeMatchSources(
+  matchId: string,
+  remote: SavedPostMatch | null,
+  local: SavedPostMatch | null,
+  pre: SavedPreMatch | null,
+): SavedPostMatch | null {
+  const remoteValid = remote?.matchId === matchId ? remote : null;
+  const localValid = local?.matchId === matchId ? local : null;
+  const preValid = pre && (!pre.matchId || pre.matchId === matchId) ? pre : null;
+
+  if (!remoteValid && !localValid && !preValid) return null;
+
+  const rosterCandidates = [
+    {
+      players: remoteValid?.players ?? [],
+      playerTeams: remoteValid?.playerTeams ?? {},
+      assignments: remoteValid?.assignments ?? {},
+      savedAt: parseSavedAt(remoteValid?.savedAt),
+    },
+    {
+      players: localValid?.players ?? [],
+      playerTeams: localValid?.playerTeams ?? {},
+      assignments: localValid?.assignments ?? {},
+      savedAt: parseSavedAt(localValid?.savedAt),
+    },
+    {
+      players: preValid?.players ?? [],
+      playerTeams: preValid?.playerTeams ?? {},
+      assignments: preValid?.assignments ?? {},
+      savedAt: parseSavedAt(preValid?.savedAt),
+    },
+  ];
+
+  const bestRoster = [...rosterCandidates].sort((a, b) => {
+    if (b.players.length !== a.players.length) {
+      return b.players.length - a.players.length;
+    }
+    return b.savedAt - a.savedAt;
+  })[0];
+
+  const base = remoteValid ?? localValid;
+  const now = new Date().toISOString();
+
+  return {
+    version: 1,
+    matchId,
+    status: base?.status ?? "configurando",
+    createdAt: base?.createdAt ?? now,
+    expiresAt: base?.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    savedAt: now,
+    gameMode: base?.gameMode ?? preValid?.gameMode ?? "fut5",
+    teamCount: base?.teamCount ?? preValid?.teamCount ?? 2,
+    teamNames: base?.teamNames ?? preValid?.teamNames ?? { A: "Equipa A", B: "Equipa B", C: "Equipa C", D: "Equipa D" },
+    players: bestRoster.players,
+    playerTeams: bestRoster.playerTeams,
+    assignments: bestRoster.assignments,
+    currentPlayerId: base?.currentPlayerId ?? bestRoster.players.find((player) => player.isMe)?.id ?? bestRoster.players[0]?.id ?? "",
+    miniGames: base?.miniGames ?? [],
+    votedUserIds: base?.votedUserIds,
+  };
 }
 
 /**

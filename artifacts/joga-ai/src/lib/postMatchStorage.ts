@@ -16,6 +16,7 @@ export type SavedPostMatch = {
   teamNames: Record<"A" | "B" | "C" | "D", string>;
   players: LivePlayer[];
   playerTeams: Record<string, PostMatchTeamKey>;
+  assignments?: Record<string, string | null>;
   currentPlayerId: string;
   miniGames: MiniGameSummary[];
   votedUserIds?: string[];
@@ -23,21 +24,37 @@ export type SavedPostMatch = {
 
 const KEY = "joga-ai-post-match-v1";
 
-export function savePostMatch(data: SavedPostMatch) {
-  localStorage.setItem(KEY, JSON.stringify(data));
+function scopedKey(matchId: string) {
+  return `${KEY}-${matchId}`;
 }
 
-export function loadPostMatch(): SavedPostMatch | null {
+export function savePostMatch(data: SavedPostMatch) {
+  localStorage.setItem(scopedKey(data.matchId), JSON.stringify(data));
+}
+
+export function loadPostMatch(matchId?: string): SavedPostMatch | null {
   try {
+    if (matchId) {
+      const scoped = localStorage.getItem(scopedKey(matchId));
+      if (scoped) return JSON.parse(scoped) as SavedPostMatch;
+    }
+
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as SavedPostMatch;
+
+    const parsed = JSON.parse(raw) as SavedPostMatch;
+    if (matchId && parsed.matchId !== matchId) return null;
+    return parsed;
   } catch {
     return null;
   }
 }
 
-export function clearPostMatch() {
+export function clearPostMatch(matchId?: string) {
+  if (matchId) {
+    localStorage.removeItem(scopedKey(matchId));
+    return;
+  }
   localStorage.removeItem(KEY);
 }
 

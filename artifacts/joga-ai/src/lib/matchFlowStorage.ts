@@ -169,7 +169,7 @@ export function hasUserVotedInSession(userId: string, matchId?: string | null) {
   const store = createMatchFlowStore(matchId);
   if (store.readVotes().some((vote) => vote.userId === userId)) return true;
 
-  const post = loadPostMatch();
+  const post = loadPostMatch(matchId ?? undefined);
   const resolvedId = normalizeMatchId(matchId ?? post?.matchId);
   if (post?.matchId === resolvedId && post.votedUserIds?.includes(userId)) {
     return true;

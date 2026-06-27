@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import {
   AlertTriangle,
@@ -12,7 +12,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { loadMatchFromFirestore } from "@/lib/matchRepository";
+import { loadMatchFromFirestore, saveMatchRoster } from "@/lib/matchRepository";
 import { loadPreMatch } from "@/lib/preMatchStorage";
 import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
@@ -280,6 +280,8 @@ export default function PreJogo() {
   const matchId = resolveMatchId({ routeMatchId: params?.id });
   const returnTo = new URLSearchParams(window.location.search).get("from") || "/jogos";
   const [matchDetails, setMatchDetails] = useState<MatchDetails | null>(null);
+  const [rosterHydrated, setRosterHydrated] = useState(false);
+  const skipNextPersist = useRef(true);
 
   useEffect(() => {
     setMatchDetails(loadMatchDetails(matchId));
@@ -289,37 +291,42 @@ export default function PreJogo() {
     let cancelled = false;
 
     async function hydrateRoster() {
-      const remote = await loadMatchFromFirestore(matchId);
-      const pre = loadPreMatch();
-      const sourcePlayers =
-        remote?.matchId === matchId && remote.players?.length
-          ? remote.players
-          : pre?.players ?? [];
+      skipNextPersist.current = true;
+      setRosterHydrated(false);
+
+      const merged = await loadMatchFromFirestore(matchId);
+      const pre = loadPreMatch(matchId);
 
       if (cancelled) return;
 
-      setPlayers(
-        sourcePlayers.map((p) => ({
-          id: p.id,
-          name: p.name,
-          position: p.position,
-          overall: p.overall,
-          paid: p.paid ?? false,
-          isMe: p.isMe,
-          manual: p.manual,
-        })),
-      );
+      const source = merged ?? pre;
 
-      if (remote?.matchId === matchId) {
-        setGameMode(remote.gameMode ?? "fut5");
-        setTeamCount(remote.teamCount ?? 2);
-        setPlayerTeams(remote.playerTeams ?? {});
-      } else if (pre) {
-        setGameMode(pre.gameMode);
-        setTeamCount(pre.teamCount);
-        setPlayerTeams(pre.playerTeams ?? {});
-        setAssignments(pre.assignments ?? {});
+      if (source) {
+        setPlayers(
+          source.players.map((p) => ({
+            id: p.id,
+            name: p.name,
+            position: p.position,
+            overall: p.overall,
+            paid: p.paid ?? false,
+            isMe: p.isMe,
+            manual: p.manual,
+          })),
+        );
+        setGameMode(source.gameMode ?? "fut5");
+        setTeamCount(source.teamCount ?? 2);
+        setPlayerTeams(source.playerTeams ?? {});
+        setAssignments(
+          merged?.assignments ??
+            pre?.assignments ??
+            {},
+        );
       }
+
+      setRosterHydrated(true);
+      window.setTimeout(() => {
+        skipNextPersist.current = false;
+      }, 0);
     }
 
     void hydrateRoster();
@@ -341,6 +348,29 @@ export default function PreJogo() {
   const [playerTeams, setPlayerTeams] = useState<Record<string, PlayerStatus>>({});
   const [assignments, setAssignments] = useState<Record<string, string | null>>({});
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
+
+  const persistRoster = useCallback(() => {
+    if (!matchId || skipNextPersist.current) return;
+
+    void saveMatchRoster(matchId, {
+      gameMode,
+      teamCount,
+      teamNames,
+      players,
+      playerTeams,
+      assignments,
+    });
+  }, [matchId, gameMode, teamCount, players, playerTeams, assignments]);
+
+  useEffect(() => {
+    if (!rosterHydrated) return;
+
+    const timeout = window.setTimeout(() => {
+      persistRoster();
+    }, 400);
+
+    return () => window.clearTimeout(timeout);
+  }, [rosterHydrated, persistRoster]);
 
   function rebuildField(mode: GameMode) {
     setGameMode(mode);
@@ -1222,10 +1252,11 @@ export default function PreJogo() {
           size="lg"
           className="gap-3"
           onClick={() => {
-            clearPostMatch();
+            clearPostMatch(matchId);
             resetMatchFlowSession(matchId);
             savePreMatch({
               version: 1,
+              matchId,
               gameMode,
               teamCount,
               teamNames,
@@ -1233,6 +1264,14 @@ export default function PreJogo() {
               playerTeams,
               assignments,
               savedAt: new Date().toISOString(),
+            }, matchId);
+            void saveMatchRoster(matchId, {
+              gameMode,
+              teamCount,
+              teamNames,
+              players,
+              playerTeams,
+              assignments,
             });
             setLocation(`/partida/${matchId}/ao-vivo`);
           }}

@@ -296,27 +296,29 @@
 }
 
 .joga-new-card-stat strong {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.06em;
+  display: block;
   font-size: clamp(28px, 10.5cqw, 50px);
   font-weight: 900;
-  line-height: 1;
+  line-height: .88;
   letter-spacing: -.05em;
 }
 
-.joga-new-card-stat-num {
-  line-height: 1;
+.joga-new-card-stat-value-wrap {
+  position: relative;
+  display: inline-block;
 }
 
 .joga-new-card-stat-delta {
-  font-size: 0.34em;
+  position: absolute;
+  top: -0.12em;
+  left: 100%;
+  margin-left: 0.05em;
+  font-size: 0.3em;
   font-weight: 800;
   color: #4ade80;
   letter-spacing: 0;
   line-height: 1;
-  transform: translateY(-0.08em);
+  text-decoration: none;
 }
 
 .joga-new-card-stat span {

@@ -120,15 +120,23 @@ export function ProfileSetupDialog({
         photoUrl,
       };
 
-      if (isEditing) {
-        await updateUserProfile(userId, {
-          displayName: name,
-          shirtNumber: num,
-          photoUrl,
-        }, !isLinked);
-      } else {
-        await completeUserProfile(userId, input, !isLinked);
-      }
+      const saveTask = isEditing
+        ? updateUserProfile(
+            userId,
+            { displayName: name, shirtNumber: num, photoUrl },
+            !isLinked,
+          )
+        : completeUserProfile(userId, input, !isLinked);
+
+      await Promise.race([
+        saveTask,
+        new Promise<never>((_, reject) => {
+          window.setTimeout(
+            () => reject(new Error("auth/timeout")),
+            25_000,
+          );
+        }),
+      ]);
 
       if (isLinked) {
         await refresh();
@@ -139,6 +147,8 @@ export function ProfileSetupDialog({
     } catch (err) {
       if (err instanceof ProfilePhotoTooLargeError) {
         setError(err.message);
+      } else if (String((err as Error)?.message ?? err).includes("auth/timeout")) {
+        setError("O guardar demorou demasiado. Verifica a ligação e tenta outra vez.");
       } else {
         setError(
           isLinked

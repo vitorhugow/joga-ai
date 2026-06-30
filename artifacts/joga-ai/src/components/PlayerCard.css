@@ -303,25 +303,21 @@
   letter-spacing: -.05em;
 }
 
-/* Envolve só o dígito — herda fonte do strong, não altera tamanho */
-.joga-new-card-stat-value {
+/* + verde em cima — só nos que subiram; não altera fonte do número */
+.joga-new-card-stat--up > strong {
   position: relative;
   display: inline-block;
 }
 
-/* Badge pequeno no canto superior direito do número */
-.joga-new-card-stat-delta {
+.joga-new-card-stat--up > strong::before {
+  content: "+";
   position: absolute;
-  top: 0;
-  left: 100%;
-  transform: translate(8%, -42%);
-  font-family: Inter, Oswald, sans-serif;
-  font-size: clamp(7px, 2.6cqw, 11px);
+  top: -0.55em;
+  right: -0.2em;
+  font-size: 0.34em;
   font-weight: 800;
   color: #4ade80;
-  letter-spacing: 0;
   line-height: 1;
-  white-space: nowrap;
   pointer-events: none;
 }
 

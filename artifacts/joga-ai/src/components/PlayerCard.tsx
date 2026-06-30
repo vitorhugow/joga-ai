@@ -126,19 +126,13 @@ export function PlayerCard({
           <div className="joga-new-card-stats">
             {stats.map(([label, value]) => {
               const attrKey = STAT_ATTR_KEYS[label];
-              const delta = attrKey ? attributeDeltas?.[attrKey] : undefined;
+              const wentUp = (attributeDeltas?.[attrKey!] ?? 0) > 0;
               return (
-                <div className="joga-new-card-stat" key={label}>
-                  <strong>
-                    <span className="joga-new-card-stat-value">
-                      {value}
-                      {delta != null && delta > 0 && (
-                        <span className="joga-new-card-stat-delta" title={`+${delta}`}>
-                          ↑+{delta}
-                        </span>
-                      )}
-                    </span>
-                  </strong>
+                <div
+                  className={`joga-new-card-stat${wentUp ? " joga-new-card-stat--up" : ""}`}
+                  key={label}
+                >
+                  <strong>{value}</strong>
                   <span>{label}</span>
                 </div>
               );

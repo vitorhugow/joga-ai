@@ -16,6 +16,19 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/communities/$(communityId)).data.adminId == request.auth.uid;
     }
 
+    // Collection-group queries (loadMyCommunities, pedidos pendentes)
+    match /{path=**}/members/{memberId} {
+      allow read: if isSignedIn()
+        && (memberId == request.auth.uid
+          || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && memberId == request.auth.uid;
+    }
+
+    match /{path=**}/joinRequests/{requestUserId} {
+      allow read: if isSignedIn() && requestUserId == request.auth.uid;
+      allow create: if isSignedIn() && requestUserId == request.auth.uid;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId);
@@ -73,7 +86,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
         && request.resource.data.adminId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.adminId == request.auth.uid
+        || (
+          !resource.data.isPrivate
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount'])
+          && request.resource.data.memberCount == resource.data.memberCount + 1
+        )
+      );
       allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid;
 
       match /members/{memberId} {

@@ -1,6 +1,9 @@
 import {
   signInAnonymously,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  linkWithRedirect,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -19,6 +22,56 @@ import { auth, isFirebaseConfigured } from "./firebase";
 const LS_ANON_ID_KEY = "joga-ai-current-user-id-v3";
 
 const googleProvider = new GoogleAuthProvider();
+
+function isPopupBlockedError(err: unknown): boolean {
+  const code = (err as { code?: string })?.code ?? "";
+  const message = String((err as Error)?.message ?? err);
+  return (
+    code === "auth/popup-blocked" ||
+    code === "auth/popup-closed-by-user" ||
+    message.includes("Cross-Origin-Opener-Policy") ||
+    message.includes("window.closed")
+  );
+}
+
+/** Processa retorno de signInWithRedirect após reload */
+export async function handleGoogleRedirectResult(): Promise<UserCredential | null> {
+  if (!isFirebaseConfigured()) return null;
+  try {
+    return await getRedirectResult(auth);
+  } catch (err) {
+    console.warn("[auth] getRedirectResult:", err);
+    return null;
+  }
+}
+
+async function googleWithPopupOrRedirect(): Promise<UserCredential> {
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (err) {
+    if (isPopupBlockedError(err)) {
+      await signInWithRedirect(auth, googleProvider);
+      throw new Error("auth/redirect-started");
+    }
+    throw err;
+  }
+}
+
+async function linkGoogleWithPopupOrRedirect(user: User): Promise<UserCredential> {
+  try {
+    return await linkWithPopup(user, googleProvider);
+  } catch (err) {
+    const code = (err as { code?: string })?.code ?? "";
+    if (code === "auth/credential-already-in-use" || code === "auth/email-already-in-use") {
+      throw new AuthAccountSwitchError();
+    }
+    if (isPopupBlockedError(err)) {
+      await linkWithRedirect(user, googleProvider);
+      throw new Error("auth/redirect-started");
+    }
+    throw err;
+  }
+}
 
 export class AuthAccountSwitchError extends Error {
   constructor(message = "Esta conta Google já existe. Os dados da sessão anterior podem não transferir.") {
@@ -58,8 +111,9 @@ export async function signInWithGoogle(): Promise<UserCredential> {
 
   if (auth.currentUser?.isAnonymous) {
     try {
-      return await linkWithPopup(auth.currentUser, googleProvider);
+      return await linkGoogleWithPopupOrRedirect(auth.currentUser);
     } catch (err) {
+      if ((err as Error).message === "auth/redirect-started") throw err;
       const code = (err as { code?: string })?.code ?? "";
       if (code === "auth/credential-already-in-use" || code === "auth/email-already-in-use") {
         throw new AuthAccountSwitchError();
@@ -68,7 +122,7 @@ export async function signInWithGoogle(): Promise<UserCredential> {
     }
   }
 
-  return signInWithPopup(auth, googleProvider);
+  return googleWithPopupOrRedirect();
 }
 
 // ─── Login Email/Password ─────────────────────────────────────────────────────

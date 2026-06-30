@@ -44,6 +44,7 @@ export type CreateMatchInput = {
   organizerName: string;
   organizerPosition: string;
   organizerOverall: number;
+  communityId?: string;
 };
 
 const LISTINGS_KEY = "joga-ai-match-listings-v1";
@@ -65,6 +66,7 @@ export type MatchDetails = {
   notes?: string;
   openToExternal?: boolean;
   organizerName?: string;
+  organizerId?: string;
   status?: string;
 };
 
@@ -167,6 +169,9 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     playerTeams: { [input.organizerId]: "BENCH" },
     currentPlayerId: input.organizerId,
     miniGames: [],
+    title: input.title.trim() || "Nova partida",
+    communityId: input.communityId,
+    organizerId: input.organizerId,
   };
 
   const preMatch: SavedPreMatch = {
@@ -194,6 +199,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     date: formatMatchDate(input.date, input.time),
     spotsRemaining: spotsLeft > 0 ? `${spotsLeft} vagas` : "Lotado",
     price: input.price.trim() || "Grátis",
+    communityId: input.communityId,
     status: "configurando",
   };
 
@@ -209,6 +215,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     notes: input.notes,
     openToExternal: input.openToExternal,
     organizerName: input.organizerName,
+    organizerId: input.organizerId,
   });
 
   if (isFirebaseConfigured()) {
@@ -226,6 +233,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
         openToExternal: input.openToExternal,
         notes: input.notes,
         organizerId: input.organizerId,
+        communityId: input.communityId ?? null,
         scheduledDate: input.date,
         scheduledTime: input.time,
         savedAt: serverTimestamp(),
@@ -347,7 +355,7 @@ export async function updateMatchStatus(
 ): Promise<void> {
   // Actualiza cache local
   const local = loadPostMatch(matchId);
-  if (local) {
+  if (local && local.matchId === matchId) {
     savePostMatch({ ...local, status: status as SavedPostMatch["status"] });
   }
 
@@ -400,6 +408,9 @@ export async function loadMatchFromFirestore(
       currentPlayerId: remote.currentPlayerId ?? "",
       miniGames: remote.miniGames ?? [],
       votedUserIds: remote.votedUserIds,
+      title: remote.title,
+      communityId: remote.communityId,
+      organizerId: remote.organizerId,
     };
 
     const merged = mergeMatchSources(matchId, remoteMatch, local, pre);
@@ -476,6 +487,9 @@ function mergeMatchSources(
     currentPlayerId: base?.currentPlayerId ?? bestRoster.players.find((player) => player.isMe)?.id ?? bestRoster.players[0]?.id ?? "",
     miniGames: base?.miniGames ?? [],
     votedUserIds: base?.votedUserIds,
+    title: base?.title,
+    communityId: base?.communityId,
+    organizerId: base?.organizerId,
   };
 }
 

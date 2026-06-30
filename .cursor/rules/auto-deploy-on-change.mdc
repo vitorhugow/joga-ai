@@ -1,0 +1,46 @@
+---
+description: Deploy imediato após alterações no Joga AI (Cloudflare + Firestore)
+alwaysApply: true
+---
+
+# Deploy imediato após alterações
+
+Sempre que fizeres alterações neste projeto, **faz deploy na hora** — não esperes o utilizador pedir.
+
+## Quando aplicar
+
+Após commits de código, fixes ou features que toquem:
+- Frontend (`artifacts/joga-ai/src/**`, `public/**`)
+- Regras/índices Firestore (`firestore.rules`, `firestore.indexes.json`)
+
+## Comandos (raiz do monorepo)
+
+```bash
+# 1. Build de produção
+pnpm install && pnpm --filter @workspace/joga-ai run build
+
+# 2. Cloudflare Pages (frontend)
+cd artifacts/joga-ai && npx wrangler pages deploy dist/public --project-name=joga-ai
+
+# 3. Firestore (se alteraste rules ou indexes)
+cd artifacts/joga-ai && firebase deploy --only firestore:rules,firestore:indexes
+```
+
+## Ordem
+
+1. `tsc` / build local — falha rápido antes de publicar
+2. Deploy Cloudflare se mudaste app ou assets estáticos (`_headers`, `_redirects`)
+3. Deploy Firestore se mudaste `firestore.rules` ou `firestore.indexes.json`
+
+## Git + Cloudflare
+
+Se o projeto estiver ligado ao GitHub com auto-deploy na `main`, **push** também conta como deploy — mas o utilizador quer deploy **logo após alterar**, não só no fim da sessão.
+
+## Não fazer sem pedido explícito
+
+- `git push --force` para `main`
+- Commit (só quando o utilizador pedir)
+
+## Reportar ao utilizador
+
+No fim do deploy, indica URL do Pages e se Firestore foi actualizado.

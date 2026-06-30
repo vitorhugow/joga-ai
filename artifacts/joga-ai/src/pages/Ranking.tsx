@@ -36,8 +36,14 @@ export default function Ranking() {
             name: player.name,
             position: player.position,
             overall: myOverall,
-            value: category === "overall" ? myOverall : category === "golos" ? profile.seasonStats.goals : profile.seasonStats.assists,
-            label: category === "overall" ? "OVR" : category === "golos" ? "Golos" : "Assist.",
+            value:
+              category === "overall"
+                ? myOverall
+                : category === "golos"
+                  ? profile.seasonStats.goals
+                  : category === "notas"
+                    ? Number(profile.lastMatchRating ?? profile.seasonStats.averageRating ?? 0).toFixed(1)
+                    : profile.seasonStats.assists,
             isMe: true,
           },
         ]

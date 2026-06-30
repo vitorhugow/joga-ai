@@ -24,6 +24,14 @@ service cloud.firestore {
       match /evolution/{recordId} {
         allow read, write: if isOwner(userId);
       }
+
+      match /matchHistory/{matchId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /notifications/{notifId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     match /matches/{matchId} {
@@ -34,7 +42,8 @@ service cloud.firestore {
         resource.data.organizerId == request.auth.uid
         || resource.data.currentPlayerId == request.auth.uid
       );
-      allow delete: if false;
+      allow delete: if isSignedIn()
+        && resource.data.organizerId == request.auth.uid;
 
       match /auditors/{docId} {
         allow read, write: if isSignedIn();
@@ -45,6 +54,19 @@ service cloud.firestore {
         allow create, update: if isOwner(userId);
         allow delete: if false;
       }
+
+      match /events/{eventId} {
+        allow read, write: if isSignedIn();
+      }
+
+      match /miniGames/{gameId} {
+        allow read, write: if isSignedIn();
+      }
+
+      match /summary/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
     }
 
     match /communities/{communityId} {
@@ -52,7 +74,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.adminId == request.auth.uid;
       allow update: if isSignedIn() && resource.data.adminId == request.auth.uid;
-      allow delete: if false;
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid;
 
       match /members/{memberId} {
         allow read: if isSignedIn();

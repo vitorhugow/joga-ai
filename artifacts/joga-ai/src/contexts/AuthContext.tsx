@@ -4,6 +4,7 @@ import {
   onUserChanged,
   getLocalUserId,
   signInWithGoogle,
+  handleGoogleRedirectResult,
   loginWithEmail,
   registerWithEmail,
   resetPassword,
@@ -12,7 +13,7 @@ import {
   signInAnonymousSession,
 } from "@/lib/auth";
 import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
-import { isFirebaseConfigured } from "@/lib/firebase";
+import { isFirebaseConfigured, auth } from "@/lib/firebase";
 
 type AuthState = {
   userId: string;
@@ -84,13 +85,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onUserChanged(async (user) => {
       if (!bootstrappedRef.current) {
         bootstrappedRef.current = true;
-        if (!user) {
+        await handleGoogleRedirectResult();
+        if (!auth.currentUser && !user) {
           await signInAnonymousSession();
           return;
         }
       }
 
-      setState(applyUserState(user, localUserIdRef.current));
+      setState(applyUserState(auth.currentUser ?? user, localUserIdRef.current));
     });
 
     return unsubscribe;

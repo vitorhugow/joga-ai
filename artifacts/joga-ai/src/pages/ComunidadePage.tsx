@@ -9,6 +9,7 @@ import {
   loadAvailableMatches,
   loadCommunityMembers,
   requestToJoin,
+  joinCommunityPublic,
   getJoinRequestStatus,
   type Community,
   type MatchListing,
@@ -19,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
+import { loadCommunityMatchResults, type MatchResult } from "@/lib/matchHistoryRepository";
 import { toast } from "@/hooks/use-toast";
 
 const gameTypeLabel: Record<string, string> = {
@@ -33,13 +35,14 @@ export default function ComunidadePage() {
   const { userId, isLinked } = useAuth();
   const { profile } = useUserProfile();
   const [, params] = useRoute("/comunidades/:id");
-  const [activeTab, setActiveTab] = useState<"partidas" | "membros">("partidas");
+  const [activeTab, setActiveTab] = useState<"partidas" | "membros" | "resultados">("partidas");
   const id = params?.id || "";
 
   const [community, setCommunity] = useState<Community | null>(null);
   const [matches, setMatches] = useState<MatchListing[]>([]);
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [joinStatus, setJoinStatus] = useState<JoinRequestStatus | null>(null);
+  const [results, setResults] = useState<MatchResult[]>([]);
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
@@ -49,6 +52,7 @@ export default function ComunidadePage() {
       setMatches(all.filter((m) => m.communityId === id)),
     );
     loadCommunityMembers(id).then(setMembers);
+    loadCommunityMatchResults(id).then(setResults);
     if (userId) getJoinRequestStatus(id, userId).then(setJoinStatus);
   }, [id, userId]);
 
@@ -64,17 +68,26 @@ export default function ComunidadePage() {
   const hasAccess = !community.isPrivate || isMember;
   const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
 
+  const isAdmin = community.adminId === userId;
+
   async function handleJoin() {
     if (!requireLinked({ mode: "register", title: "Cria conta para entrar na comunidade" })) {
       return;
     }
-    if (isMember || joinPending) return;
+    if (!community || isMember || joinPending || isAdmin) return;
 
     setJoining(true);
     try {
-      await requestToJoin(id, userId, profile.displayName || "Jogador");
-      setJoinStatus("pending");
-      toast({ title: "Pedido enviado", description: "O administrador vai rever o teu pedido." });
+      if (!community.isPrivate) {
+        await joinCommunityPublic(id, userId, profile.displayName || "Jogador");
+        toast({ title: "Entraste na comunidade!" });
+        loadCommunity(id, userId).then(setCommunity);
+        loadCommunityMembers(id).then(setMembers);
+      } else {
+        await requestToJoin(id, userId, profile.displayName || "Jogador");
+        setJoinStatus("pending");
+        toast({ title: "Pedido enviado", description: "O administrador vai rever o teu pedido." });
+      }
     } catch {
       toast({ title: "Erro ao pedir entrada", variant: "destructive" });
     } finally {
@@ -84,6 +97,7 @@ export default function ComunidadePage() {
 
   const tabs = [
     { key: "partidas", label: "Partidas" },
+    { key: "resultados", label: "Resultados" },
     { key: "membros", label: "Membros" },
   ] as const;
 
@@ -126,7 +140,17 @@ export default function ComunidadePage() {
       </div>
 
       <div className="px-4 pt-4 space-y-4">
-        {!isMember && isLinked && (
+        {isAdmin && (
+          <Link href={`/comunidades/${id}/configuracoes`}>
+            <JogaButton variant="ghost" size="sm" className="w-full">⚙️ Configurar comunidade</JogaButton>
+          </Link>
+        )}
+
+        {isAdmin && isMember && (
+          <p className="text-emerald-400 text-xs font-semibold text-center">És o administrador desta comunidade</p>
+        )}
+
+        {!isMember && !isAdmin && isLinked && (
           <JogaButton
             variant="primary"
             size="lg"
@@ -134,7 +158,7 @@ export default function ComunidadePage() {
             disabled={joining || joinPending}
             onClick={() => void handleJoin()}
           >
-            {joinPending ? "Pedido pendente" : "Pedir para entrar"}
+            {joinPending ? "Pedido pendente" : community.isPrivate ? "Pedir para entrar" : "Entrar"}
           </JogaButton>
         )}
 
@@ -186,10 +210,47 @@ export default function ComunidadePage() {
 
         {hasAccess && activeTab === "partidas" && (
           <div className="space-y-3">
+            {(isAdmin || isMember) && (
+              <Link href={`/criar-partida?communityId=${id}`}>
+                <JogaButton variant="primary" size="md" className="w-full">
+                  Criar partida na comunidade
+                </JogaButton>
+              </Link>
+            )}
             {matches.length === 0 ? (
               <p className="text-white/40 text-sm text-center py-8">Sem partidas nesta comunidade.</p>
             ) : (
               matches.map((m) => <MatchCard key={m.id} {...m} returnTo={`/comunidades/${id}`} />)
+            )}
+          </div>
+        )}
+
+        {hasAccess && activeTab === "resultados" && (
+          <div className="space-y-3">
+            {results.length === 0 ? (
+              <p className="text-white/40 text-sm text-center py-8">Sem resultados registados.</p>
+            ) : (
+              results.map((r) => (
+                <JogaCard key={r.matchId} variant="arena">
+                  <p className="font-display font-black text-white">{r.title}</p>
+                  <p className="text-white/40 text-xs mt-1">
+                    {new Date(r.completedAt).toLocaleDateString("pt-PT")}
+                  </p>
+                  {r.topScorers?.[0] && (
+                    <p className="text-emerald-400 text-sm mt-2">
+                      Artilheiro: {r.topScorers[0].name} ({r.topScorers[0].goals} golos)
+                    </p>
+                  )}
+                  <div className="mt-2 space-y-1">
+                    {r.players.slice(0, 5).map((p) => (
+                      <div key={p.playerId} className="flex justify-between text-xs text-white/60">
+                        <span>{p.name}</span>
+                        <span>Nota {p.rating > 0 ? p.rating.toFixed(1) : "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </JogaCard>
+              ))
             )}
           </div>
         )}

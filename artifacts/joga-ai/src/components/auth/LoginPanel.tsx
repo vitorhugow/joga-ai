@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { waitForAccountLinked } from "@/lib/auth";
+import { waitForAccountLinked, AuthAccountSwitchError } from "@/lib/auth";
 import { JogaButton, JogaCard } from "@/components/joga";
 
 function GoogleIcon() {
@@ -27,7 +27,15 @@ function GoogleIcon() {
   );
 }
 
-function mapAuthError(code: string): string {
+function mapAuthError(err: unknown): string {
+  if (err instanceof AuthAccountSwitchError) {
+    return "Esta conta Google já existe. Faz login com essa conta ou usa outro email.";
+  }
+  const code = String((err as { code?: string })?.code ?? (err as Error)?.message ?? err);
+  if (code.includes("auth/redirect-started")) return "A redirecionar para o Google…";
+  if (code.includes("auth/unauthorized-domain")) {
+    return "Domínio não autorizado no Firebase. Adiciona o URL do site em Authentication → Authorized domains.";
+  }
   if (code.includes("auth/invalid-email")) return "Email inválido.";
   if (code.includes("auth/wrong-password") || code.includes("auth/invalid-credential")) {
     return "Email ou password incorrectos.";
@@ -36,6 +44,7 @@ function mapAuthError(code: string): string {
   if (code.includes("auth/weak-password")) return "A password deve ter pelo menos 6 caracteres.";
   if (code.includes("auth/popup-closed-by-user")) return "Login cancelado.";
   if (code.includes("auth/too-many-requests")) return "Muitas tentativas. Tenta mais tarde.";
+  if (import.meta.env.DEV) console.warn("[auth]", err);
   return "Não foi possível entrar. Tenta outra vez.";
 }
 
@@ -65,7 +74,7 @@ export function LoginPanel({ onSuccess, compact = false, bare = false, initialMo
       await waitForAccountLinked();
       onSuccess?.();
     } catch (err) {
-      setError(mapAuthError(String((err as { code?: string })?.code ?? err)));
+      setError(mapAuthError(err));
     } finally {
       setLoading(null);
     }
@@ -95,7 +104,7 @@ export function LoginPanel({ onSuccess, compact = false, bare = false, initialMo
       await waitForAccountLinked();
       onSuccess?.();
     } catch (err) {
-      setError(mapAuthError(String((err as { code?: string })?.code ?? err)));
+      setError(mapAuthError(err));
     } finally {
       setLoading(null);
     }
@@ -112,7 +121,7 @@ export function LoginPanel({ onSuccess, compact = false, bare = false, initialMo
       await resetPassword(email.trim());
       setResetSent(true);
     } catch (err) {
-      setError(mapAuthError(String((err as { code?: string })?.code ?? err)));
+      setError(mapAuthError(err));
     } finally {
       setLoading(null);
     }

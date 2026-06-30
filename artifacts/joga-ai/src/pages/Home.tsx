@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Plus, Search, ChevronRight, Trophy, Flame } from "lucide-react";
+import { NotificationsBell } from "@/components/NotificationsBell";
 import { calculateOverall } from "@/lib/cardUtils";
 import { loadCommunities, loadAvailableMatches, type Community, type MatchListing } from "@/lib/communityRepository";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,7 +11,6 @@ import { profileToPlayerCard } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { PlayerCard } from "@/components/PlayerCard";
 import { JogaLogo } from "@/components/brand";
-import { NotificationsBell } from "@/components/NotificationsBell";
 import { JogaCard, JogaChip, JogaPage, JogaButton } from "@/components/joga";
 
 const PITCH_SVG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Cpath d='M40 0 L40 80' stroke='rgba(255,255,255,0.03)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='18' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -94,8 +94,8 @@ export default function Home() {
     overall: profile.profileComplete
       ? [{ rank: 1, name: player.name, position: player.position, value: overall, isMe: true }]
       : [],
-    notas: profile.profileComplete && profile.seasonStats.matches > 0
-      ? [{ rank: 1, name: player.name, position: player.position, value: "—", isMe: true }]
+    notas: profile.profileComplete && (profile.lastMatchRating ?? profile.seasonStats.averageRating)
+      ? [{ rank: 1, name: player.name, position: player.position, value: (profile.lastMatchRating ?? profile.seasonStats.averageRating ?? 0).toFixed(1), isMe: true }]
       : [],
     golos: profile.profileComplete && profile.seasonStats.goals > 0
       ? [{ rank: 1, name: player.name, position: player.position, value: player.seasonStats.goals, isMe: true }]
@@ -103,6 +103,8 @@ export default function Home() {
   };
 
   const ranking = rankingSets[rankingTab];
+
+  const nextMatch = available[0] ?? null;
 
   return (
     <JogaPage theme="dark" padded={false} bottomSpace>
@@ -178,11 +180,18 @@ export default function Home() {
                   Vai ao Perfil para montar carta e foto — sem conta
                 </p>
               </div>
-              <Link href="/perfil">
-                <JogaButton variant="primary" size="sm" className="shrink-0 px-4">
-                  Montar carta
-                </JogaButton>
-              </Link>
+              <JogaButton
+                variant="primary"
+                size="sm"
+                className="shrink-0 px-4"
+                onClick={() => openAuth({
+                  mode: "register",
+                  title: "Cria conta para guardar a carta",
+                  description: "Podes ver a carta no Perfil. Para sincronizar na nuvem, regista-te.",
+                })}
+              >
+                Montar carta
+              </JogaButton>
             </div>
           </JogaCard>
         )}
@@ -269,48 +278,39 @@ export default function Home() {
             <h2 className="font-display font-black text-white text-lg">Próximo Jogo</h2>
             <Link href="/jogos"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todos <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
-          <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>
+          {!nextMatch ? (
+            <JogaCard variant="arena" padding="md" className="text-center">
+              <p className="text-white/50 text-sm">Sem jogos agendados.</p>
+              <Link href="/jogos" className="inline-block mt-2 text-emerald-400 text-sm font-semibold">Explorar jogos</Link>
+            </JogaCard>
+          ) : (
+          <Link href={`/partida/${nextMatch.id}/pre-jogo`}>
+          <div className="rounded-2xl overflow-hidden joga-tap" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>
             <div className="h-1" style={{ background: "linear-gradient(90deg, #16a34a, #059669, #2563eb)" }} />
-            <div className="px-4 pt-3.5 pb-2">
+            <div className="px-4 pt-3.5 pb-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-display font-black text-white text-lg leading-tight">Peladinha de Sexta</p>
-                  <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>📍 Parque das Nações</p>
+                  <p className="font-display font-black text-white text-lg leading-tight">{nextMatch.title}</p>
+                  <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>📍 {nextMatch.location || nextMatch.city}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <span className="font-display font-black text-emerald-400 text-sm">Sexta</span>
-                  <p className="font-display font-bold text-white text-xl leading-none">20:00</p>
+                  <p className="font-display font-bold text-white text-sm leading-none">{nextMatch.date}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-3">
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}>⚽ Fut 7</span>
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80" }}>Recreativo</span>
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg ml-auto" style={{ background: "rgba(96,165,250,0.1)", color: "#60a5fa" }}>3 vagas</span>
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}>⚽ {nextMatch.gameType}</span>
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg ml-auto" style={{ background: "rgba(96,165,250,0.1)", color: "#60a5fa" }}>{nextMatch.spotsRemaining}</span>
               </div>
-            </div>
-            <div className="px-4 py-3 flex items-center gap-2" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-              <div className="flex -space-x-2 shrink-0">
-                {["B","P","M","J","R"].map((l, i) => (
-                  <div key={i} className="w-7 h-7 rounded-full border-2 flex items-center justify-center" style={{ background: `hsl(${140 + i * 20}, 65%, 38%)`, borderColor: "#0a0f1a", fontSize: 10, fontWeight: 800, color: "white" }}>{l}</div>
-                ))}
-                <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.08)", borderColor: "#0a0f1a" }}>
-                  <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 700 }}>+3</span>
-                </div>
-              </div>
-              <p className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>8 inscritos · 3 vagas restantes</p>
             </div>
           </div>
+          </Link>
+          )}
         </div>
 
         {/* COMUNIDADES */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">
-              Comunidades
-              <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-white/30 align-middle">
-                Demo
-              </span>
-            </h2>
+            <h2 className="font-display font-black text-white text-lg">Comunidades</h2>
             <Link href="/comunidades"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todas <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-1 -mx-4 px-4">
@@ -372,12 +372,7 @@ export default function Home() {
         {/* RANKING SEMANAL */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">
-              Ranking Semanal
-              <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-amber-400/70 align-middle">
-                Demo
-              </span>
-            </h2>
+            <h2 className="font-display font-black text-white text-lg">Ranking Semanal</h2>
             <Link href="/ranking"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver tudo <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
           <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>

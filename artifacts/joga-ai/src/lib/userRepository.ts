@@ -29,7 +29,9 @@ export type UserProfile = {
     assists: number;
     saves: number;
     mvp: number;
+    averageRating?: number;
   };
+  lastMatchRating?: number;
   updatedAt?: string;
 };
 
@@ -301,19 +303,53 @@ export async function applyMatchGainsToProfile(
   userId: string,
   averageRating: number,
 ): Promise<void> {
+  await applyMatchResultToProfile(userId, {
+    goals: 0,
+    assists: 0,
+    saves: 0,
+    mvp: false,
+    rating: averageRating,
+  });
+}
+
+export type MatchResultStats = {
+  goals: number;
+  assists: number;
+  saves: number;
+  mvp: boolean;
+  rating: number;
+};
+
+export async function applyMatchResultToProfile(
+  userId: string,
+  stats: MatchResultStats,
+): Promise<void> {
   const local = readLocalProfile(userId);
   if (!local) return;
 
-  const updatedAttrs = applyMatchStatsToCard(local.attributes, averageRating);
+  const updatedAttrs = applyMatchStatsToCard(local.attributes, stats.rating);
+  const prevAvg = local.seasonStats.averageRating ?? 0;
+  const prevMatches = local.seasonStats.matches;
+  const newAvg =
+    prevMatches > 0
+      ? (prevAvg * prevMatches + stats.rating) / (prevMatches + 1)
+      : stats.rating;
+
   const updatedStats = {
     ...local.seasonStats,
     matches: local.seasonStats.matches + 1,
+    goals: local.seasonStats.goals + stats.goals,
+    assists: local.seasonStats.assists + stats.assists,
+    saves: local.seasonStats.saves + stats.saves,
+    mvp: local.seasonStats.mvp + (stats.mvp ? 1 : 0),
+    averageRating: Math.round(newAvg * 10) / 10,
   };
 
   const updated: UserProfile = {
     ...local,
     attributes: updatedAttrs,
     seasonStats: updatedStats,
+    lastMatchRating: stats.rating,
     updatedAt: new Date().toISOString(),
   };
 
@@ -325,10 +361,11 @@ export async function applyMatchGainsToProfile(
     await updateDoc(doc(db, "users", userId), {
       attributes: updatedAttrs,
       seasonStats: updatedStats,
+      lastMatchRating: stats.rating,
       updatedAt: serverTimestamp(),
     });
   } catch (err) {
-    console.warn("[userRepository] applyMatchGainsToProfile:", err);
+    console.warn("[userRepository] applyMatchResultToProfile:", err);
   }
 }
 

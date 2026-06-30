@@ -14,10 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAuthGate } from "@/contexts/AuthGateContext";
 
-type NotificationsPanelProps = {
+type NotificationsBellProps = {
   userId?: string | null;
-  isLinked: boolean;
+  isLinked?: boolean;
+  className?: string;
+  iconClassName?: string;
 };
 
 function formatRequestTime(value?: string) {
@@ -34,7 +38,17 @@ function formatRequestTime(value?: string) {
   }
 }
 
-export function NotificationsBell({ userId, isLinked }: NotificationsPanelProps) {
+export function NotificationsBell({
+  userId: userIdProp,
+  isLinked: isLinkedProp,
+  className = "",
+  iconClassName = "w-4 h-4 text-white",
+}: NotificationsBellProps) {
+  const auth = useAuth();
+  const { requireLinked } = useAuthGate();
+  const userId = userIdProp ?? auth.userId;
+  const isLinked = isLinkedProp ?? auth.isLinked;
+
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<AdminJoinRequest[]>([]);
@@ -63,6 +77,13 @@ export function NotificationsBell({ userId, isLinked }: NotificationsPanelProps)
     if (!open) return;
     void loadRequests();
   }, [open, loadRequests]);
+
+  function handleOpen() {
+    if (!requireLinked({ mode: "register", title: "Cria conta para ver notificações" })) {
+      return;
+    }
+    setOpen(true);
+  }
 
   async function handleApprove(request: AdminJoinRequest) {
     const key = `${request.communityId}-${request.userId}`;
@@ -124,26 +145,17 @@ export function NotificationsBell({ userId, isLinked }: NotificationsPanelProps)
     <>
       <button
         type="button"
-        className="relative w-9 h-9 rounded-full flex items-center justify-center"
-        style={{ background: "rgba(255,255,255,0.1)" }}
-        onClick={() => {
-          if (!isLinked || !userId) {
-            toast({
-              title: "Entra na tua conta",
-              description: "As notificações de comunidade ficam disponíveis com conta ligada.",
-            });
-            return;
-          }
-          setOpen(true);
-        }}
+        className={`relative w-9 h-9 rounded-full flex items-center justify-center ${className}`}
+        style={{ background: className ? undefined : "rgba(255,255,255,0.1)" }}
+        onClick={handleOpen}
         data-testid="button-notifications"
         aria-label="Notificações"
       >
-        <Bell className="w-4 h-4 text-white" />
+        <Bell className={iconClassName} />
         {pendingCount > 0 && (
           <span
             className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-black text-white"
-            style={{ background: "#ef4444", border: "2px solid #031408" }}
+            style={{ background: "#ef4444", border: className ? "2px solid white" : "2px solid #031408" }}
           >
             {pendingCount > 9 ? "9+" : pendingCount}
           </span>

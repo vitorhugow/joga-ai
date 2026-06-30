@@ -23,7 +23,13 @@ import {
   buildEvolutionRecord,
   saveEvolutionRecord,
 } from "@/lib/evolutionStorage";
-import { applyMatchGainsToProfile } from "@/lib/userRepository";
+import { applyMatchResultToProfile } from "@/lib/userRepository";
+import {
+  saveMatchResult,
+  saveUserMatchHistory,
+  type MatchPlayerResult,
+} from "@/lib/matchHistoryRepository";
+import { getVotes } from "@/lib/auditRepository";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
 import {
   collectAllEvents,
@@ -173,8 +179,8 @@ export default function PosJogo() {
 
   const [, params] = useRoute("/partida/:id/pos-jogo");
   const [userId] = useState(currentMatchUserId);
-  const [data, setData] = useState<SavedPostMatch | null>(() => loadPostMatch(params?.id));
-  const matchId = resolveMatchId({ storedMatchId: data?.matchId, routeMatchId: params?.id });
+  const matchId = resolveMatchId({ routeMatchId: params?.id });
+  const [data, setData] = useState<SavedPostMatch | null>(() => loadPostMatch(matchId));
 
   // Hidrata dados do Firestore em background (não bloqueia render)
   // e verifica se a partida já expirou
@@ -408,11 +414,75 @@ export default function PosJogo() {
     updateData({ ...data, status: "concluida", votedUserIds });
     updateMatchStatus(data.matchId, "concluida").catch(console.warn);
 
-    // Aplica ganhos de atributos no perfil do jogador
     const avgRating =
       Object.values(ratings).reduce((a, b) => a + b, 0) /
       Math.max(1, Object.keys(ratings).length);
-    applyMatchGainsToProfile(userId, avgRating).catch(console.warn);
+
+    void (async () => {
+      const allVotes = await getVotes(matchId);
+      const ratingByPlayer: Record<string, number[]> = {};
+      for (const vote of allVotes) {
+        for (const [pid, rating] of Object.entries(vote.ratings)) {
+          if (!ratingByPlayer[pid]) ratingByPlayer[pid] = [];
+          ratingByPlayer[pid].push(rating);
+        }
+      }
+      ratingByPlayer[currentPlayer.id] = ratingByPlayer[currentPlayer.id] ?? [avgRating];
+
+      const playerResults: MatchPlayerResult[] = players.map((player: { id: string; name: string; userId?: string }) => {
+        const pStats = computePlayerMatchStats(player.id, allEvents);
+        const playerRatings = ratingByPlayer[player.id] ?? [];
+        const playerAvg =
+          playerRatings.length > 0
+            ? playerRatings.reduce((a, b) => a + b, 0) / playerRatings.length
+            : 0;
+        return {
+          playerId: player.id,
+          userId: player.userId ?? (player.id === currentPlayer.id ? userId : undefined),
+          name: player.name,
+          goals: pStats.goals,
+          assists: pStats.assists,
+          saves: pStats.saves,
+          rating: Math.round(playerAvg * 10) / 10,
+        };
+      });
+
+      const result = {
+        matchId: data.matchId,
+        title: data.title ?? `Pelada ${data.matchId}`,
+        completedAt: new Date().toISOString(),
+        communityId: data.communityId,
+        organizerId: data.organizerId,
+        players: playerResults,
+        topScorers,
+        teamNames: data.teamNames,
+      };
+
+      await saveMatchResult(result);
+
+      for (const pr of playerResults) {
+        const targetUid = pr.userId ?? (pr.playerId === currentPlayer.id ? userId : null);
+        if (!targetUid) continue;
+
+        await applyMatchResultToProfile(targetUid, {
+          goals: pr.goals,
+          assists: pr.assists,
+          saves: pr.saves,
+          mvp: false,
+          rating: pr.rating || avgRating,
+        });
+
+        await saveUserMatchHistory(targetUid, {
+          matchId: data.matchId,
+          title: result.title,
+          date: result.completedAt,
+          rating: pr.rating || avgRating,
+          goals: pr.goals,
+          assists: pr.assists,
+          communityId: data.communityId,
+        });
+      }
+    })();
 
     setVoteMode(false);
     setGainsMode(true);
@@ -426,8 +496,8 @@ export default function PosJogo() {
           <h1 className="font-display font-black text-white text-2xl">Resumo da Pelada</h1>
           <p className="text-white/45 text-sm mt-2">Nenhuma pelada pendente encontrada.</p>
           <div className="mt-4 space-y-2">
-            <Link href="/partida/100/pre-jogo" className="block">
-              <JogaButton variant="primary" size="md">Começar Pré-Jogo</JogaButton>
+            <Link href="/jogos" className="block">
+              <JogaButton variant="primary" size="md">Ver jogos</JogaButton>
             </Link>
             <Link href="/perfil/evolucao" className="block">
               <JogaButton variant="ghost" size="md">Ver evolução no Perfil</JogaButton>

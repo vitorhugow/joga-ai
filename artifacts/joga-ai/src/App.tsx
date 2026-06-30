@@ -24,6 +24,7 @@ import Campos from "@/pages/Campos";
 import Evolucao from "@/pages/Evolucao";
 import Ranking from "@/pages/Ranking";
 import Login from "@/pages/Login";
+import ComunidadeConfiguracoes from "@/pages/ComunidadeConfiguracoes";
 import CriarComunidade from "@/pages/CriarComunidade";
 import DemoCarta from "@/pages/DemoCarta";
 
@@ -44,6 +45,7 @@ function AnimatedRoutes() {
             <Route path="/perfil/evolucao" component={Evolucao} />
             <Route path="/perfil" component={Perfil} />
             <Route path="/comunidades/criar" component={CriarComunidade} />
+            <Route path="/comunidades/:id/configuracoes" component={ComunidadeConfiguracoes} />
             <Route path="/comunidades" component={Comunidades} />
             <Route path="/comunidades/:id" component={ComunidadePage} />
             <Route path="/criar-partida" component={CriarPartida} />

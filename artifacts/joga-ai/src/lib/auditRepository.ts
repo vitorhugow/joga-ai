@@ -13,7 +13,6 @@ import {
   doc,
   setDoc,
   getDocs,
-  runTransaction,
   onSnapshot,
   serverTimestamp,
   type Unsubscribe,
@@ -28,7 +27,7 @@ export type AuditorRecord = {
   confirmedAt?: string;
 };
 
-/** Regista um auditor (máx. 3) usando transação para evitar race condition */
+/** Regista um auditor (máx. 3) */
 export async function registerAuditor(
   matchId: string,
   userId: string,
@@ -39,32 +38,29 @@ export async function registerAuditor(
   const docRef = doc(colRef, userId);
 
   try {
-    const result = await runTransaction(db, async (tx) => {
-      const snap = await getDocs(colRef);
-      const existing = snap.docs.map((d) => ({
-        userId: d.id,
-        ...d.data(),
-      })) as AuditorRecord[];
+    const snap = await getDocs(colRef);
+    const existing = snap.docs.map((d) => ({
+      userId: d.id,
+      ...d.data(),
+    })) as AuditorRecord[];
 
-      if (existing.some((a) => a.userId === userId)) {
-        return { success: true, auditors: existing };
-      }
-      if (existing.length >= 3) {
-        return { success: false, auditors: existing };
-      }
+    if (existing.some((a) => a.userId === userId)) {
+      return { success: true, auditors: existing };
+    }
+    if (existing.length >= 3) {
+      return { success: false, auditors: existing };
+    }
 
-      tx.set(docRef, {
-        userId,
-        joinedAt: new Date().toISOString(),
-        confirmed: false,
-      });
-
-      return {
-        success: true,
-        auditors: [...existing, { userId, joinedAt: new Date().toISOString(), confirmed: false }],
-      };
+    await setDoc(docRef, {
+      userId,
+      joinedAt: new Date().toISOString(),
+      confirmed: false,
     });
-    return result;
+
+    return {
+      success: true,
+      auditors: [...existing, { userId, joinedAt: new Date().toISOString(), confirmed: false }],
+    };
   } catch (err) {
     console.warn("[auditRepository] registerAuditor:", err);
     return { success: false, auditors: [] };

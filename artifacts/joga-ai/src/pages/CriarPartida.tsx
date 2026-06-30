@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { useAuth } from "@/contexts/AuthContext";
@@ -81,6 +81,8 @@ function StyledTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>
 
 export default function CriarPartida() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const communityId = new URLSearchParams(search).get("communityId") ?? undefined;
   const { userId } = useAuth();
   const { requireLinked } = useAuthGate();
   const { profile, needsSetup, refresh } = useUserProfile();
@@ -136,6 +138,7 @@ export default function CriarPartida() {
         organizerName: profile.displayName,
         organizerPosition: profile.position,
         organizerOverall: calculateOverall(profile.attributes),
+        communityId,
       });
       setLocation(`/partida/${matchId}/pre-jogo`);
     } catch (err) {

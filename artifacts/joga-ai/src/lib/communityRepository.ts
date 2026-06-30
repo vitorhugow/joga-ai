@@ -9,6 +9,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -62,6 +63,13 @@ export type AdminJoinRequest = {
   requestedAt?: string;
 };
 
+export type JoinRequest = {
+  userId: string;
+  displayName: string;
+  status: JoinRequestStatus;
+  requestedAt?: string;
+};
+
 export type CreateCommunityInput = {
   name: string;
   city: string;
@@ -93,7 +101,7 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
         memberCount: Number(data.memberCount ?? 1),
         coverImage: data.coverImage,
         adminId: data.adminId,
-        isMember: memberIds.has(d.id),
+        isMember: memberIds.has(d.id) || (userId ? data.adminId === userId : false),
         joinPending: pendingIds.has(d.id),
       } as Community & { joinPending?: boolean };
     });
@@ -197,7 +205,7 @@ export async function loadCommunity(
       memberCount: Number(data.memberCount ?? 1),
       coverImage: data.coverImage,
       adminId: data.adminId,
-      isMember: memberIds.has(snap.id),
+      isMember: memberIds.has(snap.id) || (userId ? data.adminId === userId : false),
       joinPending: pendingIds.has(snap.id),
     };
   } catch (err) {
@@ -369,6 +377,105 @@ export async function loadCommunityMembers(communityId: string): Promise<Communi
     console.warn("[communityRepository] loadCommunityMembers:", err);
     return [];
   }
+}
+
+export type UpdateCommunityInput = {
+  name?: string;
+  city?: string;
+  gameType?: Community["gameType"];
+  isPrivate?: boolean;
+  coverImage?: string;
+};
+
+export async function loadPendingJoinRequests(communityId: string): Promise<JoinRequest[]> {
+  if (!isFirebaseConfigured()) return [];
+
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, "communities", communityId, "joinRequests"),
+        where("status", "==", "pending"),
+      ),
+    );
+    return snap.docs.map((d) => ({
+      userId: d.data().userId ?? d.id,
+      displayName: d.data().displayName ?? "Jogador",
+      status: (d.data().status as JoinRequestStatus) ?? "pending",
+      requestedAt: d.data().requestedAt?.toDate?.()?.toISOString(),
+    }));
+  } catch (err) {
+    console.warn("[communityRepository] loadPendingJoinRequests:", err);
+    return [];
+  }
+}
+
+export async function joinCommunityPublic(
+  communityId: string,
+  userId: string,
+  displayName: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const communitySnap = await getDoc(doc(db, "communities", communityId));
+  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada");
+  if (communitySnap.data().isPrivate) throw new Error("Comunidade privada");
+
+  const memberRef = doc(db, "communities", communityId, "members", userId);
+  const existing = await getDoc(memberRef);
+  if (existing.exists()) return;
+
+  await setDoc(memberRef, {
+    userId,
+    displayName: displayName.trim() || "Jogador",
+    role: "member",
+    joinedAt: serverTimestamp(),
+  });
+
+  const count = Number(communitySnap.data().memberCount ?? 0);
+  await updateDoc(doc(db, "communities", communityId), { memberCount: count + 1 });
+}
+
+export async function updateCommunity(
+  communityId: string,
+  input: UpdateCommunityInput,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name.trim();
+  if (input.city !== undefined) patch.city = input.city.trim();
+  if (input.gameType !== undefined) patch.gameType = input.gameType;
+  if (input.isPrivate !== undefined) patch.isPrivate = input.isPrivate;
+  if (input.coverImage !== undefined) patch.coverImage = input.coverImage;
+
+  await updateDoc(doc(db, "communities", communityId), patch);
+}
+
+export async function removeCommunityMember(
+  communityId: string,
+  memberUserId: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const communityRef = doc(db, "communities", communityId);
+  const communitySnap = await getDoc(communityRef);
+  if (!communitySnap.exists()) return;
+
+  await deleteDoc(doc(db, "communities", communityId, "members", memberUserId));
+  const count = Math.max(1, Number(communitySnap.data().memberCount ?? 1) - 1);
+  await updateDoc(communityRef, { memberCount: count });
+}
+
+export async function deleteCommunity(communityId: string): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const batch = writeBatch(db);
+  const membersSnap = await getDocs(collection(db, "communities", communityId, "members"));
+  membersSnap.docs.forEach((d) => batch.delete(d.ref));
+  const requestsSnap = await getDocs(collection(db, "communities", communityId, "joinRequests"));
+  requestsSnap.docs.forEach((d) => batch.delete(d.ref));
+  batch.delete(doc(db, "communities", communityId));
+  await batch.commit();
 }
 
 /** Partidas disponíveis (Firestore + cache local) */

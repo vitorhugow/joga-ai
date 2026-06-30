@@ -1,8 +1,9 @@
 import { Link } from "wouter";
-import { ChevronLeft, Bell } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { JogaButton } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
+import { NotificationsBell } from "@/components/NotificationsBell";
 
 interface AppHeaderProps {
   title?: string;
@@ -52,10 +53,10 @@ export function AppHeader({ title, showLogo, showBack, backUrl = "/", rightEleme
       </div>
       <div className="flex items-center gap-2">
         {showBell && (
-          <JogaButton variant="outline" size="icon" className="relative border-gray-200 bg-gray-50" data-testid="button-notifications">
-            <Bell className="w-4 h-4 text-gray-600" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border border-white" />
-          </JogaButton>
+          <NotificationsBell
+            className="border border-gray-200 bg-gray-50"
+            iconClassName="w-4 h-4 text-gray-600"
+          />
         )}
         {rightElement && (
           <div className="flex items-center justify-end" data-testid="header-right-element">

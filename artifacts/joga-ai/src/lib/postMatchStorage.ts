@@ -20,42 +20,96 @@ export type SavedPostMatch = {
   currentPlayerId: string;
   miniGames: MiniGameSummary[];
   votedUserIds?: string[];
+  title?: string;
+  communityId?: string;
+  organizerId?: string;
 };
 
-const KEY = "joga-ai-post-match-v1";
+const KEY_PREFIX = "joga-ai-post-match-v1-";
+const LEGACY_KEY = "joga-ai-post-match-v1";
+const MATCH_IDS_KEY = "joga-ai-match-ids-v1";
 
-function scopedKey(matchId: string) {
-  return `${KEY}-${matchId}`;
+function storageKey(matchId: string) {
+  return `${KEY_PREFIX}${matchId}`;
+}
+
+function readMatchIds(): string[] {
+  try {
+    const raw = localStorage.getItem(MATCH_IDS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMatchIds(ids: string[]) {
+  const unique = [...new Set(ids)];
+  localStorage.setItem(MATCH_IDS_KEY, JSON.stringify(unique.slice(0, 50)));
+}
+
+function migrateLegacyIfNeeded(): string | null {
+  try {
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as SavedPostMatch;
+    if (data?.matchId) {
+      localStorage.setItem(storageKey(data.matchId), raw);
+      writeMatchIds([data.matchId, ...readMatchIds()]);
+      localStorage.removeItem(LEGACY_KEY);
+      return data.matchId;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export function savePostMatch(data: SavedPostMatch) {
-  localStorage.setItem(scopedKey(data.matchId), JSON.stringify(data));
+  if (!data.matchId) return;
+  localStorage.setItem(storageKey(data.matchId), JSON.stringify(data));
+  writeMatchIds([data.matchId, ...readMatchIds()]);
 }
 
 export function loadPostMatch(matchId?: string): SavedPostMatch | null {
-  try {
-    if (matchId) {
-      const scoped = localStorage.getItem(scopedKey(matchId));
-      if (scoped) return JSON.parse(scoped) as SavedPostMatch;
+  migrateLegacyIfNeeded();
+
+  if (matchId) {
+    try {
+      const raw = localStorage.getItem(storageKey(matchId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as SavedPostMatch;
+      return parsed.matchId === matchId ? parsed : null;
+    } catch {
+      return null;
     }
-
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as SavedPostMatch;
-    if (matchId && parsed.matchId !== matchId) return null;
-    return parsed;
-  } catch {
-    return null;
   }
+
+  const ids = readMatchIds();
+  for (const id of ids) {
+    const match = loadPostMatch(id);
+    if (match && match.status !== "concluida" && match.status !== "expirada") {
+      return match;
+    }
+  }
+  return ids.length > 0 ? loadPostMatch(ids[0]) : null;
+}
+
+export function loadAllPostMatches(): SavedPostMatch[] {
+  migrateLegacyIfNeeded();
+  return readMatchIds()
+    .map((id) => loadPostMatch(id))
+    .filter((m): m is SavedPostMatch => m !== null);
 }
 
 export function clearPostMatch(matchId?: string) {
   if (matchId) {
-    localStorage.removeItem(scopedKey(matchId));
+    localStorage.removeItem(storageKey(matchId));
+    writeMatchIds(readMatchIds().filter((id) => id !== matchId));
     return;
   }
-  localStorage.removeItem(KEY);
+  readMatchIds().forEach((id) => localStorage.removeItem(storageKey(id)));
+  localStorage.removeItem(MATCH_IDS_KEY);
+  localStorage.removeItem(LEGACY_KEY);
 }
 
 export function isPostMatchExpired(data: SavedPostMatch | null) {

@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
 import { profileToPlayerCard } from "@/lib/userRepository";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
+import { loadUserMatchHistory, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
 import { calculateOverall } from "@/lib/cardUtils";
 import { useUserId, useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
@@ -133,6 +134,7 @@ export default function Perfil() {
   const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");
   const [isCardExpanded, setIsCardExpanded] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
+  const [matchHistory, setMatchHistory] = useState<UserMatchHistoryEntry[]>([]);
 
   useEffect(() => {
     setSetupFinished(profile.profileComplete);
@@ -141,6 +143,7 @@ export default function Perfil() {
   useEffect(() => {
     if (!userId) return;
     loadMyCommunities(userId).then(setMyCommunities);
+    loadUserMatchHistory(userId).then(setMatchHistory);
   }, [userId]);
 
   const player = profileToPlayerCard(profile);
@@ -187,7 +190,7 @@ export default function Perfil() {
   return (
     <JogaPage theme="dark" padded={false} className="pb-28">
       <ProfileSetupDialog
-        open={showSetup || (!setupFinished && needsSetup)}
+        open={showSetup || (isLinked && !setupFinished && needsSetup)}
         onOpenChange={(next) => {
           setShowSetup(next);
           if (!next && profile.profileComplete) setSetupFinished(true);
@@ -296,7 +299,17 @@ export default function Perfil() {
                 variant="ghost"
                 size="sm"
                 className="rounded-full px-3"
-                onClick={() => setShowSetup(true)}
+                onClick={() => {
+                  if (!isLinked) {
+                    openAuth({
+                      mode: "register",
+                      title: "Cria conta para editar a carta",
+                      description: "Regista-te para guardar alterações na nuvem.",
+                    });
+                    return;
+                  }
+                  setShowSetup(true);
+                }}
                 data-testid="button-edit-card"
               >
                 Editar carta
@@ -483,6 +496,29 @@ export default function Perfil() {
           </div>
         </div>
         )}
+
+        <div>
+          <h2 className="font-display font-black text-white text-lg mb-3">Peladas anteriores</h2>
+          {matchHistory.length === 0 ? (
+            <p className="text-white/40 text-sm">Ainda não jogaste peladas registadas.</p>
+          ) : (
+            <div className="space-y-2">
+              {matchHistory.slice(0, 5).map((m) => (
+                <JogaCard key={m.matchId} variant="arena" className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-white font-semibold text-sm truncate">{m.title}</p>
+                    <p className="text-white/40 text-xs mt-0.5">
+                      {new Date(m.date).toLocaleDateString("pt-PT")} · {m.goals}G · {m.assists}A
+                    </p>
+                  </div>
+                  <span className="font-display font-black text-emerald-400 text-lg shrink-0">
+                    {m.rating > 0 ? m.rating.toFixed(1) : "—"}
+                  </span>
+                </JogaCard>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div>
           <h2 className="font-display font-black text-white text-lg mb-3">Comunidades</h2>

@@ -9,6 +9,7 @@ export type LivePlayer = {
   paid?: boolean;
   isMe?: boolean;
   manual?: boolean;
+  userId?: string;
 };
 
 export type LiveAssignment = {
@@ -29,23 +30,18 @@ export type SavedPreMatch = {
   savedAt: string;
 };
 
-export const PRE_MATCH_STORAGE_KEY = "joga-ai-pre-match-v1";
+const KEY_PREFIX = "joga-ai-pre-match-v1-";
+const LEGACY_KEY = "joga-ai-pre-match-v1";
 
-function scopedKey(matchId: string) {
-  return `${PRE_MATCH_STORAGE_KEY}-${matchId}`;
+function storageKey(matchId: string) {
+  return `${KEY_PREFIX}${matchId}`;
 }
 
 export function savePreMatch(data: SavedPreMatch, matchId?: string) {
   try {
     const id = matchId ?? data.matchId;
-    const payload = id ? { ...data, matchId: id } : data;
-
-    if (id) {
-      window.localStorage.setItem(scopedKey(id), JSON.stringify(payload));
-      return;
-    }
-
-    window.localStorage.setItem(PRE_MATCH_STORAGE_KEY, JSON.stringify(payload));
+    if (!id) return;
+    window.localStorage.setItem(storageKey(id), JSON.stringify({ ...data, matchId: id }));
   } catch (error) {
     console.warn("Erro ao salvar pré-jogo:", error);
   }
@@ -54,16 +50,15 @@ export function savePreMatch(data: SavedPreMatch, matchId?: string) {
 export function loadPreMatch(matchId?: string): SavedPreMatch | null {
   try {
     if (matchId) {
-      const scoped = window.localStorage.getItem(scopedKey(matchId));
-      if (scoped) return JSON.parse(scoped) as SavedPreMatch;
+      const raw = window.localStorage.getItem(storageKey(matchId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as SavedPreMatch;
+      if (parsed.matchId && parsed.matchId !== matchId) return null;
+      return parsed;
     }
-
-    const raw = window.localStorage.getItem(PRE_MATCH_STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as SavedPreMatch;
-    if (matchId && parsed.matchId && parsed.matchId !== matchId) return null;
-    return parsed;
+    const legacy = window.localStorage.getItem(LEGACY_KEY);
+    if (legacy) return JSON.parse(legacy) as SavedPreMatch;
+    return null;
   } catch (error) {
     console.warn("Erro ao carregar pré-jogo:", error);
     return null;
@@ -73,11 +68,14 @@ export function loadPreMatch(matchId?: string): SavedPreMatch | null {
 export function clearPreMatch(matchId?: string) {
   try {
     if (matchId) {
-      window.localStorage.removeItem(scopedKey(matchId));
+      window.localStorage.removeItem(storageKey(matchId));
       return;
     }
-    window.localStorage.removeItem(PRE_MATCH_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_KEY);
   } catch (error) {
     console.warn("Erro ao limpar pré-jogo:", error);
   }
 }
+
+/** @deprecated use savePreMatch(data, matchId) */
+export const PRE_MATCH_STORAGE_KEY = LEGACY_KEY;

@@ -18,6 +18,7 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
+import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaPage } from "@/components/joga";
 
 const levelLabels: Record<string, string> = {
@@ -48,7 +49,6 @@ type Player = {
   manual?: boolean;
 };
 
-const isOrganizer = true;
 
 const teamNames: Record<TeamKey, string> = {
   A: "Time A",
@@ -154,17 +154,19 @@ function SlotPlayer({
   player,
   onClick,
   teamColor,
+  canEdit,
 }: {
   slotId: string;
   label: string;
   player?: Player;
   onClick: () => void;
   teamColor: string;
+  canEdit: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      disabled={!isOrganizer}
+      disabled={!canEdit}
       className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 active:scale-95 transition-transform cursor-pointer"
       style={{ touchAction: "manipulation" }}
       data-testid={`slot-${slotId}`}
@@ -275,6 +277,7 @@ function PlayerPicker({
 }
 
 export default function PreJogo() {
+  const { userId } = useAuth();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/pre-jogo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
@@ -282,9 +285,13 @@ export default function PreJogo() {
   const [matchDetails, setMatchDetails] = useState<MatchDetails | null>(null);
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
+  const [organizerId, setOrganizerId] = useState<string | null>(null);
+  const isOrganizer = userId === (organizerId ?? matchDetails?.organizerId ?? userId);
 
   useEffect(() => {
-    setMatchDetails(loadMatchDetails(matchId));
+    const details = loadMatchDetails(matchId);
+    setMatchDetails(details);
+    if (details?.organizerId) setOrganizerId(details.organizerId);
   }, [matchId]);
 
   useEffect(() => {
@@ -296,6 +303,7 @@ export default function PreJogo() {
 
       const merged = await loadMatchFromFirestore(matchId);
       const pre = loadPreMatch(matchId);
+      if (merged?.organizerId) setOrganizerId(merged.organizerId);
 
       if (cancelled) return;
 
@@ -1042,6 +1050,7 @@ export default function PreJogo() {
                       player={player}
                       teamColor={teamColors[team]}
                       onClick={() => setPickerSlot(slotId)}
+                      canEdit={isOrganizer}
                     />
                   </div>
                 );

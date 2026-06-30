@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { JogaButton } from "@/components/joga";
 
-const OUTPUT_SIZE = 480;
+const OUTPUT_SIZE = 400;
 const PREVIEW_SIZE = 280;
 
 type PhotoCropDialogProps = {
@@ -84,7 +84,7 @@ export function PhotoCropDialog({
 
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-      onApply(canvas.toDataURL("image/jpeg", 0.88));
+      onApply(canvas.toDataURL("image/jpeg", 0.82));
       onOpenChange(false);
     };
     img.src = imageSrc;

@@ -12,9 +12,11 @@ import { PhotoCropDialog } from "@/components/profile/PhotoCropDialog";
 import {
   completeUserProfile,
   updateUserProfile,
+  ProfilePhotoTooLargeError,
   type UserProfile,
 } from "@/lib/userRepository";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 const POSITIONS = [
   { value: "AVA", label: "Avançado" },
@@ -41,6 +43,7 @@ export function ProfileSetupDialog({
   profile,
 }: ProfileSetupDialogProps) {
   const { userId, isLinked } = useAuth();
+  const { refresh } = useUserProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditing = Boolean(profile?.profileComplete);
 
@@ -127,10 +130,22 @@ export function ProfileSetupDialog({
         await completeUserProfile(userId, input, !isLinked);
       }
 
+      if (isLinked) {
+        await refresh();
+      }
+
       onComplete();
       onOpenChange(false);
-    } catch {
-      setError("Não foi possível guardar. Tenta outra vez.");
+    } catch (err) {
+      if (err instanceof ProfilePhotoTooLargeError) {
+        setError(err.message);
+      } else {
+        setError(
+          isLinked
+            ? "Não foi possível sincronizar na nuvem. Verifica a ligação e tenta outra vez."
+            : "Não foi possível guardar. Tenta outra vez.",
+        );
+      }
     } finally {
       setSaving(false);
     }

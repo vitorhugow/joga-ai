@@ -1,6 +1,6 @@
 /**
  * userRepository.ts — perfil do jogador: users/{userId}
- * Contas ligadas: Firestore + Firebase Storage são a fonte de verdade.
+ * Contas ligadas: Firestore é a fonte de verdade (foto JPEG base64 no documento).
  * localStorage é apenas cache offline.
  */
 
@@ -12,8 +12,7 @@ import {
   serverTimestamp,
   type DocumentReference,
 } from "firebase/firestore";
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
-import { db, storage, isFirebaseConfigured } from "./firebase";
+import { db, isFirebaseConfigured } from "./firebase";
 import type { PlayerAttributes } from "./cardUtils";
 import { applyMatchStatsToCard, generateInitialAttributes } from "./cardUtils";
 
@@ -41,6 +40,27 @@ export type UserProfile = {
 
 const LOCAL_PROFILE_PREFIX = "joga-ai-user-profile-v2";
 const LEGACY_PROFILE_KEY = "joga-ai-user-profile-v1";
+
+/** Limite seguro para photoUrl base64 no documento Firestore (~280 KB) */
+export const MAX_PROFILE_PHOTO_BYTES = 280_000;
+
+export class ProfilePhotoTooLargeError extends Error {
+  constructor() {
+    super(
+      "A foto é demasiado grande para sincronizar. Aproxima mais no recorte ou escolhe outra imagem.",
+    );
+    this.name = "ProfilePhotoTooLargeError";
+  }
+}
+
+function validatePhotoUrlForFirestore(photoUrl?: string): string | undefined {
+  if (!photoUrl) return undefined;
+  if (!photoUrl.startsWith("data:")) return photoUrl;
+  if (photoUrl.length > MAX_PROFILE_PHOTO_BYTES) {
+    throw new ProfilePhotoTooLargeError();
+  }
+  return photoUrl;
+}
 
 function localProfileKey(userId: string) {
   return `${LOCAL_PROFILE_PREFIX}-${userId}`;
@@ -152,28 +172,6 @@ function mergeProfiles(
   return base;
 }
 
-async function uploadProfilePhoto(userId: string, photoUrl: string): Promise<string> {
-  if (!photoUrl.startsWith("data:")) return photoUrl;
-  if (!isFirebaseConfigured()) return photoUrl;
-
-  const photoRef = ref(storage, `users/${userId}/profile.jpg`);
-  await uploadString(photoRef, photoUrl, "data_url");
-  return getDownloadURL(photoRef);
-}
-
-async function resolvePhotoUrl(userId: string, photoUrl?: string): Promise<string | undefined> {
-  if (!photoUrl) return undefined;
-  try {
-    return await uploadProfilePhoto(userId, photoUrl);
-  } catch (err) {
-    console.warn("[userRepository] uploadProfilePhoto:", err);
-    if (photoUrl.startsWith("data:") && photoUrl.length < 400_000) {
-      return photoUrl;
-    }
-    throw err;
-  }
-}
-
 function profileForFirestore(profile: UserProfile) {
   const { uid: _uid, ...rest } = profile;
   return rest;
@@ -224,10 +222,7 @@ export async function migrateLocalProfileIfNeeded(
     const snap = await getDoc(userRef);
     if (snap.exists() && snap.data()?.profileComplete) return;
 
-    let photoUrl = migrated.photoUrl;
-    if (photoUrl?.startsWith("data:")) {
-      photoUrl = await resolvePhotoUrl(toUserId, photoUrl);
-    }
+    let photoUrl = validatePhotoUrlForFirestore(migrated.photoUrl);
 
     await persistProfile(userRef, { ...migrated, photoUrl }, !snap.exists());
     writeLocalProfile({ ...migrated, photoUrl });
@@ -284,10 +279,7 @@ export async function loadUserProfile(
     let profile = mergeProfiles(userId, seed, local, remote, preferRemote);
 
     if (preferRemote && !remote && local?.profileComplete) {
-      let photoUrl = local.photoUrl;
-      if (photoUrl?.startsWith("data:")) {
-        photoUrl = await resolvePhotoUrl(userId, photoUrl);
-      }
+      const photoUrl = validatePhotoUrlForFirestore(local.photoUrl);
       profile = { ...local, uid: userId, photoUrl, isAnonymous: false };
       await persistProfile(userRef, profile, true);
     }
@@ -316,10 +308,7 @@ export async function completeUserProfile(
   const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
   const position = input.position || current.position;
 
-  let photoUrl = input.photoUrl ?? current.photoUrl;
-  if (!isAnonymous && photoUrl) {
-    photoUrl = await resolvePhotoUrl(userId, photoUrl);
-  }
+  let photoUrl = validatePhotoUrlForFirestore(input.photoUrl ?? current.photoUrl);
 
   const updated: UserProfile = {
     ...current,
@@ -354,10 +343,9 @@ export async function updateUserProfile(
 ): Promise<UserProfile> {
   const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
 
-  let photoUrl = patch.photoUrl !== undefined ? patch.photoUrl : current.photoUrl;
-  if (!isAnonymous && photoUrl?.startsWith("data:")) {
-    photoUrl = await resolvePhotoUrl(userId, photoUrl);
-  }
+  const photoUrl = validatePhotoUrlForFirestore(
+    patch.photoUrl !== undefined ? patch.photoUrl : current.photoUrl,
+  );
 
   const updated: UserProfile = {
     ...current,
@@ -396,12 +384,9 @@ export async function markProfileAsLinked(userId: string): Promise<void> {
   try {
     const userRef = doc(db, "users", userId);
     if (updated.profileComplete) {
-      let photoUrl = updated.photoUrl;
-      if (photoUrl?.startsWith("data:")) {
-        photoUrl = await resolvePhotoUrl(userId, photoUrl);
-        updated.photoUrl = photoUrl;
-        writeLocalProfile(updated);
-      }
+      const photoUrl = validatePhotoUrlForFirestore(updated.photoUrl);
+      updated.photoUrl = photoUrl;
+      writeLocalProfile(updated);
       const snap = await getDoc(userRef);
       await persistProfile(userRef, updated, !snap.exists());
     } else {

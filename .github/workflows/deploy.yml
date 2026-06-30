@@ -15,6 +15,9 @@ jobs:
     permissions:
       contents: read
       deployments: write
+    env:
+      PAGES_URL: https://joga-ai.pages.dev
+      FIREBASE_PROJECT: joga-ai-f7622
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,25 +48,53 @@ jobs:
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
 
       - name: Deploy to Cloudflare Pages
+        id: pages
         working-directory: artifacts/joga-ai
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "Cloudflare secrets not configured — skipping Pages deploy (Git integration may still deploy)."
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            echo "::warning::Cloudflare secrets em falta — corre ./scripts/setup-github-deploy-secrets.sh no Mac"
             exit 0
           fi
           pnpm exec wrangler pages deploy dist/public --project-name=joga-ai --branch=main
+          echo "status=deployed" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy Firestore rules
+      - name: Deploy Firestore rules and indexes
+        id: firestore
         working-directory: artifacts/joga-ai
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           if [ -z "$FIREBASE_TOKEN" ]; then
-            echo "FIREBASE_TOKEN not configured — publish rules manually:"
-            echo "  cd artifacts/joga-ai && firebase login && firebase deploy --only firestore:rules"
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            echo "::warning::FIREBASE_TOKEN em falta — corre: cd artifacts/joga-ai && firebase login:ci"
+            echo "::warning::Depois: ./scripts/setup-github-deploy-secrets.sh"
             exit 0
           fi
-          pnpm exec firebase deploy --only firestore:rules --non-interactive --token "$FIREBASE_TOKEN"
+          pnpm exec firebase deploy --only firestore:rules,firestore:indexes --non-interactive --token "$FIREBASE_TOKEN"
+          echo "status=deployed" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy summary
+        run: |
+          {
+            echo "## Deploy Joga AI"
+            echo ""
+            echo "| Peça | Estado |"
+            echo "|------|--------|"
+            echo "| Build frontend | ✅ |"
+            if [ "${{ steps.pages.outputs.status }}" = "deployed" ]; then
+              echo "| Cloudflare Pages | ✅ ${PAGES_URL} |"
+            else
+              echo "| Cloudflare Pages | ⚠️ saltado (secrets em falta) |"
+            fi
+            if [ "${{ steps.firestore.outputs.status }}" = "deployed" ]; then
+              echo "| Firestore rules + indexes | ✅ ${FIREBASE_PROJECT} |"
+            else
+              echo "| Firestore rules + indexes | ⚠️ saltado — configura FIREBASE_TOKEN |"
+            fi
+            echo ""
+            echo "Configuração única: \`./scripts/setup-github-deploy-secrets.sh\`"
+          } >> "$GITHUB_STEP_SUMMARY"

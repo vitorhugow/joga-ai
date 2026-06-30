@@ -20,6 +20,23 @@ import {
   increment,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { MAX_PROFILE_PHOTO_BYTES } from "./userRepository";
+
+export class CommunityCoverTooLargeError extends Error {
+  constructor() {
+    super("A imagem da capa é demasiado grande. Tenta outra foto.");
+    this.name = "CommunityCoverTooLargeError";
+  }
+}
+
+export function validateCoverImageForFirestore(coverImage?: string): string | undefined {
+  if (!coverImage) return undefined;
+  if (!coverImage.startsWith("data:")) return coverImage;
+  if (coverImage.length > MAX_PROFILE_PHOTO_BYTES) {
+    throw new CommunityCoverTooLargeError();
+  }
+  return coverImage;
+}
 
 export type Community = {
   id: string;
@@ -446,9 +463,23 @@ export async function updateCommunity(
   if (input.city !== undefined) patch.city = input.city.trim();
   if (input.gameType !== undefined) patch.gameType = input.gameType;
   if (input.isPrivate !== undefined) patch.isPrivate = input.isPrivate;
-  if (input.coverImage !== undefined) patch.coverImage = input.coverImage;
+  if (input.coverImage !== undefined) {
+    patch.coverImage = validateCoverImageForFirestore(input.coverImage);
+  }
 
   await updateDoc(doc(db, "communities", communityId), patch);
+}
+
+export async function leaveCommunity(communityId: string, userId: string): Promise<void> {
+  if (!isFirebaseConfigured() || !userId) throw new Error("Firebase não configurado");
+
+  const communitySnap = await getDoc(doc(db, "communities", communityId));
+  if (!communitySnap.exists()) return;
+  if (communitySnap.data().adminId === userId) {
+    throw new Error("O administrador não pode sair — transfere ou apaga a comunidade.");
+  }
+
+  await removeCommunityMember(communityId, userId);
 }
 
 export async function removeCommunityMember(

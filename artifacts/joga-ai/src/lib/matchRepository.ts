@@ -434,6 +434,14 @@ function parseSavedAt(value?: string) {
   return Number.isNaN(time) ? 0 : time;
 }
 
+function miniGameRichness(miniGames: SavedPostMatch["miniGames"] = []) {
+  if (!miniGames.length) return 0;
+  return miniGames.reduce(
+    (sum, game) => sum + (game.events?.length ?? 0) + 1,
+    0,
+  );
+}
+
 function mergeMatchSources(
   matchId: string,
   remote: SavedPostMatch | null,
@@ -476,6 +484,12 @@ function mergeMatchSources(
 
   const base = remoteValid ?? localValid;
   const now = new Date().toISOString();
+  const remoteMini = remoteValid?.miniGames ?? [];
+  const localMini = localValid?.miniGames ?? [];
+  const miniGames =
+    miniGameRichness(localMini) >= miniGameRichness(remoteMini)
+      ? localMini
+      : remoteMini;
 
   return {
     version: 1,
@@ -491,7 +505,7 @@ function mergeMatchSources(
     playerTeams: bestRoster.playerTeams,
     assignments: bestRoster.assignments,
     currentPlayerId: base?.currentPlayerId ?? bestRoster.players.find((player) => player.isMe)?.id ?? bestRoster.players[0]?.id ?? "",
-    miniGames: base?.miniGames ?? [],
+    miniGames,
     votedUserIds: base?.votedUserIds,
     title: base?.title,
     communityId: base?.communityId,

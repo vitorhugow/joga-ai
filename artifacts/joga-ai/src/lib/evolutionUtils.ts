@@ -100,10 +100,10 @@ export function computePlayerGains(
   const hasRating = receivedRating != null && receivedRating > 0;
   list.push({
     title: "Nota dos colegas",
-    value: hasRating ? receivedRating.toFixed(1) : "Pendente",
+    value: hasRating ? receivedRating.toFixed(1) : "Em 24h",
     reason: hasRating
       ? "Média das avaliações nesta pelada"
-      : "Será atualizada após o período de avaliação",
+      : "Será revelada 24h após o fim da pelada — recebes notificação",
     type: hasRating ? "up" : "pending",
   });
 

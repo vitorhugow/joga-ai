@@ -32,6 +32,7 @@ import {
   type MatchPlayerResult,
 } from "@/lib/matchHistoryRepository";
 import { getVotes } from "@/lib/auditRepository";
+import { ratingsReleaseAt } from "@/lib/ratingsRelease";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
 import {
   collectAllEvents,
@@ -200,9 +201,17 @@ export default function PosJogo() {
     checkAndCloseExpiredMatch();
     if (!matchId || matchId === "default") return;
     loadMatchFromFirestore(matchId).then((remote) => {
-      if (remote) {
-        setData(authUserId ? applyAuthToMatchData(remote, authUserId) : remote);
-      }
+      if (!remote) return;
+      setData((current) => {
+        const applied = authUserId ? applyAuthToMatchData(remote, authUserId) : remote;
+        if (!current?.miniGames?.length) return applied;
+        const currentEvents = collectAllEvents(current.miniGames).length;
+        const remoteEvents = collectAllEvents(applied.miniGames ?? []).length;
+        if (currentEvents > remoteEvents) {
+          return { ...applied, miniGames: current.miniGames };
+        }
+        return applied;
+      });
     });
   }, [matchId, authUserId]);
 
@@ -247,15 +256,8 @@ export default function PosJogo() {
 
   useEffect(() => {
     if (!gainsMode || !currentPlayer || displayGains) return;
-    void (async () => {
-      const allVotes = await getVotes(matchId);
-      const ratingByPlayer = computeRatingByPlayer(allVotes);
-      const receivedRating = averageRatingsForPlayer(ratingByPlayer, currentPlayer.id);
-      if (receivedRating > 0) {
-        setDisplayGains(computePlayerGains(currentPlayer, allEvents, receivedRating));
-      }
-    })();
-  }, [gainsMode, currentPlayer, displayGains, matchId, allEvents]);
+    setDisplayGains(computePlayerGains(currentPlayer, allEvents));
+  }, [gainsMode, currentPlayer, displayGains, allEvents]);
 
   // Registo de auditor e listeners em tempo real (Firestore + localStorage fallback)
   useEffect(() => {
@@ -445,18 +447,15 @@ export default function PosJogo() {
 
     void (async () => {
       const stats = computePlayerMatchStats(currentPlayer.id, allEvents);
-      const allVotes = await getVotes(matchId);
-      const ratingByPlayer = computeRatingByPlayer(allVotes);
-      const receivedRating = averageRatingsForPlayer(ratingByPlayer, currentPlayer.id);
-      const gainsWithRating = computePlayerGains(currentPlayer, allEvents, receivedRating);
-      setDisplayGains(gainsWithRating);
+      const gainsWithEvents = computePlayerGains(currentPlayer, allEvents);
+      setDisplayGains(gainsWithEvents);
 
       const alreadyApplied = await hasUserMatchHistoryEntry(userId, data.matchId);
       if (!alreadyApplied) {
         const record = buildEvolutionRecord({
           matchId,
           player: { id: currentPlayer.id, name: currentPlayer.name },
-          gains: gainsWithRating,
+          gains: gainsWithEvents,
           stats: {
             ...stats,
             miniGames: games.length,
@@ -472,7 +471,7 @@ export default function PosJogo() {
           assists: stats.assists,
           saves: stats.saves,
           mvp: false,
-          rating: receivedRating,
+          deferRating: true,
           position: currentPlayer.position,
         });
 
@@ -480,7 +479,9 @@ export default function PosJogo() {
           matchId: data.matchId,
           title: data.title ?? `Pelada ${data.matchId}`,
           date: new Date().toISOString(),
-          rating: receivedRating,
+          rating: 0,
+          ratingPending: true,
+          ratingReleased: false,
           goals: stats.goals,
           assists: stats.assists,
           communityId: data.communityId,
@@ -488,6 +489,10 @@ export default function PosJogo() {
       }
 
       if (!allVoted) return;
+
+      const allVotes = await getVotes(matchId);
+      const ratingByPlayer = computeRatingByPlayer(allVotes);
+      const completedAt = new Date().toISOString();
 
       const playerResults: MatchPlayerResult[] = players.map(
         (player: { id: string; name: string; userId?: string }) => {
@@ -507,7 +512,8 @@ export default function PosJogo() {
       await saveMatchResult({
         matchId: data.matchId,
         title: data.title ?? `Pelada ${data.matchId}`,
-        completedAt: new Date().toISOString(),
+        completedAt,
+        ratingsReleaseAt: ratingsReleaseAt(completedAt),
         communityId: data.communityId,
         organizerId: data.organizerId,
         players: playerResults,
@@ -545,9 +551,7 @@ export default function PosJogo() {
           <h1 className="font-display font-black text-white text-3xl mt-2">Atributos ganhos</h1>
           <p className="text-white/55 text-sm mt-2">
             {currentPlayer?.name || "Jogador"}, estes ganhos já entram no perfil.
-            {displayGains?.find((g) => g.title === "Nota dos colegas")?.value !== "Pendente"
-              ? ` A tua nota: ${displayGains?.find((g) => g.title === "Nota dos colegas")?.value}.`
-              : " As notas dos colegas aparecem assim que houver avaliações."}
+            A nota dos colegas sai 24h depois do fim da pelada — vais receber notificação.
           </p>
         </JogaHero>
 

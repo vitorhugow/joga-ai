@@ -13,6 +13,7 @@ import {
   signInAnonymousSession,
 } from "@/lib/auth";
 import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
+import { processPendingRatings } from "@/lib/ratingsRelease";
 import { isFirebaseConfigured, auth } from "@/lib/firebase";
 
 type AuthState = {
@@ -92,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const current = auth.currentUser ?? user;
       if (current && !current.isAnonymous) {
         await migrateLocalProfileIfNeeded(localUserIdRef.current, current.uid);
+        void processPendingRatings(current.uid);
       }
 
       setState(applyUserState(current, localUserIdRef.current));

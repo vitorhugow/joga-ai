@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import type { PlayerAttributes } from "./cardUtils";
-import { applyEventGainsToCard, generateInitialAttributes } from "./cardUtils";
+import { applyEventGainsToCard, calculateOverall, generateInitialAttributes } from "./cardUtils";
 
 export const PROFILE_UPDATED_EVENT = "joga-ai-profile-updated";
 
@@ -41,6 +41,7 @@ export type UserProfile = {
     averageRating?: number;
   };
   lastMatchRating?: number;
+  lastAttributeDeltas?: Partial<PlayerAttributes>;
   updatedAt?: string;
 };
 
@@ -424,9 +425,23 @@ export type MatchResultStats = {
   assists: number;
   saves: number;
   mvp: boolean;
-  rating: number;
+  rating?: number;
   position?: string;
+  /** Se true, não actualiza média/nota — fica para liberação após 24h */
+  deferRating?: boolean;
 };
+
+function computeAttributeDeltas(
+  before: PlayerAttributes,
+  after: PlayerAttributes,
+): Partial<PlayerAttributes> {
+  const deltas: Partial<PlayerAttributes> = {};
+  (Object.keys(before) as (keyof PlayerAttributes)[]).forEach((key) => {
+    const diff = after[key] - before[key];
+    if (diff > 0) deltas[key] = diff;
+  });
+  return deltas;
+}
 
 export async function applyMatchResultToProfile(
   userId: string,
@@ -439,18 +454,24 @@ export async function applyMatchResultToProfile(
       : null);
   if (!local) return;
 
-  const updatedAttrs = applyEventGainsToCard(local.attributes, {
+  const beforeAttrs = local.attributes;
+  const updatedAttrs = applyEventGainsToCard(beforeAttrs, {
     goals: stats.goals,
     assists: stats.assists,
     saves: stats.saves,
     position: stats.position ?? local.position,
   });
-  const prevAvg = local.seasonStats.averageRating ?? 0;
+  const attributeDeltas = computeAttributeDeltas(beforeAttrs, updatedAttrs);
+
   const prevMatches = local.seasonStats.matches;
+  const rating = stats.deferRating ? 0 : (stats.rating ?? 0);
+  const prevAvg = local.seasonStats.averageRating ?? 0;
   const newAvg =
-    prevMatches > 0
-      ? (prevAvg * prevMatches + stats.rating) / (prevMatches + 1)
-      : stats.rating;
+    !stats.deferRating && rating > 0
+      ? prevMatches > 0
+        ? (prevAvg * prevMatches + rating) / (prevMatches + 1)
+        : rating
+      : prevAvg;
 
   const updatedStats = {
     ...local.seasonStats,
@@ -459,26 +480,33 @@ export async function applyMatchResultToProfile(
     assists: local.seasonStats.assists + stats.assists,
     saves: local.seasonStats.saves + stats.saves,
     mvp: local.seasonStats.mvp + (stats.mvp ? 1 : 0),
-    averageRating: Math.round(newAvg * 10) / 10,
+    averageRating: stats.deferRating
+      ? prevAvg
+      : Math.round(newAvg * 10) / 10,
   };
 
   const updated: UserProfile = {
     ...local,
     attributes: updatedAttrs,
     seasonStats: updatedStats,
-    lastMatchRating: stats.rating,
+    lastMatchRating: stats.deferRating ? local.lastMatchRating : rating || local.lastMatchRating,
+    lastAttributeDeltas: attributeDeltas,
     isAnonymous: local.isAnonymous,
     updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured() && !local.isAnonymous) {
     try {
-      await updateDoc(doc(db, "users", userId), {
+      const patch: Record<string, unknown> = {
         attributes: updatedAttrs,
         seasonStats: updatedStats,
-        lastMatchRating: stats.rating,
+        lastAttributeDeltas: attributeDeltas,
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (!stats.deferRating && rating > 0) {
+        patch.lastMatchRating = rating;
+      }
+      await updateDoc(doc(db, "users", userId), patch);
     } catch (err) {
       console.warn("[userRepository] applyMatchResultToProfile:", err);
     }
@@ -486,6 +514,64 @@ export async function applyMatchResultToProfile(
 
   writeLocalProfile(updated);
   notifyProfileUpdated(userId);
+}
+
+/** Aplica nota média após período de 24h (não altera atributos da carta). */
+export async function applyDelayedRatingToProfile(
+  userId: string,
+  rating: number,
+): Promise<void> {
+  const local =
+    readLocalProfile(userId) ??
+    (isFirebaseConfigured()
+      ? await loadUserProfile(userId, undefined, { preferRemote: true })
+      : null);
+  if (!local || rating <= 0) return;
+
+  const matches = local.seasonStats.matches;
+  const prevAvg = local.seasonStats.averageRating ?? 0;
+  const newAvg =
+    matches <= 1
+      ? rating
+      : (prevAvg * (matches - 1) + rating) / matches;
+
+  const updatedStats = {
+    ...local.seasonStats,
+    averageRating: Math.round(newAvg * 10) / 10,
+  };
+
+  const updated: UserProfile = {
+    ...local,
+    seasonStats: updatedStats,
+    lastMatchRating: rating,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (isFirebaseConfigured() && !local.isAnonymous) {
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        seasonStats: updatedStats,
+        lastMatchRating: rating,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn("[userRepository] applyDelayedRatingToProfile:", err);
+    }
+  }
+
+  writeLocalProfile(updated);
+  notifyProfileUpdated(userId);
+}
+
+export function getOverallDelta(profile: UserProfile): number {
+  if (!profile.lastAttributeDeltas) return 0;
+  const before = { ...profile.attributes };
+  const after = { ...profile.attributes };
+  (Object.keys(profile.lastAttributeDeltas) as (keyof PlayerAttributes)[]).forEach((key) => {
+    const d = profile.lastAttributeDeltas?.[key] ?? 0;
+    before[key] = Math.max(28, after[key] - d);
+  });
+  return calculateOverall(after) - calculateOverall(before);
 }
 
 export function getCachedProfile(userId?: string): UserProfile | null {

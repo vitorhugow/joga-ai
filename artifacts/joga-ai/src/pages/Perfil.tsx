@@ -3,7 +3,8 @@ import { Share2, TrendingUp, ChevronRight, Shield, LogOut, Link2 } from "lucide-
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
-import { profileToPlayerCard } from "@/lib/userRepository";
+import { profileToPlayerCard, getOverallDelta } from "@/lib/userRepository";
+import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
 import { loadUserMatchHistory, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
 import { calculateOverall } from "@/lib/cardUtils";
@@ -36,7 +37,7 @@ function StatTile({ icon, label, value, accent }: {
 }
 
 /* ─── Attribute bar ─── */
-function AttrBar({ label, value }: { label: string; value: number }) {
+function AttrBar({ label, value, delta }: { label: string; value: number; delta?: number }) {
   const pct = Math.min(100, value);
   const bar =
     value >= 80 ? "linear-gradient(90deg, #15803d, #4ade80)" :
@@ -56,7 +57,15 @@ function AttrBar({ label, value }: { label: string; value: number }) {
       <div className="flex-1 rounded-full overflow-hidden h-[9px]" style={{ background: "rgba(255,255,255,0.08)" }}>
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: bar }} />
       </div>
-      <span className="font-display font-black text-right shrink-0 w-7 text-base" style={{ color: text }}>{value}</span>
+      <div className="flex items-center gap-1 shrink-0 w-[52px] justify-end">
+        {delta != null && delta > 0 && (
+          <span className="flex items-center text-emerald-400 text-[10px] font-bold" title={`+${delta} nesta pelada`}>
+            <TrendingUp className="w-3 h-3" />
+            +{delta}
+          </span>
+        )}
+        <span className="font-display font-black text-base" style={{ color: text }}>{value}</span>
+      </div>
     </div>
   );
 }
@@ -144,20 +153,28 @@ export default function Perfil() {
   const player = profileToPlayerCard(profile);
 
   const overall = calculateOverall(player.attributes);
+  const overallDelta = getOverallDelta(profile);
+  const attrDeltas = profile.lastAttributeDeltas;
+
+  const ATTR_LABELS: { key: keyof PlayerAttributes; label: string }[] = [
+    { key: "ritmo", label: "Ritmo" },
+    { key: "finalizacao", label: "Finalização" },
+    { key: "drible", label: "Drible" },
+    { key: "passe", label: "Passe" },
+    { key: "fisico", label: "Físico" },
+    { key: "defesa", label: "Defesa" },
+  ];
+
+  const attrs = ATTR_LABELS.map(({ key, label }) => ({
+    label,
+    value: player.attributes[key],
+    delta: attrDeltas?.[key],
+  }));
 
   const badges: BadgeItem[] = [];
   const pastCards: PastCardItem[] = profile.profileComplete
     ? [{ season: "Atual", overall, position: player.position, current: true }]
     : [];
-
-  const attrs = [
-    { label: "Ritmo",       value: player.attributes.ritmo },
-    { label: "Finalização", value: player.attributes.finalizacao },
-    { label: "Drible",      value: player.attributes.drible },
-    { label: "Passe",       value: player.attributes.passe },
-    { label: "Físico",      value: player.attributes.fisico },
-    { label: "Defesa",      value: player.attributes.defesa },
-  ];
 
   async function shareCard() {
     const url = `${window.location.origin}/perfil`;
@@ -341,6 +358,7 @@ export default function Perfil() {
                   title={player.title}
                   photoUrl={player.photoUrl}
                   size="profile"
+                  attributeDeltas={attrDeltas}
                 />
               </div>
             </button>
@@ -436,11 +454,13 @@ export default function Perfil() {
                 </div>
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm bg-emerald-500/12 text-emerald-300 border border-emerald-400/20">
                   <TrendingUp className="w-4 h-4" />
-                  +3 esta época
+                  {overallDelta > 0 ? `+${overallDelta} última pelada` : "Sem subida recente"}
                 </div>
               </div>
               <div className="space-y-3">
-                {attrs.map((a) => <AttrBar key={a.label} label={a.label} value={a.value} />)}
+                {attrs.map((a) => (
+                  <AttrBar key={a.label} label={a.label} value={a.value} delta={a.delta} />
+                ))}
               </div>
               <div className="flex items-center justify-between mt-5 pt-4 text-[11px] border-t border-white/8">
                 <span className="text-white/40 font-medium">Próxima evolução</span>
@@ -584,6 +604,7 @@ export default function Perfil() {
               title={player.title}
               photoUrl={player.photoUrl}
               size="profile"
+              attributeDeltas={attrDeltas}
             />
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
-import { Users, MapPin, ChevronLeft, Lock } from "lucide-react";
+import { Users, MapPin, ChevronLeft, Lock, Calendar } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
 import { PlayerMiniCard } from "@/components/PlayerMiniCard";
@@ -9,7 +9,7 @@ import {
   loadAvailableMatches,
   loadCommunityMembers,
   requestToJoin,
-  joinCommunityPublic,
+  leaveCommunity,
   getJoinRequestStatus,
   type Community,
   type MatchListing,
@@ -21,6 +21,7 @@ import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { loadCommunityMatchResults, type MatchResult } from "@/lib/matchHistoryRepository";
+import { imageDisplaySrc } from "@/lib/imageUtils";
 import { toast } from "@/hooks/use-toast";
 
 const gameTypeLabel: Record<string, string> = {
@@ -45,16 +46,28 @@ export default function ComunidadePage() {
   const [results, setResults] = useState<MatchResult[]>([]);
   const [joining, setJoining] = useState(false);
 
+  async function refreshCommunity() {
+    const c = await loadCommunity(id, userId);
+    setCommunity(c);
+    if (userId) {
+      const status = await getJoinRequestStatus(id, userId);
+      setJoinStatus(status);
+    }
+  }
+
   useEffect(() => {
     if (!id) return;
-    loadCommunity(id, userId).then(setCommunity);
+    void refreshCommunity();
     loadAvailableMatches().then((all) =>
       setMatches(all.filter((m) => m.communityId === id)),
     );
-    loadCommunityMembers(id).then(setMembers);
     loadCommunityMatchResults(id).then(setResults);
-    if (userId) getJoinRequestStatus(id, userId).then(setJoinStatus);
   }, [id, userId]);
+
+  useEffect(() => {
+    if (!id || !community?.isMember) return;
+    loadCommunityMembers(id).then(setMembers);
+  }, [id, community?.isMember]);
 
   if (!community) {
     return (
@@ -65,12 +78,12 @@ export default function ComunidadePage() {
   }
 
   const isMember = community.isMember;
-  const hasAccess = !community.isPrivate || isMember;
-  const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
-
   const isAdmin = community.adminId === userId;
+  const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
+  const hasAccess = isMember || isAdmin;
+  const coverSrc = imageDisplaySrc(community.coverImage);
 
-  async function handleJoin() {
+  async function handleRequestJoin() {
     if (!requireLinked({ mode: "register", title: "Cria conta para entrar na comunidade" })) {
       return;
     }
@@ -78,18 +91,34 @@ export default function ComunidadePage() {
 
     setJoining(true);
     try {
-      if (!community.isPrivate) {
-        await joinCommunityPublic(id, userId, profile.displayName || "Jogador");
-        toast({ title: "Entraste na comunidade!" });
-        loadCommunity(id, userId).then(setCommunity);
-        loadCommunityMembers(id).then(setMembers);
-      } else {
-        await requestToJoin(id, userId, profile.displayName || "Jogador");
-        setJoinStatus("pending");
-        toast({ title: "Pedido enviado", description: "O administrador vai rever o teu pedido." });
-      }
+      await requestToJoin(id, userId, profile.displayName || "Jogador");
+      setJoinStatus("pending");
+      await refreshCommunity();
+      toast({
+        title: "Pedido enviado",
+        description: "O administrador vai rever o teu pedido.",
+      });
     } catch {
       toast({ title: "Erro ao pedir entrada", variant: "destructive" });
+    } finally {
+      setJoining(false);
+    }
+  }
+
+  async function handleLeave() {
+    if (!window.confirm("Queres sair desta comunidade?")) return;
+    setJoining(true);
+    try {
+      await leaveCommunity(id, userId);
+      setMembers([]);
+      await refreshCommunity();
+      toast({ title: "Saíste da comunidade" });
+    } catch (err) {
+      toast({
+        title: "Não foi possível sair",
+        description: err instanceof Error ? err.message : "Tenta novamente.",
+        variant: "destructive",
+      });
     } finally {
       setJoining(false);
     }
@@ -104,12 +133,14 @@ export default function ComunidadePage() {
   return (
     <JogaPage theme="dark" padded={false}>
       <div className="relative h-44 joga-hero-arena overflow-hidden">
-        {community.coverImage && (
+        {coverSrc ? (
           <img
-            src={`${community.coverImage}?w=500&h=200&fit=crop`}
+            src={coverSrc}
             alt={community.name}
             className="w-full h-full object-cover opacity-60"
           />
+        ) : (
+          <div className="w-full h-full bg-linear-to-br from-emerald-900 to-emerald-950" />
         )}
         <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
         <Link
@@ -135,6 +166,12 @@ export default function ComunidadePage() {
             <span className="bg-white/20 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
               {gameTypeLabel[community.gameType] || community.gameType}
             </span>
+            {community.isPrivate && (
+              <span className="flex items-center gap-1 bg-amber-500/20 text-amber-300 text-xs font-semibold px-2 py-0.5 rounded-full">
+                <Lock className="w-3 h-3" />
+                Privada
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -150,15 +187,54 @@ export default function ComunidadePage() {
           <p className="text-emerald-400 text-xs font-semibold text-center">És o administrador desta comunidade</p>
         )}
 
+        {/* Pré-visualização para não-membros */}
+        {!hasAccess && (
+          <JogaCard variant="arena" padding="md">
+            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2">Sobre</p>
+            <p className="text-white/80 text-sm leading-relaxed">
+              Comunidade de {gameTypeLabel[community.gameType] || community.gameType} em {community.city}.
+              {community.isPrivate
+                ? " Entrada sujeita a aprovação do administrador."
+                : " Entrada sujeita a aprovação do administrador."}
+            </p>
+            <div className="flex gap-4 mt-4 text-sm text-white/55">
+              <span className="flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-emerald-400" />
+                {community.memberCount} membros
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-emerald-400" />
+                {matches.length} partida{matches.length !== 1 ? "s" : ""} aberta{matches.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <p className="text-white/35 text-xs mt-3">
+              Depois de aprovado vês a lista de membros, partidas e resultados.
+            </p>
+          </JogaCard>
+        )}
+
+        {isMember && !isAdmin && (
+          <JogaButton
+            variant="ghost"
+            size="md"
+            className="w-full text-red-300 border border-red-400/20"
+            disabled={joining}
+            onClick={() => void handleLeave()}
+            data-testid="button-leave-community"
+          >
+            Sair da comunidade
+          </JogaButton>
+        )}
+
         {!isMember && !isAdmin && isLinked && (
           <JogaButton
             variant="primary"
             size="lg"
             data-testid="button-join-community"
             disabled={joining || joinPending}
-            onClick={() => void handleJoin()}
+            onClick={() => void handleRequestJoin()}
           >
-            {joinPending ? "Pedido pendente" : community.isPrivate ? "Pedir para entrar" : "Entrar"}
+            {joinPending ? "Pedido pendente" : "Pedir para entrar"}
           </JogaButton>
         )}
 
@@ -175,25 +251,6 @@ export default function ComunidadePage() {
           >
             Entrar com conta para pedir acesso
           </JogaButton>
-        )}
-
-        {community.isPrivate && !hasAccess && (
-          <div
-            className="rounded-2xl p-5 text-center"
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
-            data-testid="private-community-locked"
-          >
-            <div
-              className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center"
-              style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)" }}
-            >
-              <Lock className="w-7 h-7 text-amber-400" />
-            </div>
-            <h2 className="font-display font-black text-white text-xl">Comunidade Privada</h2>
-            <p className="text-sm mt-2" style={{ color: "rgba(255,255,255,0.48)" }}>
-              O teu pedido precisa de aprovação para ver partidas e membros.
-            </p>
-          </div>
         )}
 
         <div className="flex gap-2 flex-wrap" style={{ display: hasAccess ? "flex" : "none" }}>

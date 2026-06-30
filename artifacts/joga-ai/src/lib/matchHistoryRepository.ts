@@ -32,6 +32,7 @@ export type MatchResult = {
   matchId: string;
   title: string;
   completedAt: string;
+  ratingsReleaseAt?: string;
   communityId?: string;
   organizerId?: string;
   players: MatchPlayerResult[];
@@ -47,6 +48,8 @@ export type UserMatchHistoryEntry = {
   goals: number;
   assists: number;
   communityId?: string;
+  ratingPending?: boolean;
+  ratingReleased?: boolean;
 };
 
 const LOCAL_HISTORY_PREFIX = "joga-ai-match-history-v1";

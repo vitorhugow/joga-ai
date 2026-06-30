@@ -22,6 +22,9 @@ service cloud.firestore {
         && (memberId == request.auth.uid
           || resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && memberId == request.auth.uid;
+      allow delete: if isSignedIn()
+        && (memberId == request.auth.uid
+          || resource.data.userId == request.auth.uid);
     }
 
     match /{path=**}/joinRequests/{requestUserId} {
@@ -102,7 +105,9 @@ service cloud.firestore {
           memberId == request.auth.uid
           || isCommunityAdmin(communityId)
         );
-        allow update, delete: if isCommunityAdmin(communityId);
+        allow update: if isCommunityAdmin(communityId);
+        allow delete: if isCommunityAdmin(communityId)
+          || (isSignedIn() && memberId == request.auth.uid);
       }
 
       match /joinRequests/{requestUserId} {

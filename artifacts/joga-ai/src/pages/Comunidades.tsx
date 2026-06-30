@@ -9,6 +9,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaChip, JogaPage } from "@/components/joga";
+import { imageDisplaySrc } from "@/lib/imageUtils";
 
 const gameTypeLabel: Record<string, string> = {
   futsal: "Futsal",
@@ -67,7 +68,7 @@ function CommunityCard({
       >
         <div className="relative h-28 overflow-hidden">
           {coverImage ? (
-            <img src={`${coverImage}?w=500&h=200&fit=crop`} alt={name} className="w-full h-full object-cover" />
+            <img src={imageDisplaySrc(coverImage)} alt={name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full" style={{ background: clubBg }} />
           )}
@@ -160,6 +161,9 @@ export default function Comunidades() {
 
   const myIds = new Set(myCommunities.map((c) => c.id));
   const showSections = search === "" && filter === "todas";
+  const discoverList = filtered.filter(
+    (c) => !myIds.has(c.id) && !c.isMember && !(c as Community & { joinPending?: boolean }).joinPending,
+  );
 
   return (
     <JogaPage theme="dark" padded={false}>
@@ -273,10 +277,10 @@ export default function Comunidades() {
               className="text-xs font-bold px-2.5 py-1 rounded-full"
               style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)" }}
             >
-              {filtered.length}
+              {discoverList.length}
             </span>
           </div>
-          {filtered.length === 0 ? (
+          {discoverList.length === 0 ? (
             <div className="text-center py-16 flex flex-col items-center gap-4">
               <div
                 className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
@@ -293,8 +297,8 @@ export default function Comunidades() {
             </div>
           ) : (
             <div className="space-y-5">
-              {filtered.map((c) => (
-                <CommunityCard key={c.id} {...c} joined={myIds.has(c.id) || c.isMember} />
+              {discoverList.map((c) => (
+                <CommunityCard key={c.id} {...c} joined={false} />
               ))}
             </div>
           )}

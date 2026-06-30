@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ChevronLeft, Trash2, Camera } from "lucide-react";
 import {
   loadCommunity,
   loadCommunityMembers,
@@ -10,12 +10,15 @@ import {
   updateCommunity,
   removeCommunityMember,
   deleteCommunity,
+  CommunityCoverTooLargeError,
   type Community,
   type CommunityMember,
   type JoinRequest,
 } from "@/lib/communityRepository";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
+import { PhotoCropDialog } from "@/components/profile/PhotoCropDialog";
+import { imageDisplaySrc } from "@/lib/imageUtils";
 import { toast } from "@/hooks/use-toast";
 
 const GAME_TYPES = [
@@ -39,6 +42,9 @@ export default function ComunidadeConfiguracoes() {
   const [isPrivate, setIsPrivate] = useState(false);
   const [coverImage, setCoverImage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = community?.adminId === userId;
 
@@ -80,11 +86,31 @@ export default function ComunidadeConfiguracoes() {
     try {
       await updateCommunity(id, { name, city, gameType, isPrivate, coverImage: coverImage || undefined });
       toast({ title: "Comunidade actualizada" });
-    } catch {
-      toast({ title: "Erro ao guardar", variant: "destructive" });
+    } catch (err) {
+      if (err instanceof CommunityCoverTooLargeError) {
+        toast({ title: err.message, variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao guardar", variant: "destructive" });
+      }
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleCoverFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Escolhe uma imagem (JPG, PNG ou WebP).", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropSource(reader.result as string);
+      setCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
   }
 
   async function handleApprove(req: JoinRequest) {
@@ -143,9 +169,55 @@ export default function ComunidadeConfiguracoes() {
             <input value={city} onChange={(e) => setCity(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-3 bg-white/6 border border-white/10 text-white text-sm" />
           </div>
           <div>
-            <label className="text-[10px] font-bold uppercase text-white/40">URL da capa</label>
-            <input value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="https://..." className="mt-1 w-full rounded-xl px-4 py-3 bg-white/6 border border-white/10 text-white text-sm" />
+            <label className="text-[10px] font-bold uppercase text-white/40">Capa da comunidade</label>
+            <div className="mt-2 flex items-center gap-3">
+              <div className="w-20 h-20 rounded-xl overflow-hidden border border-white/10 bg-white/6 shrink-0">
+                {coverImage ? (
+                  <img src={imageDisplaySrc(coverImage, "200")} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white/25 text-xs">Sem capa</div>
+                )}
+              </div>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleCoverFileChange}
+                />
+                <JogaButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Camera className="w-4 h-4" />
+                  Carregar imagem
+                </JogaButton>
+                {coverImage && (
+                  <button
+                    type="button"
+                    className="block text-xs text-red-300 mt-2"
+                    onClick={() => setCoverImage("")}
+                  >
+                    Remover capa
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
+          <PhotoCropDialog
+            open={cropOpen}
+            onOpenChange={setCropOpen}
+            imageSrc={cropSource}
+            onApply={(dataUrl) => {
+              setCoverImage(dataUrl);
+              setCropOpen(false);
+              setCropSource(null);
+            }}
+          />
           <label className="flex items-center gap-2 text-sm text-white/70">
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} className="accent-emerald-500" />
             Comunidade privada

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { waitForAccountLinked, AuthAccountSwitchError } from "@/lib/auth";
+import { waitForAccountLinked } from "@/lib/auth";
 import { JogaButton, JogaCard } from "@/components/joga";
 
 function GoogleIcon() {
@@ -28,9 +28,6 @@ function GoogleIcon() {
 }
 
 function mapAuthError(err: unknown): string {
-  if (err instanceof AuthAccountSwitchError) {
-    return "Esta conta Google já existe. Faz login com essa conta ou usa outro email.";
-  }
   const code = String((err as { code?: string })?.code ?? (err as Error)?.message ?? err);
   if (code.includes("auth/redirect-started")) return "A redirecionar para o Google…";
   if (code.includes("auth/unauthorized-domain")) {

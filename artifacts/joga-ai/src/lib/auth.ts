@@ -4,6 +4,7 @@ import {
   signInWithRedirect,
   getRedirectResult,
   linkWithRedirect,
+  signInWithCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -34,12 +35,33 @@ function isPopupBlockedError(err: unknown): boolean {
   );
 }
 
-/** Processa retorno de signInWithRedirect após reload */
+function credentialAlreadyInUse(code: string) {
+  return code === "auth/credential-already-in-use" || code === "auth/email-already-in-use";
+}
+
+function googleCredentialFromError(err: unknown) {
+  return GoogleAuthProvider.credentialFromError(
+    err as Parameters<typeof GoogleAuthProvider.credentialFromError>[0],
+  );
+}
+
+/** Se a credencial Google já pertence a outra conta, entra nessa conta */
+async function signInWithExistingGoogleCredential(err: unknown): Promise<UserCredential | null> {
+  const code = (err as { code?: string })?.code ?? "";
+  if (!credentialAlreadyInUse(code)) return null;
+  const credential = googleCredentialFromError(err);
+  if (!credential) return null;
+  return signInWithCredential(auth, credential);
+}
+
+/** Processa retorno de signInWithRedirect / linkWithRedirect após reload */
 export async function handleGoogleRedirectResult(): Promise<UserCredential | null> {
   if (!isFirebaseConfigured()) return null;
   try {
     return await getRedirectResult(auth);
   } catch (err) {
+    const existing = await signInWithExistingGoogleCredential(err);
+    if (existing) return existing;
     console.warn("[auth] getRedirectResult:", err);
     return null;
   }
@@ -61,10 +83,8 @@ async function linkGoogleWithPopupOrRedirect(user: User): Promise<UserCredential
   try {
     return await linkWithPopup(user, googleProvider);
   } catch (err) {
-    const code = (err as { code?: string })?.code ?? "";
-    if (code === "auth/credential-already-in-use" || code === "auth/email-already-in-use") {
-      throw new AuthAccountSwitchError();
-    }
+    const existing = await signInWithExistingGoogleCredential(err);
+    if (existing) return existing;
     if (isPopupBlockedError(err)) {
       await linkWithRedirect(user, googleProvider);
       throw new Error("auth/redirect-started");
@@ -114,10 +134,8 @@ export async function signInWithGoogle(): Promise<UserCredential> {
       return await linkGoogleWithPopupOrRedirect(auth.currentUser);
     } catch (err) {
       if ((err as Error).message === "auth/redirect-started") throw err;
-      const code = (err as { code?: string })?.code ?? "";
-      if (code === "auth/credential-already-in-use" || code === "auth/email-already-in-use") {
-        throw new AuthAccountSwitchError();
-      }
+      const existing = await signInWithExistingGoogleCredential(err);
+      if (existing) return existing;
       throw err;
     }
   }
@@ -138,9 +156,17 @@ export async function registerWithEmail(
   let cred: UserCredential;
 
   if (auth.currentUser?.isAnonymous) {
-    // Upgrade preserva o mesmo uid Firebase → perfil e partidas mantêm-se
     const credential = EmailAuthProvider.credential(email, password);
-    cred = await linkWithCredential(auth.currentUser, credential);
+    try {
+      cred = await linkWithCredential(auth.currentUser, credential);
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? "";
+      if (credentialAlreadyInUse(code)) {
+        cred = await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        throw err;
+      }
+    }
   } else {
     cred = await createUserWithEmailAndPassword(auth, email, password);
   }
@@ -165,8 +191,8 @@ export async function loginWithEmail(
       return await linkWithCredential(auth.currentUser, credential);
     } catch (err) {
       const code = (err as { code?: string })?.code ?? "";
-      if (code === "auth/credential-already-in-use" || code === "auth/email-already-in-use") {
-        throw new AuthAccountSwitchError();
+      if (credentialAlreadyInUse(code)) {
+        return signInWithEmailAndPassword(auth, email, password);
       }
       throw err;
     }

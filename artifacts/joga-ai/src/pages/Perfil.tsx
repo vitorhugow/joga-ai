@@ -218,13 +218,19 @@ export default function Perfil() {
                   Monta a tua carta
                 </p>
                 <p className="text-white/70 text-sm mt-1 leading-relaxed">
-                  Escolhe nome, posição e foto abaixo. Conta só é precisa para partidas e comunidades.
+                  Cria conta ou entra para montar a tua carta e guardar na nuvem.
                 </p>
                 <JogaButton
                   variant="primary"
                   size="sm"
                   className="mt-3 gap-1.5"
-                  onClick={() => setShowSetup(true)}
+                  onClick={() =>
+                    openAuth({
+                      mode: "register",
+                      title: "Cria conta para montar a carta",
+                      description: "Entra com Google ou email. Se já tens conta, faz login — entras na mesma.",
+                    })
+                  }
                 >
                   Começar
                   <ChevronRight className="w-4 h-4" />

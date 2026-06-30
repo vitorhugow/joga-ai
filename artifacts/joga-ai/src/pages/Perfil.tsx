@@ -128,17 +128,12 @@ export default function Perfil() {
   const { isLinked, displayName, loading: authLoading, logout } = useAuth();
   const { openAuth } = useAuthGate();
   const userId = useUserId();
-  const { profile, refresh, needsSetup } = useUserProfile();
+  const { profile, refresh } = useUserProfile();
   const [showSetup, setShowSetup] = useState(false);
-  const [setupFinished, setSetupFinished] = useState(false);
   const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");
   const [isCardExpanded, setIsCardExpanded] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [matchHistory, setMatchHistory] = useState<UserMatchHistoryEntry[]>([]);
-
-  useEffect(() => {
-    setSetupFinished(profile.profileComplete);
-  }, [userId, profile.profileComplete]);
 
   useEffect(() => {
     if (!userId) return;
@@ -190,15 +185,11 @@ export default function Perfil() {
   return (
     <JogaPage theme="dark" padded={false} className="pb-28">
       <ProfileSetupDialog
-        open={showSetup || (isLinked && !setupFinished && needsSetup)}
-        onOpenChange={(next) => {
-          setShowSetup(next);
-          if (!next && profile.profileComplete) setSetupFinished(true);
-        }}
-        dismissible={profile.profileComplete}
+        open={showSetup}
+        onOpenChange={setShowSetup}
+        dismissible
         profile={profile}
         onComplete={() => {
-          setSetupFinished(true);
           setShowSetup(false);
           void refresh();
         }}

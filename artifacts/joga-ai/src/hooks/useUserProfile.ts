@@ -22,24 +22,22 @@ export function useUserProfile() {
   useEffect(() => {
     if (authLoading || !userId) return;
     const cached = getCachedProfile(userId);
-    if (cached) setProfile(cached);
-  }, [authLoading, userId]);
+    if (cached && !isLinked) setProfile(cached);
+  }, [authLoading, userId, isLinked]);
 
   const refresh = useCallback(async () => {
-    const cached = getCachedProfile(userId);
-    if (cached) setProfile(cached);
-    const next = await loadUserProfile(userId, seed);
+    const next = await loadUserProfile(userId, seed, { preferRemote: isLinked });
     setProfile(next);
     return next;
-  }, [userId, seed]);
+  }, [userId, seed, isLinked]);
 
   useEffect(() => {
     if (authLoading || !userId) return;
     setLoading(true);
-    loadUserProfile(userId, seed)
+    loadUserProfile(userId, seed, { preferRemote: isLinked })
       .then(setProfile)
       .finally(() => setLoading(false));
-  }, [userId, seed, authLoading]);
+  }, [userId, seed, authLoading, isLinked]);
 
   return {
     profile,

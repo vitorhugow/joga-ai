@@ -1,5 +1,7 @@
 /**
  * userRepository.ts — perfil do jogador: users/{userId}
+ * Contas ligadas: Firestore + Firebase Storage são a fonte de verdade.
+ * localStorage é apenas cache offline.
  */
 
 import {
@@ -8,8 +10,10 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  type DocumentReference,
 } from "firebase/firestore";
-import { db, isFirebaseConfigured } from "./firebase";
+import { ref, uploadString, getDownloadURL } from "firebase/storage";
+import { db, storage, isFirebaseConfigured } from "./firebase";
 import type { PlayerAttributes } from "./cardUtils";
 import { applyMatchStatsToCard, generateInitialAttributes } from "./cardUtils";
 
@@ -64,8 +68,139 @@ function writeLocalProfile(profile: UserProfile) {
   localStorage.setItem(localProfileKey(profile.uid), JSON.stringify(profile));
 }
 
-/** Quando o Firebase liga, o uid muda — traz o perfil local para o uid novo */
-export function migrateLocalProfileIfNeeded(fromUserId: string, toUserId: string): void {
+function parseUpdatedAt(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    try {
+      return (value as { toDate(): Date }).toDate().toISOString();
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function remoteToPartial(data: Record<string, unknown>, userId: string): Partial<UserProfile> {
+  return {
+    uid: userId,
+    displayName: String(data.displayName ?? ""),
+    position: String(data.position ?? "AVA"),
+    shirtNumber: Number(data.shirtNumber ?? 10),
+    photoUrl: data.photoUrl ? String(data.photoUrl) : undefined,
+    title: String(data.title ?? "Jogador"),
+    isAnonymous: Boolean(data.isAnonymous),
+    profileComplete: Boolean(data.profileComplete),
+    attributes: data.attributes as PlayerAttributes,
+    seasonStats: data.seasonStats as UserProfile["seasonStats"],
+    lastMatchRating: data.lastMatchRating ? Number(data.lastMatchRating) : undefined,
+    updatedAt: parseUpdatedAt(data.updatedAt),
+  };
+}
+
+function buildProfileFromRemote(
+  userId: string,
+  seed: UserProfile,
+  remote: Partial<UserProfile>,
+): UserProfile {
+  return {
+    ...seed,
+    ...remote,
+    uid: userId,
+    profileComplete:
+      remote.profileComplete !== undefined
+        ? Boolean(remote.profileComplete)
+        : Boolean(String(remote.displayName ?? "").trim().length >= 2),
+    seasonStats: remote.seasonStats ?? seed.seasonStats,
+    attributes: remote.attributes ?? seed.attributes,
+    updatedAt: remote.updatedAt || new Date().toISOString(),
+  };
+}
+
+/** Contas ligadas: servidor manda; anónimos podem usar cache local */
+function mergeProfiles(
+  userId: string,
+  seed: UserProfile,
+  local: UserProfile | null,
+  remote: Partial<UserProfile> | null,
+  preferRemote: boolean,
+): UserProfile {
+  if (preferRemote && remote) {
+    return buildProfileFromRemote(userId, seed, remote);
+  }
+
+  if (preferRemote && !remote && local?.profileComplete) {
+    return { ...local, uid: userId };
+  }
+
+  const base = remote
+    ? buildProfileFromRemote(userId, seed, remote)
+    : local ?? { ...seed, uid: userId };
+
+  if (!preferRemote && local?.profileComplete && !base.profileComplete) {
+    return { ...local, uid: userId };
+  }
+
+  if (!preferRemote && local?.profileComplete && base.profileComplete) {
+    const localTime = Date.parse(local.updatedAt ?? "") || 0;
+    const remoteTime = Date.parse(base.updatedAt ?? "") || 0;
+    if (localTime > remoteTime) {
+      return { ...local, uid: userId, photoUrl: local.photoUrl ?? base.photoUrl };
+    }
+  }
+
+  return base;
+}
+
+async function uploadProfilePhoto(userId: string, photoUrl: string): Promise<string> {
+  if (!photoUrl.startsWith("data:")) return photoUrl;
+  if (!isFirebaseConfigured()) return photoUrl;
+
+  const photoRef = ref(storage, `users/${userId}/profile.jpg`);
+  await uploadString(photoRef, photoUrl, "data_url");
+  return getDownloadURL(photoRef);
+}
+
+async function resolvePhotoUrl(userId: string, photoUrl?: string): Promise<string | undefined> {
+  if (!photoUrl) return undefined;
+  try {
+    return await uploadProfilePhoto(userId, photoUrl);
+  } catch (err) {
+    console.warn("[userRepository] uploadProfilePhoto:", err);
+    if (photoUrl.startsWith("data:") && photoUrl.length < 400_000) {
+      return photoUrl;
+    }
+    throw err;
+  }
+}
+
+function profileForFirestore(profile: UserProfile) {
+  const { uid: _uid, ...rest } = profile;
+  return rest;
+}
+
+async function persistProfile(
+  userRef: DocumentReference,
+  profile: UserProfile,
+  create = false,
+): Promise<void> {
+  const payload = {
+    ...profileForFirestore(profile),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (create) {
+    await setDoc(userRef, { ...payload, createdAt: serverTimestamp() }, { merge: true });
+  } else {
+    await setDoc(userRef, payload, { merge: true });
+  }
+}
+
+/** Quando o Firebase liga, migra perfil local e sincroniza com o servidor */
+export async function migrateLocalProfileIfNeeded(
+  fromUserId: string,
+  toUserId: string,
+): Promise<void> {
   if (!fromUserId || !toUserId || fromUserId === toUserId) return;
 
   const from = readLocalProfile(fromUserId);
@@ -79,52 +214,29 @@ export function migrateLocalProfileIfNeeded(fromUserId: string, toUserId: string
 
   if (toHasData) return;
 
-  writeLocalProfile({ ...from, uid: toUserId });
-}
+  const migrated: UserProfile = { ...from, uid: toUserId, isAnonymous: false };
+  writeLocalProfile(migrated);
 
-function mergeProfiles(
-  userId: string,
-  seed: UserProfile,
-  local: UserProfile | null,
-  remote: Partial<UserProfile> | null,
-): UserProfile {
-  const base = remote
-    ? {
-        ...seed,
-        ...remote,
-        uid: userId,
-        profileComplete:
-          remote.profileComplete !== undefined
-            ? Boolean(remote.profileComplete)
-            : Boolean(String(remote.displayName ?? "").trim().length >= 2),
-        seasonStats: remote.seasonStats ?? seed.seasonStats,
-        attributes: remote.attributes ?? seed.attributes,
-        updatedAt: remote.updatedAt ?? new Date().toISOString(),
-      }
-    : local ?? { ...seed, uid: userId };
+  if (!isFirebaseConfigured() || !migrated.profileComplete) return;
 
-  // Foto grande fica só no dispositivo — não sobrescrever com remoto vazio
-  if (local?.photoUrl && !base.photoUrl) {
-    base.photoUrl = local.photoUrl;
-  }
+  try {
+    const userRef = doc(db, "users", toUserId);
+    const snap = await getDoc(userRef);
+    if (snap.exists() && snap.data()?.profileComplete) return;
 
-  // Perfil completo local ganha se o remoto ainda estiver incompleto
-  if (local?.profileComplete && !base.profileComplete) {
-    return { ...local, uid: userId };
-  }
-
-  if (local?.profileComplete && base.profileComplete) {
-    const localTime = Date.parse(local.updatedAt ?? "") || 0;
-    const remoteTime = Date.parse(base.updatedAt ?? "") || 0;
-    if (localTime >= remoteTime) {
-      return { ...local, uid: userId, photoUrl: local.photoUrl ?? base.photoUrl };
+    let photoUrl = migrated.photoUrl;
+    if (photoUrl?.startsWith("data:")) {
+      photoUrl = await resolvePhotoUrl(toUserId, photoUrl);
     }
-  }
 
-  return base;
+    await persistProfile(userRef, { ...migrated, photoUrl }, !snap.exists());
+    writeLocalProfile({ ...migrated, photoUrl });
+  } catch (err) {
+    console.warn("[userRepository] migrateLocalProfileIfNeeded:", err);
+  }
 }
 
-/** Perfil inicial vazio — sem dados do mock Diogo */
+/** Perfil inicial vazio */
 export function createIncompleteSeedProfile(
   userId: string,
   isAnonymous = true,
@@ -152,7 +264,9 @@ export function createIncompleteSeedProfile(
 export async function loadUserProfile(
   userId: string,
   seedProfile?: UserProfile,
+  options?: { preferRemote?: boolean },
 ): Promise<UserProfile> {
+  const preferRemote = options?.preferRemote ?? false;
   const seed = seedProfile ?? createIncompleteSeedProfile(userId);
   const local = readLocalProfile(userId);
 
@@ -161,23 +275,23 @@ export async function loadUserProfile(
   }
 
   try {
-    const ref = doc(db, "users", userId);
-    const snap = await getDoc(ref);
+    const userRef = doc(db, "users", userId);
+    const snap = await getDoc(userRef);
+    const remote = snap.exists()
+      ? remoteToPartial(snap.data() as Record<string, unknown>, userId)
+      : null;
 
-    if (!snap.exists()) {
-      const initial = mergeProfiles(userId, seed, local, null);
-      const { photoUrl, ...forFirestore } = initial;
-      await setDoc(
-        ref,
-        { ...forFirestore, photoUrl: photoUrl && photoUrl.length < 400_000 ? photoUrl : undefined, createdAt: serverTimestamp() },
-        { merge: true },
-      );
-      writeLocalProfile(initial);
-      return initial;
+    let profile = mergeProfiles(userId, seed, local, remote, preferRemote);
+
+    if (preferRemote && !remote && local?.profileComplete) {
+      let photoUrl = local.photoUrl;
+      if (photoUrl?.startsWith("data:")) {
+        photoUrl = await resolvePhotoUrl(userId, photoUrl);
+      }
+      profile = { ...local, uid: userId, photoUrl, isAnonymous: false };
+      await persistProfile(userRef, profile, true);
     }
 
-    const data = snap.data() as Partial<UserProfile>;
-    const profile = mergeProfiles(userId, seed, local, data);
     writeLocalProfile(profile);
     return profile;
   } catch (err) {
@@ -201,13 +315,19 @@ export async function completeUserProfile(
 ): Promise<UserProfile> {
   const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
   const position = input.position || current.position;
+
+  let photoUrl = input.photoUrl ?? current.photoUrl;
+  if (!isAnonymous && photoUrl) {
+    photoUrl = await resolvePhotoUrl(userId, photoUrl);
+  }
+
   const updated: UserProfile = {
     ...current,
     uid: userId,
     displayName: input.displayName.trim(),
     position,
     shirtNumber: input.shirtNumber,
-    photoUrl: input.photoUrl ?? current.photoUrl,
+    photoUrl,
     title: input.title?.trim() || current.title || "Jogador",
     isAnonymous,
     profileComplete: true,
@@ -217,68 +337,52 @@ export async function completeUserProfile(
     updatedAt: new Date().toISOString(),
   };
 
-  writeLocalProfile(updated);
-
-  if (isFirebaseConfigured()) {
-    try {
-      const ref = doc(db, "users", userId);
-      const { photoUrl, ...forFirestore } = updated;
-      await setDoc(
-        ref,
-        {
-          ...forFirestore,
-          photoUrl: photoUrl && photoUrl.length < 400_000 ? photoUrl : undefined,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-    } catch (err) {
-      console.warn("[userRepository] completeUserProfile:", err);
-    }
+  if (isFirebaseConfigured() && !isAnonymous) {
+    const userRef = doc(db, "users", userId);
+    const snap = await getDoc(userRef);
+    await persistProfile(userRef, updated, !snap.exists());
   }
 
+  writeLocalProfile(updated);
   return updated;
 }
 
 export async function updateUserProfile(
   userId: string,
   patch: Partial<ProfileSetupInput & { title: string }>,
+  isAnonymous = true,
 ): Promise<UserProfile> {
-  const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId);
+  const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
+
+  let photoUrl = patch.photoUrl !== undefined ? patch.photoUrl : current.photoUrl;
+  if (!isAnonymous && photoUrl?.startsWith("data:")) {
+    photoUrl = await resolvePhotoUrl(userId, photoUrl);
+  }
+
   const updated: UserProfile = {
     ...current,
     displayName: patch.displayName?.trim() ?? current.displayName,
-    // Posição só muda no primeiro cadastro — edição preserva posição e atributos
     position: current.position,
     shirtNumber: patch.shirtNumber ?? current.shirtNumber,
-    photoUrl: patch.photoUrl !== undefined ? patch.photoUrl : current.photoUrl,
+    photoUrl,
     title: patch.title?.trim() ?? current.title,
     attributes: current.attributes,
     profileComplete: true,
+    isAnonymous,
     updatedAt: new Date().toISOString(),
   };
 
-  writeLocalProfile(updated);
-
-  if (isFirebaseConfigured()) {
-    try {
-      const { photoUrl, ...forFirestore } = updated;
-      await updateDoc(doc(db, "users", userId), {
-        ...forFirestore,
-        photoUrl: photoUrl && photoUrl.length < 400_000 ? photoUrl : undefined,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (err) {
-      console.warn("[userRepository] updateUserProfile:", err);
-    }
+  if (isFirebaseConfigured() && !isAnonymous) {
+    await persistProfile(doc(db, "users", userId), updated);
   }
 
+  writeLocalProfile(updated);
   return updated;
 }
 
 export async function markProfileAsLinked(userId: string): Promise<void> {
   const current = readLocalProfile(userId);
-  if (!current || !current.isAnonymous) return;
+  if (!current) return;
 
   const updated: UserProfile = {
     ...current,
@@ -290,10 +394,22 @@ export async function markProfileAsLinked(userId: string): Promise<void> {
   if (!isFirebaseConfigured()) return;
 
   try {
-    await updateDoc(doc(db, "users", userId), {
-      isAnonymous: false,
-      updatedAt: serverTimestamp(),
-    });
+    const userRef = doc(db, "users", userId);
+    if (updated.profileComplete) {
+      let photoUrl = updated.photoUrl;
+      if (photoUrl?.startsWith("data:")) {
+        photoUrl = await resolvePhotoUrl(userId, photoUrl);
+        updated.photoUrl = photoUrl;
+        writeLocalProfile(updated);
+      }
+      const snap = await getDoc(userRef);
+      await persistProfile(userRef, updated, !snap.exists());
+    } else {
+      await updateDoc(userRef, {
+        isAnonymous: false,
+        updatedAt: serverTimestamp(),
+      });
+    }
   } catch (err) {
     console.warn("[userRepository] markProfileAsLinked:", err);
   }
@@ -324,7 +440,11 @@ export async function applyMatchResultToProfile(
   userId: string,
   stats: MatchResultStats,
 ): Promise<void> {
-  const local = readLocalProfile(userId);
+  const local =
+    readLocalProfile(userId) ??
+    (isFirebaseConfigured()
+      ? await loadUserProfile(userId, undefined, { preferRemote: true })
+      : null);
   if (!local) return;
 
   const updatedAttrs = applyMatchStatsToCard(local.attributes, stats.rating);
@@ -350,23 +470,24 @@ export async function applyMatchResultToProfile(
     attributes: updatedAttrs,
     seasonStats: updatedStats,
     lastMatchRating: stats.rating,
+    isAnonymous: local.isAnonymous,
     updatedAt: new Date().toISOString(),
   };
 
-  writeLocalProfile(updated);
-
-  if (!isFirebaseConfigured()) return;
-
-  try {
-    await updateDoc(doc(db, "users", userId), {
-      attributes: updatedAttrs,
-      seasonStats: updatedStats,
-      lastMatchRating: stats.rating,
-      updatedAt: serverTimestamp(),
-    });
-  } catch (err) {
-    console.warn("[userRepository] applyMatchResultToProfile:", err);
+  if (isFirebaseConfigured() && !local.isAnonymous) {
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        attributes: updatedAttrs,
+        seasonStats: updatedStats,
+        lastMatchRating: stats.rating,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn("[userRepository] applyMatchResultToProfile:", err);
+    }
   }
+
+  writeLocalProfile(updated);
 }
 
 export function getCachedProfile(userId?: string): UserProfile | null {

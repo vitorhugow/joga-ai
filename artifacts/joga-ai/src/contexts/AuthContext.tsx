@@ -45,9 +45,6 @@ const AuthContext = createContext<AuthState>({
 
 function applyUserState(user: User | null, localUserId: string) {
   const linked = user ? isAccountLinked() : false;
-  if (user) {
-    migrateLocalProfileIfNeeded(localUserId, user.uid);
-  }
   if (user && linked) {
     markProfileAsLinked(user.uid).catch(console.warn);
   }
@@ -92,7 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState(applyUserState(auth.currentUser ?? user, localUserIdRef.current));
+      const current = auth.currentUser ?? user;
+      if (current && !current.isAnonymous) {
+        await migrateLocalProfileIfNeeded(localUserIdRef.current, current.uid);
+      }
+
+      setState(applyUserState(current, localUserIdRef.current));
     });
 
     return unsubscribe;

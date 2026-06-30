@@ -122,7 +122,7 @@ export function ProfileSetupDialog({
           displayName: name,
           shirtNumber: num,
           photoUrl,
-        });
+        }, !isLinked);
       } else {
         await completeUserProfile(userId, input, !isLinked);
       }

@@ -13,34 +13,56 @@ Após commits de código, fixes ou features que toquem:
 - Frontend (`artifacts/joga-ai/src/**`, `public/**`)
 - Regras/índices Firestore (`firestore.rules`, `firestore.indexes.json`)
 
-## Comandos (raiz do monorepo)
+## Deploy automático (GitHub Actions)
+
+Cada push para `main` corre `.github/workflows/deploy.yml`:
+1. Build Vite com `VITE_FIREBASE_*` (secrets)
+2. Cloudflare Pages (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`)
+3. Firestore rules + indexes (`FIREBASE_TOKEN`)
+
+**O agente não consegue criar secrets no GitHub.** Se o deploy saltar regras/Pages, pede ao utilizador para correr **uma vez**:
 
 ```bash
-# 1. Build de produção
-pnpm install && pnpm --filter @workspace/joga-ai run build
-
-# 2. Cloudflare Pages (frontend)
-cd artifacts/joga-ai && npx wrangler pages deploy dist/public --project-name=joga-ai
-
-# 3. Firestore (se alteraste rules ou indexes)
-cd artifacts/joga-ai && firebase deploy --only firestore:rules,firestore:indexes
+chmod +x scripts/setup-github-deploy-secrets.sh
+./scripts/setup-github-deploy-secrets.sh
+gh workflow run deploy.yml --repo vitorhugow/joga-ai
 ```
 
-## Ordem
+## Comandos locais (Mac / ambiente com credenciais)
 
-1. `tsc` / build local — falha rápido antes de publicar
-2. Deploy Cloudflare se mudaste app ou assets estáticos (`_headers`, `_redirects`)
-3. Deploy Firestore se mudaste `firestore.rules` ou `firestore.indexes.json`
+```bash
+# Deploy completo
+./scripts/deploy-production.sh
 
-## Git + Cloudflare
+# Só Firestore (regras + índices) — obrigatório após mudar firestore.rules
+./scripts/deploy-firestore.sh
+```
 
-Se o projeto estiver ligado ao GitHub com auto-deploy na `main`, **push** também conta como deploy — mas o utilizador quer deploy **logo após alterar**, não só no fim da sessão.
+Ordem manual:
+1. `pnpm --filter @workspace/joga-ai run build`
+2. `wrangler pages deploy` (se mudaste frontend)
+3. `firebase deploy --only firestore:rules,firestore:indexes` (se mudaste Firestore)
 
-## Não fazer sem pedido explícito
+## Secrets necessários no GitHub
 
-- `git push --force` para `main`
-- Commit (só quando o utilizador pedir)
+| Secret | Origem |
+|--------|--------|
+| `VITE_FIREBASE_*` (7 vars) | `artifacts/joga-ai/.env.local` |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare → API Tokens |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard |
+| `FIREBASE_TOKEN` | `cd artifacts/joga-ai && firebase login:ci` |
+
+Projeto Firebase: **joga-ai-f7622**  
+Site: **https://joga-ai.pages.dev**
+
+## Git
+
+- Push para `main` dispara deploy automático (com secrets configurados)
+- **Nunca** `git push --force` para `main` sem pedido explícito
 
 ## Reportar ao utilizador
 
-No fim do deploy, indica URL do Pages e se Firestore foi actualizado.
+No fim do deploy, indica:
+- URL do site
+- Se Firestore rules/indexes foram publicados
+- Se algum passo foi saltado por falta de secrets

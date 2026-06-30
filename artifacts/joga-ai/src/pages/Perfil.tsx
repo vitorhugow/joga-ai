@@ -358,7 +358,6 @@ export default function Perfil() {
                   title={player.title}
                   photoUrl={player.photoUrl}
                   size="profile"
-                  attributeDeltas={attrDeltas}
                 />
               </div>
             </button>
@@ -604,7 +603,6 @@ export default function Perfil() {
               title={player.title}
               photoUrl={player.photoUrl}
               size="profile"
-              attributeDeltas={attrDeltas}
             />
           </div>
         </div>

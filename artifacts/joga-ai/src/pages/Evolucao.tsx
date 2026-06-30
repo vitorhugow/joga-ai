@@ -23,7 +23,7 @@ function formatDate(iso: string) {
 
 export default function Evolucao() {
   const { userId: authUserId } = useAuth();
-  const [history, setHistory] = useState<EvolutionRecord[]>(() => loadEvolutionHistory());
+  const [history, setHistory] = useState<EvolutionRecord[]>(() => loadEvolutionHistory(authUserId));
   const [pendingMatch, setPendingMatch] = useState(() => loadPostMatch());
   const matchUserId = currentMatchUserId();
   const pendingMatchId = resolveMatchId({ storedMatchId: pendingMatch?.matchId });
@@ -51,6 +51,7 @@ export default function Evolucao() {
   }, []);
 
   useEffect(() => {
+    setHistory(loadEvolutionHistory(authUserId));
     loadEvolutionFromFirestore(authUserId).then((remote) => {
       if (remote.length > 0) setHistory(remote);
     });

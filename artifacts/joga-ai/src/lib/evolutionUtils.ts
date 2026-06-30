@@ -50,7 +50,8 @@ export function computeTopScorers(events: MatchEvent[]) {
 
 export function computePlayerGains(
   player: { id: string; name?: string; position?: string } | null | undefined,
-  events: MatchEvent[]
+  events: MatchEvent[],
+  receivedRating?: number | null,
 ): EvolutionGain[] {
   if (!player) return [];
 
@@ -96,14 +97,52 @@ export function computePlayerGains(
     });
   }
 
+  const hasRating = receivedRating != null && receivedRating > 0;
   list.push({
     title: "Nota dos colegas",
-    value: "Pendente",
-    reason: "Será atualizada após o período de avaliação",
-    type: "pending",
+    value: hasRating ? receivedRating.toFixed(1) : "Pendente",
+    reason: hasRating
+      ? "Média das avaliações nesta pelada"
+      : "Será atualizada após o período de avaliação",
+    type: hasRating ? "up" : "pending",
   });
 
   return list;
+}
+
+export function computeRatingByPlayer(
+  votes: Array<{ ratings: Record<string, number> }>,
+): Record<string, number[]> {
+  const ratingByPlayer: Record<string, number[]> = {};
+  for (const vote of votes) {
+    for (const [pid, rating] of Object.entries(vote.ratings)) {
+      if (!ratingByPlayer[pid]) ratingByPlayer[pid] = [];
+      ratingByPlayer[pid].push(rating);
+    }
+  }
+  return ratingByPlayer;
+}
+
+export function averageRatingsForPlayer(
+  ratingByPlayer: Record<string, number[]>,
+  playerId: string,
+): number {
+  const ratings = ratingByPlayer[playerId] ?? [];
+  if (ratings.length === 0) return 0;
+  const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+  return Math.round(avg * 10) / 10;
+}
+
+export function collectLinkedPlayerUserIds(
+  players: Array<{ id: string; userId?: string }>,
+  organizerId?: string,
+): string[] {
+  const ids = new Set<string>();
+  for (const player of players) {
+    if (player.userId) ids.add(player.userId);
+    else if (organizerId && player.id === organizerId) ids.add(organizerId);
+  }
+  return [...ids];
 }
 
 export function computePlayerMatchStats(playerId: string, events: MatchEvent[]) {

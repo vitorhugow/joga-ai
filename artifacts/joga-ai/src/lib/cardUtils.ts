@@ -127,16 +127,44 @@ export function generateInitialAttributes(position?: string): PlayerAttributes {
   return distributeAttributes(pos, targetSum);
 }
 
+export type MatchEventGains = {
+  goals: number;
+  assists: number;
+  saves: number;
+  position?: string;
+};
+
+/** Ganhos por desempenho na partida — alinhado com computePlayerGains. OVR sobe via média. */
+export function applyEventGainsToCard(
+  currentAttrs: PlayerAttributes,
+  events: MatchEventGains,
+): PlayerAttributes {
+  const isGoalkeeper = String(events.position || "").toUpperCase().includes("GR");
+
+  return {
+    ritmo: clampStat(currentAttrs.ritmo),
+    finalizacao: clampStat(
+      currentAttrs.finalizacao + (events.goals > 0 && !isGoalkeeper ? events.goals : 0),
+    ),
+    passe: clampStat(currentAttrs.passe + events.assists),
+    defesa: clampStat(
+      currentAttrs.defesa +
+        events.saves +
+        (isGoalkeeper && events.goals > 0 ? events.goals : 0),
+    ),
+    drible: clampStat(currentAttrs.drible),
+    fisico: clampStat(currentAttrs.fisico + 1),
+  };
+}
+
+/** @deprecated Use applyEventGainsToCard — mantido para compatibilidade interna */
 export function applyMatchStatsToCard(
   currentAttrs: PlayerAttributes,
   matchPerformance: number,
 ): PlayerAttributes {
-  return {
-    ritmo: currentAttrs.ritmo + (matchPerformance > 8 ? 1 : 0),
-    finalizacao: currentAttrs.finalizacao + (matchPerformance > 8 ? 1 : 0),
-    passe: currentAttrs.passe + (matchPerformance > 8 ? 1 : 0),
-    defesa: currentAttrs.defesa,
-    drible: currentAttrs.drible + (matchPerformance > 8 ? 1 : 0),
-    fisico: currentAttrs.fisico + (matchPerformance > 8 ? 1 : 0),
-  };
+  return applyEventGainsToCard(currentAttrs, {
+    goals: matchPerformance > 8 ? 1 : 0,
+    assists: 0,
+    saves: 0,
+  });
 }

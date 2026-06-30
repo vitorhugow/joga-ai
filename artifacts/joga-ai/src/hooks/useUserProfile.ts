@@ -4,6 +4,7 @@ import {
   createIncompleteSeedProfile,
   getCachedProfile,
   loadUserProfile,
+  PROFILE_UPDATED_EVENT,
   type UserProfile,
 } from "@/lib/userRepository";
 
@@ -38,6 +39,17 @@ export function useUserProfile() {
       .then(setProfile)
       .finally(() => setLoading(false));
   }, [userId, seed, authLoading, isLinked]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId: string }>).detail;
+      if (detail?.userId === userId) {
+        void refresh();
+      }
+    };
+    window.addEventListener(PROFILE_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, handler);
+  }, [userId, refresh]);
 
   return {
     profile,

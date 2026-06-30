@@ -21,31 +21,49 @@ export type EvolutionRecord = {
   miniGames: Array<{ title: string; winner?: string }>;
 };
 
-const KEY = "joga-ai-evolution-history-v1";
+const KEY_PREFIX = "joga-ai-evolution-history-v1-";
+const LEGACY_KEY = "joga-ai-evolution-history-v1";
 
-export function loadEvolutionHistory(): EvolutionRecord[] {
+function evolutionKey(userId?: string) {
+  return `${KEY_PREFIX}${userId || getCurrentUserId()}`;
+}
+
+function migrateLegacyHistory(userId: string) {
   try {
-    const raw = localStorage.getItem(KEY);
+    const legacyRaw = localStorage.getItem(LEGACY_KEY);
+    if (!legacyRaw) return;
+    const key = evolutionKey(userId);
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, legacyRaw);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadEvolutionHistory(userId?: string): EvolutionRecord[] {
+  const uid = userId || getCurrentUserId();
+  migrateLegacyHistory(uid);
+  try {
+    const raw = localStorage.getItem(evolutionKey(uid));
     return raw ? (JSON.parse(raw) as EvolutionRecord[]) : [];
   } catch {
     return [];
   }
 }
 
-export function loadLatestEvolution(playerId?: string): EvolutionRecord | null {
-  const history = loadEvolutionHistory();
+export function loadLatestEvolution(playerId?: string, userId?: string): EvolutionRecord | null {
+  const history = loadEvolutionHistory(userId);
   if (history.length === 0) return null;
   if (!playerId) return history[0];
   return history.find((record) => record.playerId === playerId) || history[0];
 }
 
-export function saveEvolutionRecord(record: EvolutionRecord) {
-  const history = loadEvolutionHistory().filter((item) => item.id !== record.id);
-  localStorage.setItem(KEY, JSON.stringify([record, ...history].slice(0, 20)));
+export function saveEvolutionRecord(record: EvolutionRecord, userId?: string) {
+  const uid = userId || getCurrentUserId();
+  const history = loadEvolutionHistory(uid).filter((item) => item.id !== record.id);
+  localStorage.setItem(evolutionKey(uid), JSON.stringify([record, ...history].slice(0, 20)));
 
-  // Persiste no Firestore em paralelo (fire-and-forget)
-  const userId = getCurrentUserId();
-  saveEvolutionToFirestore(userId, record).catch(console.warn);
+  saveEvolutionToFirestore(uid, record).catch(console.warn);
 }
 
 export function buildEvolutionRecord(input: {

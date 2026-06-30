@@ -18,7 +18,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
-import type { MatchVoteRecord } from "./matchFlowStorage";
+import { createMatchFlowStore, type MatchVoteRecord } from "./matchFlowStorage";
 
 export type AuditorRecord = {
   userId: string;
@@ -104,22 +104,26 @@ export async function submitVote(
   }
 }
 
-/** Lê todos os votos de uma vez */
+/** Lê todos os votos (Firestore + cache local) */
 export async function getVotes(matchId: string): Promise<MatchVoteRecord[]> {
-  if (!isFirebaseConfigured()) return [];
+  const store = createMatchFlowStore(matchId);
+  const local = store.readVotes();
+
+  if (!isFirebaseConfigured()) return local;
 
   try {
     const snap = await getDocs(collection(db, "matches", matchId, "votes"));
-    return snap.docs.map((d) => ({
+    const remote = snap.docs.map((d) => ({
       userId: d.id,
       ratings: d.data().ratings as Record<string, number>,
       createdAt:
         d.data().createdAt?.toDate?.()?.toISOString() ??
         new Date().toISOString(),
     }));
+    return remote.length > 0 ? store.mergeRemoteVotes(remote) : local;
   } catch (err) {
     console.warn("[auditRepository] getVotes:", err);
-    return [];
+    return local;
   }
 }
 

@@ -24,9 +24,11 @@ import {
   saveEvolutionRecord,
 } from "@/lib/evolutionStorage";
 import { applyMatchResultToProfile } from "@/lib/userRepository";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   saveMatchResult,
   saveUserMatchHistory,
+  hasUserMatchHistoryEntry,
   type MatchPlayerResult,
 } from "@/lib/matchHistoryRepository";
 import { getVotes } from "@/lib/auditRepository";
@@ -36,7 +38,12 @@ import {
   computePlayerGains,
   computePlayerMatchStats,
   computeTopScorers,
+  computeRatingByPlayer,
+  averageRatingsForPlayer,
+  collectLinkedPlayerUserIds,
+  type EvolutionGain,
 } from "@/lib/evolutionUtils";
+import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
 
 const eventLabels: Record<string, string> = {
@@ -178,9 +185,14 @@ export default function PosJogo() {
   }, []);
 
   const [, params] = useRoute("/partida/:id/pos-jogo");
-  const [userId] = useState(currentMatchUserId);
+  const { userId: authUserId } = useAuth();
+  const userId = authUserId || currentMatchUserId();
   const matchId = resolveMatchId({ routeMatchId: params?.id });
-  const [data, setData] = useState<SavedPostMatch | null>(() => loadPostMatch(matchId));
+  const [data, setData] = useState<SavedPostMatch | null>(() => {
+    const local = loadPostMatch(matchId);
+    if (!local || !authUserId) return local;
+    return applyAuthToMatchData(local, authUserId);
+  });
 
   // Hidrata dados do Firestore em background (não bloqueia render)
   // e verifica se a partida já expirou
@@ -188,9 +200,17 @@ export default function PosJogo() {
     checkAndCloseExpiredMatch();
     if (!matchId || matchId === "default") return;
     loadMatchFromFirestore(matchId).then((remote) => {
-      if (remote) setData(remote);
+      if (remote) {
+        setData(authUserId ? applyAuthToMatchData(remote, authUserId) : remote);
+      }
     });
-  }, [matchId]);
+  }, [matchId, authUserId]);
+
+  useEffect(() => {
+    if (!authUserId) return;
+    setData((current) => (current ? applyAuthToMatchData(current, authUserId) : current));
+  }, [authUserId]);
+
   const flow = useMemo(() => createMatchFlowStore(matchId), [matchId]);
 
   const [auditors, setAuditors] = useState<string[]>([]);
@@ -201,6 +221,7 @@ export default function PosJogo() {
     const id = resolveMatchId({ routeMatchId: params?.id });
     return hasUserVotedInSession(currentMatchUserId(), id);
   });
+  const [displayGains, setDisplayGains] = useState<EvolutionGain[] | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>(() => {
     const id = resolveMatchId({ routeMatchId: params?.id });
     return createMatchFlowStore(id).readVoteDraft();
@@ -213,6 +234,28 @@ export default function PosJogo() {
   const isExpired = isPostMatchExpired(data) || Date.now() > expiresAt;
   const players: any[] = data?.players || [];
   const games: any[] = data?.miniGames || [];
+
+  const allEvents = useMemo(() => collectAllEvents(games), [games]);
+
+  const currentPlayer = useMemo(() => {
+    return (
+      players.find((player: any) => player.id === data?.currentPlayerId) ||
+      players.find((player: any) => player.isMe) ||
+      players[0]
+    );
+  }, [players, data]);
+
+  useEffect(() => {
+    if (!gainsMode || !currentPlayer || displayGains) return;
+    void (async () => {
+      const allVotes = await getVotes(matchId);
+      const ratingByPlayer = computeRatingByPlayer(allVotes);
+      const receivedRating = averageRatingsForPlayer(ratingByPlayer, currentPlayer.id);
+      if (receivedRating > 0) {
+        setDisplayGains(computePlayerGains(currentPlayer, allEvents, receivedRating));
+      }
+    })();
+  }, [gainsMode, currentPlayer, displayGains, matchId, allEvents]);
 
   // Registo de auditor e listeners em tempo real (Firestore + localStorage fallback)
   useEffect(() => {
@@ -264,21 +307,11 @@ export default function PosJogo() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, isExpired]);
 
-  const allEvents = useMemo(() => collectAllEvents(games), [games]);
-
-  const currentPlayer = useMemo(() => {
-    return (
-      players.find((player: any) => player.id === data?.currentPlayerId) ||
-      players.find((player: any) => player.isMe) ||
-      players[0]
-    );
-  }, [players, data]);
-
   const topScorers = useMemo(() => computeTopScorers(allEvents), [allEvents]);
 
   const gains = useMemo(
-    () => computePlayerGains(currentPlayer, allEvents),
-    [allEvents, currentPlayer]
+    () => displayGains ?? computePlayerGains(currentPlayer, allEvents),
+    [allEvents, currentPlayer, displayGains],
   );
 
   const isAuditor = auditors.includes(userId);
@@ -381,7 +414,7 @@ export default function PosJogo() {
     }
 
     const missing = players.some(
-      (player: any) => ratings[player.id] === undefined || ratings[player.id] < 1
+      (player: { id: string }) => ratings[player.id] === undefined || ratings[player.id] < 1,
     );
 
     if (missing) {
@@ -390,64 +423,88 @@ export default function PosJogo() {
     }
 
     const voteRecord = { userId, ratings, createdAt: new Date().toISOString() };
-
     flow.upsertVote(voteRecord);
-
-    // Escreve no Firestore em paralelo
     submitVote(matchId, voteRecord).catch(console.warn);
 
-    const stats = computePlayerMatchStats(currentPlayer.id, allEvents);
-    const record = buildEvolutionRecord({
-      matchId,
-      player: { id: currentPlayer.id, name: currentPlayer.name },
-      gains,
-      stats: {
-        ...stats,
-        miniGames: games.length,
-      },
-      topScorers,
-      miniGames: games,
-    });
-
-    saveEvolutionRecord(record);
     const votedUserIds = [...new Set([...(data.votedUserIds ?? []), userId])];
-    updateData({ ...data, status: "concluida", votedUserIds });
-    updateMatchStatus(data.matchId, "concluida").catch(console.warn);
+    const requiredVoters = collectLinkedPlayerUserIds(players, data.organizerId);
+    const allVoted =
+      requiredVoters.length === 0 ||
+      requiredVoters.every((uid) => votedUserIds.includes(uid));
+    const nextStatus = allVoted ? "concluida" : data.status ?? "auditada";
 
-    const avgRating =
-      Object.values(ratings).reduce((a, b) => a + b, 0) /
-      Math.max(1, Object.keys(ratings).length);
+    updateData({ ...data, votedUserIds, status: nextStatus });
+
+    if (allVoted) {
+      updateMatchStatus(data.matchId, "concluida").catch(console.warn);
+    }
+
+    setVoteMode(false);
+    setGainsMode(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
 
     void (async () => {
+      const stats = computePlayerMatchStats(currentPlayer.id, allEvents);
       const allVotes = await getVotes(matchId);
-      const ratingByPlayer: Record<string, number[]> = {};
-      for (const vote of allVotes) {
-        for (const [pid, rating] of Object.entries(vote.ratings)) {
-          if (!ratingByPlayer[pid]) ratingByPlayer[pid] = [];
-          ratingByPlayer[pid].push(rating);
-        }
+      const ratingByPlayer = computeRatingByPlayer(allVotes);
+      const receivedRating = averageRatingsForPlayer(ratingByPlayer, currentPlayer.id);
+      const gainsWithRating = computePlayerGains(currentPlayer, allEvents, receivedRating);
+      setDisplayGains(gainsWithRating);
+
+      const alreadyApplied = await hasUserMatchHistoryEntry(userId, data.matchId);
+      if (!alreadyApplied) {
+        const record = buildEvolutionRecord({
+          matchId,
+          player: { id: currentPlayer.id, name: currentPlayer.name },
+          gains: gainsWithRating,
+          stats: {
+            ...stats,
+            miniGames: games.length,
+          },
+          topScorers,
+          miniGames: games,
+        });
+
+        saveEvolutionRecord(record, userId);
+
+        await applyMatchResultToProfile(userId, {
+          goals: stats.goals,
+          assists: stats.assists,
+          saves: stats.saves,
+          mvp: false,
+          rating: receivedRating,
+          position: currentPlayer.position,
+        });
+
+        await saveUserMatchHistory(userId, {
+          matchId: data.matchId,
+          title: data.title ?? `Pelada ${data.matchId}`,
+          date: new Date().toISOString(),
+          rating: receivedRating,
+          goals: stats.goals,
+          assists: stats.assists,
+          communityId: data.communityId,
+        });
       }
-      ratingByPlayer[currentPlayer.id] = ratingByPlayer[currentPlayer.id] ?? [avgRating];
 
-      const playerResults: MatchPlayerResult[] = players.map((player: { id: string; name: string; userId?: string }) => {
-        const pStats = computePlayerMatchStats(player.id, allEvents);
-        const playerRatings = ratingByPlayer[player.id] ?? [];
-        const playerAvg =
-          playerRatings.length > 0
-            ? playerRatings.reduce((a, b) => a + b, 0) / playerRatings.length
-            : 0;
-        return {
-          playerId: player.id,
-          userId: player.userId ?? (player.id === currentPlayer.id ? userId : undefined),
-          name: player.name,
-          goals: pStats.goals,
-          assists: pStats.assists,
-          saves: pStats.saves,
-          rating: Math.round(playerAvg * 10) / 10,
-        };
-      });
+      if (!allVoted) return;
 
-      const result = {
+      const playerResults: MatchPlayerResult[] = players.map(
+        (player: { id: string; name: string; userId?: string }) => {
+          const pStats = computePlayerMatchStats(player.id, allEvents);
+          return {
+            playerId: player.id,
+            userId: player.userId ?? (player.id === data.organizerId ? data.organizerId : undefined),
+            name: player.name,
+            goals: pStats.goals,
+            assists: pStats.assists,
+            saves: pStats.saves,
+            rating: averageRatingsForPlayer(ratingByPlayer, player.id),
+          };
+        },
+      );
+
+      await saveMatchResult({
         matchId: data.matchId,
         title: data.title ?? `Pelada ${data.matchId}`,
         completedAt: new Date().toISOString(),
@@ -456,37 +513,8 @@ export default function PosJogo() {
         players: playerResults,
         topScorers,
         teamNames: data.teamNames,
-      };
-
-      await saveMatchResult(result);
-
-      for (const pr of playerResults) {
-        const targetUid = pr.userId ?? (pr.playerId === currentPlayer.id ? userId : null);
-        if (!targetUid) continue;
-
-        await applyMatchResultToProfile(targetUid, {
-          goals: pr.goals,
-          assists: pr.assists,
-          saves: pr.saves,
-          mvp: false,
-          rating: pr.rating || avgRating,
-        });
-
-        await saveUserMatchHistory(targetUid, {
-          matchId: data.matchId,
-          title: result.title,
-          date: result.completedAt,
-          rating: pr.rating || avgRating,
-          goals: pr.goals,
-          assists: pr.assists,
-          communityId: data.communityId,
-        });
-      }
+      });
     })();
-
-    setVoteMode(false);
-    setGainsMode(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   if (!data) {
@@ -516,7 +544,10 @@ export default function PosJogo() {
           <p className="text-emerald-300 text-[10px] font-black uppercase tracking-[0.22em]">Evolução registrada</p>
           <h1 className="font-display font-black text-white text-3xl mt-2">Atributos ganhos</h1>
           <p className="text-white/55 text-sm mt-2">
-            {currentPlayer?.name || "Jogador"}, estes ganhos já entram no perfil. As notas dos colegas entram depois das 24h.
+            {currentPlayer?.name || "Jogador"}, estes ganhos já entram no perfil.
+            {displayGains?.find((g) => g.title === "Nota dos colegas")?.value !== "Pendente"
+              ? ` A tua nota: ${displayGains?.find((g) => g.title === "Nota dos colegas")?.value}.`
+              : " As notas dos colegas aparecem assim que houver avaliações."}
           </p>
         </JogaHero>
 

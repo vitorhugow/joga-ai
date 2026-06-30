@@ -18,6 +18,8 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
+import { loadCommunityMembers } from "@/lib/communityRepository";
+import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaPage } from "@/components/joga";
 
@@ -47,6 +49,7 @@ type Player = {
   paid: boolean;
   isMe?: boolean;
   manual?: boolean;
+  userId?: string;
 };
 
 
@@ -288,9 +291,14 @@ export default function PreJogo() {
   const [organizerId, setOrganizerId] = useState<string | null>(null);
   const isOrganizer = userId === (organizerId ?? matchDetails?.organizerId ?? userId);
 
+  const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
+    () => loadMatchDetails(matchId)?.communityId,
+  );
+
   useEffect(() => {
     const details = loadMatchDetails(matchId);
     setMatchDetails(details);
+    if (details?.communityId) setMatchCommunityId(details.communityId);
     if (details?.organizerId) setOrganizerId(details.organizerId);
   }, [matchId]);
 
@@ -304,23 +312,24 @@ export default function PreJogo() {
       const merged = await loadMatchFromFirestore(matchId);
       const pre = loadPreMatch(matchId);
       if (merged?.organizerId) setOrganizerId(merged.organizerId);
+      if (merged?.communityId) setMatchCommunityId(merged.communityId);
 
       if (cancelled) return;
 
       const source = merged ?? pre;
 
       if (source) {
-        setPlayers(
-          source.players.map((p) => ({
-            id: p.id,
-            name: p.name,
-            position: p.position,
-            overall: p.overall,
-            paid: p.paid ?? false,
-            isMe: p.isMe,
-            manual: p.manual,
-          })),
-        );
+        const mapped = source.players.map((p) => ({
+          id: p.id,
+          name: p.name,
+          position: p.position,
+          overall: p.overall,
+          paid: p.paid ?? false,
+          isMe: p.isMe,
+          manual: p.manual,
+          userId: p.userId,
+        }));
+        setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setGameMode(source.gameMode ?? "fut5");
         setTeamCount(source.teamCount ?? 2);
         setPlayerTeams(source.playerTeams ?? {});
@@ -341,7 +350,25 @@ export default function PreJogo() {
     return () => {
       cancelled = true;
     };
-  }, [matchId]);
+  }, [matchId, userId]);
+
+  const [communityMembers, setCommunityMembers] = useState<
+    Awaited<ReturnType<typeof loadCommunityMembers>>
+  >([]);
+
+  useEffect(() => {
+    const communityId = matchCommunityId ?? matchDetails?.communityId;
+    if (!communityId) {
+      setCommunityMembers([]);
+      return;
+    }
+    void loadCommunityMembers(communityId).then(setCommunityMembers);
+  }, [matchCommunityId, matchDetails?.communityId]);
+
+  useEffect(() => {
+    if (!userId || !rosterHydrated) return;
+    setPlayers((current) => linkPlayersInRoster(current, userId));
+  }, [userId, rosterHydrated]);
 
   const [gameMode, setGameMode] = useState<GameMode>("fut5");
   const [teamCount, setTeamCount] = useState<2 | 3 | 4>(2);
@@ -870,7 +897,19 @@ export default function PreJogo() {
     return list.sort((a, b) => Number(b.paid) - Number(a.paid));
   }, [players, playerTeams, sortMode]);
 
-  const communityPlayersNotInMatch: Player[] = [];
+  const communityPlayersNotInMatch = useMemo(() => {
+    const inMatchIds = new Set(players.map((player) => player.userId ?? player.id));
+    return communityMembers
+      .filter((member) => !inMatchIds.has(member.userId))
+      .map((member) => ({
+        id: member.userId,
+        userId: member.userId,
+        name: member.displayName,
+        position: "MEI",
+        overall: 50,
+        paid: false,
+      }));
+  }, [communityMembers, players]);
 
   const totalPaid = players.filter((player) => player.paid).length;
   const benchCount = teamBuckets.BENCH.length;

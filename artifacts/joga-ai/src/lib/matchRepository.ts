@@ -67,6 +67,7 @@ export type MatchDetails = {
   openToExternal?: boolean;
   organizerName?: string;
   organizerId?: string;
+  communityId?: string;
   status?: string;
 };
 
@@ -148,6 +149,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
 
   const organizer: LivePlayer = {
     id: input.organizerId,
+    userId: input.organizerId,
     name: input.organizerName,
     position: input.organizerPosition,
     overall: input.organizerOverall,
@@ -340,6 +342,10 @@ export async function saveMatchToFirestore(
       miniGames: data.miniGames,
       createdAt: data.createdAt,
       expiresAt: data.expiresAt,
+      votedUserIds: data.votedUserIds ?? [],
+      title: data.title,
+      communityId: data.communityId,
+      organizerId: data.organizerId,
       savedAt: serverTimestamp(),
     };
     await setDoc(ref, payload, { merge: true });

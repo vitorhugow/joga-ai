@@ -14,7 +14,13 @@ import {
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import type { PlayerAttributes } from "./cardUtils";
-import { applyMatchStatsToCard, generateInitialAttributes } from "./cardUtils";
+import { applyEventGainsToCard, generateInitialAttributes } from "./cardUtils";
+
+export const PROFILE_UPDATED_EVENT = "joga-ai-profile-updated";
+
+function notifyProfileUpdated(userId: string) {
+  window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT, { detail: { userId } }));
+}
 
 export type UserProfile = {
   uid: string;
@@ -419,6 +425,7 @@ export type MatchResultStats = {
   saves: number;
   mvp: boolean;
   rating: number;
+  position?: string;
 };
 
 export async function applyMatchResultToProfile(
@@ -432,7 +439,12 @@ export async function applyMatchResultToProfile(
       : null);
   if (!local) return;
 
-  const updatedAttrs = applyMatchStatsToCard(local.attributes, stats.rating);
+  const updatedAttrs = applyEventGainsToCard(local.attributes, {
+    goals: stats.goals,
+    assists: stats.assists,
+    saves: stats.saves,
+    position: stats.position ?? local.position,
+  });
   const prevAvg = local.seasonStats.averageRating ?? 0;
   const prevMatches = local.seasonStats.matches;
   const newAvg =
@@ -473,6 +485,7 @@ export async function applyMatchResultToProfile(
   }
 
   writeLocalProfile(updated);
+  notifyProfileUpdated(userId);
 }
 
 export function getCachedProfile(userId?: string): UserProfile | null {

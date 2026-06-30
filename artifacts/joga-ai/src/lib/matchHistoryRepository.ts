@@ -93,6 +93,24 @@ export async function loadMatchResult(matchId: string): Promise<MatchResult | nu
   }
 }
 
+export async function hasUserMatchHistoryEntry(
+  userId: string,
+  matchId: string,
+): Promise<boolean> {
+  if (readLocalHistory(userId).some((entry) => entry.matchId === matchId)) {
+    return true;
+  }
+
+  if (!isFirebaseConfigured() || !userId) return false;
+
+  try {
+    const snap = await getDoc(doc(db, "users", userId, "matchHistory", matchId));
+    return snap.exists();
+  } catch {
+    return false;
+  }
+}
+
 export async function saveUserMatchHistory(
   userId: string,
   entry: UserMatchHistoryEntry,

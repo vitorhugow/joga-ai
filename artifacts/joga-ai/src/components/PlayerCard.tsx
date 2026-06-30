@@ -17,7 +17,17 @@ interface PlayerCardProps {
   flagUrl?: string;
   clubLogoUrl?: string;
   className?: string;
+  attributeDeltas?: Partial<PlayerAttributes>;
 }
+
+const STAT_ATTR_KEYS: Record<string, keyof PlayerAttributes> = {
+  PAC: "ritmo",
+  SHO: "finalizacao",
+  PAS: "passe",
+  DRI: "drible",
+  DEF: "defesa",
+  PHY: "fisico",
+};
 
 function getStats(attrs: PlayerAttributes): [string, number][] {
   return [
@@ -49,6 +59,7 @@ export function PlayerCard({
   photoUrl,
   flagUrl,
   className,
+  attributeDeltas,
 }: PlayerCardProps) {
   const overall = calculateOverall(attributes);
   const stats = getStats(attributes);
@@ -113,12 +124,25 @@ export function PlayerCard({
           <div className="joga-new-card-name-line" />
 
           <div className="joga-new-card-stats">
-            {stats.map(([label, value]) => (
-              <div className="joga-new-card-stat" key={label}>
-                <strong>{value}</strong>
-                <span>{label}</span>
-              </div>
-            ))}
+            {stats.map(([label, value]) => {
+              const attrKey = STAT_ATTR_KEYS[label];
+              const delta = attrKey ? attributeDeltas?.[attrKey] : undefined;
+              return (
+                <div className="joga-new-card-stat" key={label}>
+                  <strong>
+                    <span className="joga-new-card-stat-value">
+                      {value}
+                      {delta != null && delta > 0 && (
+                        <span className="joga-new-card-stat-delta" title={`+${delta}`}>
+                          ↑+{delta}
+                        </span>
+                      )}
+                    </span>
+                  </strong>
+                  <span>{label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

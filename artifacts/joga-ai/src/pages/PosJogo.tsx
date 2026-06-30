@@ -29,18 +29,20 @@ import {
   saveMatchResult,
   saveUserMatchHistory,
   hasUserMatchHistoryEntry,
-  type MatchPlayerResult,
+  loadMatchResult,
 } from "@/lib/matchHistoryRepository";
 import { getVotes } from "@/lib/auditRepository";
-import { ratingsReleaseAt } from "@/lib/ratingsRelease";
+import {
+  buildMatchResultPayload,
+  releaseMatchRatings,
+} from "@/lib/ratingsRelease";
+import type { MatchVoteRecord } from "@/lib/matchFlowStorage";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
 import {
   collectAllEvents,
   computePlayerGains,
   computePlayerMatchStats,
   computeTopScorers,
-  computeRatingByPlayer,
-  averageRatingsForPlayer,
   collectLinkedPlayerUserIds,
   type EvolutionGain,
 } from "@/lib/evolutionUtils";
@@ -216,6 +218,13 @@ export default function PosJogo() {
   }, [matchId, authUserId]);
 
   useEffect(() => {
+    if (!matchId) return;
+    loadMatchResult(matchId).then((result) => {
+      if (result?.ratingsReleased) setRatingsReleased(true);
+    });
+  }, [matchId]);
+
+  useEffect(() => {
     if (!authUserId) return;
     setData((current) => (current ? applyAuthToMatchData(current, authUserId) : current));
   }, [authUserId]);
@@ -238,6 +247,9 @@ export default function PosJogo() {
   const [selectedGameId, setSelectedGameId] = useState("");
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [selectedEventType, setSelectedEventType] = useState("golo");
+  const [voteRecords, setVoteRecords] = useState<MatchVoteRecord[]>([]);
+  const [ratingsReleased, setRatingsReleased] = useState(false);
+  const [finalizeBusy, setFinalizeBusy] = useState(false);
 
   const expiresAt = data?.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + 24 * 60 * 60 * 1000;
   const isExpired = isPostMatchExpired(data) || Date.now() > expiresAt;
@@ -296,6 +308,7 @@ export default function PosJogo() {
     // Listener em tempo real para votos — não apagar votos locais com snapshot vazio do Firestore
     const unsubVotes = watchVotes(matchId, (remoteVotes) => {
       const merged = flow.mergeRemoteVotes(remoteVotes);
+      setVoteRecords(merged);
       if (merged.some((vote) => vote.userId === userId)) {
         setGainsMode(true);
         setVoteMode(false);
@@ -321,6 +334,61 @@ export default function PosJogo() {
   const hasVoted = hasUserVotedInSession(userId, matchId);
   const auditClosed = isExpired || confirmed.length >= 3;
   const mustAuditBeforeVote = isAuditor && !hasConfirmed && !auditClosed;
+  const isOrganizer = Boolean(data?.organizerId && userId === data.organizerId);
+  const requiredVoters = useMemo(
+    () => collectLinkedPlayerUserIds(players, data?.organizerId),
+    [players, data?.organizerId],
+  );
+  const votedUserIds = useMemo(() => {
+    const ids = new Set<string>(data?.votedUserIds ?? []);
+    voteRecords.forEach((vote) => ids.add(vote.userId));
+    return [...ids];
+  }, [data?.votedUserIds, voteRecords]);
+  const allVoted =
+    requiredVoters.length === 0 ||
+    requiredVoters.every((uid) => votedUserIds.includes(uid));
+
+  async function persistMatchResultAndMaybeReleaseRatings(
+    reason: "all_voted" | "organizer",
+  ) {
+    if (!data) return;
+
+    const votes = await getVotes(matchId);
+    const completedAt = new Date().toISOString();
+    const payload = await buildMatchResultPayload({
+      matchId: data.matchId,
+      title: data.title ?? `Pelada ${data.matchId}`,
+      completedAt,
+      communityId: data.communityId,
+      organizerId: data.organizerId,
+      teamNames: data.teamNames,
+      players,
+      events: allEvents,
+      votes,
+    });
+
+    await saveMatchResult(payload);
+    await releaseMatchRatings(data.matchId, reason);
+    await updateMatchStatus(data.matchId, "concluida");
+    setRatingsReleased(true);
+    updateData({ ...data, status: "concluida", votedUserIds });
+  }
+
+  async function handleOrganizerFinalizeVoting() {
+    if (!data || !isOrganizer || ratingsReleased || finalizeBusy) return;
+    if (!window.confirm("Finalizar a votação agora e publicar as notas com os votos actuais?")) {
+      return;
+    }
+
+    setFinalizeBusy(true);
+    try {
+      await persistMatchResultAndMaybeReleaseRatings("organizer");
+    } catch (err) {
+      console.warn("[PosJogo] finalize voting:", err);
+    } finally {
+      setFinalizeBusy(false);
+    }
+  }
 
   function updateData(updated: SavedPostMatch) {
     setData(updated);
@@ -428,16 +496,15 @@ export default function PosJogo() {
     flow.upsertVote(voteRecord);
     submitVote(matchId, voteRecord).catch(console.warn);
 
-    const votedUserIds = [...new Set([...(data.votedUserIds ?? []), userId])];
-    const requiredVoters = collectLinkedPlayerUserIds(players, data.organizerId);
-    const allVoted =
+    const nextVotedUserIds = [...new Set([...(data.votedUserIds ?? []), userId])];
+    const nextAllVoted =
       requiredVoters.length === 0 ||
-      requiredVoters.every((uid) => votedUserIds.includes(uid));
-    const nextStatus = allVoted ? "concluida" : data.status ?? "auditada";
+      requiredVoters.every((uid) => nextVotedUserIds.includes(uid));
+    const nextStatus = nextAllVoted ? "concluida" : data.status ?? "auditada";
 
-    updateData({ ...data, votedUserIds, status: nextStatus });
+    updateData({ ...data, votedUserIds: nextVotedUserIds, status: nextStatus });
 
-    if (allVoted) {
+    if (nextAllVoted) {
       updateMatchStatus(data.matchId, "concluida").catch(console.warn);
     }
 
@@ -488,38 +555,9 @@ export default function PosJogo() {
         });
       }
 
-      if (!allVoted) return;
+      if (!nextAllVoted) return;
 
-      const allVotes = await getVotes(matchId);
-      const ratingByPlayer = computeRatingByPlayer(allVotes);
-      const completedAt = new Date().toISOString();
-
-      const playerResults: MatchPlayerResult[] = players.map(
-        (player: { id: string; name: string; userId?: string }) => {
-          const pStats = computePlayerMatchStats(player.id, allEvents);
-          return {
-            playerId: player.id,
-            userId: player.userId ?? (player.id === data.organizerId ? data.organizerId : undefined),
-            name: player.name,
-            goals: pStats.goals,
-            assists: pStats.assists,
-            saves: pStats.saves,
-            rating: averageRatingsForPlayer(ratingByPlayer, player.id),
-          };
-        },
-      );
-
-      await saveMatchResult({
-        matchId: data.matchId,
-        title: data.title ?? `Pelada ${data.matchId}`,
-        completedAt,
-        ratingsReleaseAt: ratingsReleaseAt(completedAt),
-        communityId: data.communityId,
-        organizerId: data.organizerId,
-        players: playerResults,
-        topScorers,
-        teamNames: data.teamNames,
-      });
+      await persistMatchResultAndMaybeReleaseRatings("all_voted");
     })();
   }
 
@@ -551,7 +589,7 @@ export default function PosJogo() {
           <h1 className="font-display font-black text-white text-3xl mt-2">Atributos ganhos</h1>
           <p className="text-white/55 text-sm mt-2">
             {currentPlayer?.name || "Jogador"}, estes ganhos já entram no perfil.
-            A nota dos colegas sai 24h depois do fim da pelada — vais receber notificação.
+            A nota dos colegas sai quando todos votarem, o organizador finalizar, ou 24h após o fim — recebes notificação.
           </p>
         </JogaHero>
 
@@ -676,7 +714,7 @@ export default function PosJogo() {
         <p className="text-white/45 text-[10px] font-black uppercase tracking-[0.22em]">Resumo</p>
         <h1 className="font-display font-black text-white text-3xl mt-2">Resumo da Pelada</h1>
         <p className="text-white/55 text-sm mt-2">
-          Confere o que aconteceu antes de votar. A votação fecha em até 24h.
+          Confere o que aconteceu antes de votar. As notas saem quando todos votam, o organizador finaliza, ou após 24h.
         </p>
       </JogaHero>
 
@@ -721,6 +759,73 @@ export default function PosJogo() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {isOrganizer && (
+        <section
+          className="mt-4 rounded-3xl p-4"
+          style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.22)" }}
+          data-testid="organizer-voting-panel"
+        >
+          <p className="text-blue-200/70 text-[10px] font-black uppercase tracking-[0.2em]">Admin da pelada</p>
+          <h2 className="font-display font-black text-white text-xl mt-1">Estado da votação</h2>
+          <p className="text-white/45 text-xs mt-1">
+            {votedUserIds.length}/{requiredVoters.length || players.length} jogadores com conta já votaram
+            {ratingsReleased ? " · Notas publicadas" : ""}
+          </p>
+
+          <div className="mt-3 space-y-2">
+            {players
+              .filter((player: { userId?: string; id: string }) =>
+                player.userId || player.id === data.organizerId,
+              )
+              .map((player: { id: string; name: string; userId?: string }) => {
+                const voterId = player.userId ?? (player.id === data.organizerId ? data.organizerId : "");
+                const voted = voterId ? votedUserIds.includes(voterId) : false;
+                return (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between rounded-2xl px-3 py-2"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+                  >
+                    <span className="text-white text-sm font-semibold">{player.name}</span>
+                    <span
+                      className="text-xs font-black px-2 py-1 rounded-full"
+                      style={
+                        voted
+                          ? { background: "rgba(74,222,128,0.15)", color: "#4ade80" }
+                          : { background: "rgba(251,191,36,0.12)", color: "#fbbf24" }
+                      }
+                    >
+                      {voted ? "Votou" : "Pendente"}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+
+          {!ratingsReleased && (
+            <JogaButton
+              variant="primary"
+              size="md"
+              className="w-full mt-4"
+              disabled={finalizeBusy || votedUserIds.length === 0}
+              onClick={() => void handleOrganizerFinalizeVoting()}
+            >
+              {finalizeBusy ? "A finalizar…" : "Finalizar votação e publicar notas"}
+            </JogaButton>
+          )}
+          {!ratingsReleased && votedUserIds.length === 0 && (
+            <p className="text-white/35 text-xs mt-2 text-center">
+              Precisa de pelo menos 1 voto para finalizar manualmente.
+            </p>
+          )}
+          {allVoted && !ratingsReleased && (
+            <p className="text-emerald-300 text-xs mt-2 text-center font-semibold">
+              Todos votaram — as notas serão publicadas automaticamente.
+            </p>
+          )}
         </section>
       )}
 

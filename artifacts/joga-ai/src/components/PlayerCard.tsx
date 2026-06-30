@@ -132,7 +132,7 @@ export function PlayerCard({
                   <strong>
                     {value}
                     {delta != null && delta > 0 && (
-                      <sup className="joga-new-card-stat-delta" title={`+${delta}`}>+{delta}</sup>
+                      <sup className="joga-new-card-stat-delta" title={`+${delta}`}>↑+{delta}</sup>
                     )}
                   </strong>
                   <span>{label}</span>

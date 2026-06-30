@@ -103,7 +103,7 @@ export function computePlayerGains(
     value: hasRating ? receivedRating.toFixed(1) : "Em 24h",
     reason: hasRating
       ? "Média das avaliações nesta pelada"
-      : "Será revelada 24h após o fim da pelada — recebes notificação",
+      : "Será revelada quando todos votarem, o organizador finalizar, ou 24h após o fim",
     type: hasRating ? "up" : "pending",
   });
 

@@ -121,6 +121,7 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
     attributes: data.attributes as PlayerAttributes,
     seasonStats: data.seasonStats as UserProfile["seasonStats"],
     lastMatchRating: data.lastMatchRating ? Number(data.lastMatchRating) : undefined,
+    lastAttributeDeltas: data.lastAttributeDeltas as Partial<PlayerAttributes> | undefined,
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }
@@ -153,7 +154,11 @@ function mergeProfiles(
   preferRemote: boolean,
 ): UserProfile {
   if (preferRemote && remote) {
-    return buildProfileFromRemote(userId, seed, remote);
+    const merged = buildProfileFromRemote(userId, seed, remote);
+    if (local?.lastAttributeDeltas && !merged.lastAttributeDeltas) {
+      return { ...merged, lastAttributeDeltas: local.lastAttributeDeltas };
+    }
+    return merged;
   }
 
   if (preferRemote && !remote && local?.profileComplete) {

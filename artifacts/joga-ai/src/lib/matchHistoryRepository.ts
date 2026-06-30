@@ -33,6 +33,9 @@ export type MatchResult = {
   title: string;
   completedAt: string;
   ratingsReleaseAt?: string;
+  ratingsReleased?: boolean;
+  ratingsReleasedAt?: string;
+  ratingsReleaseReason?: "all_voted" | "organizer" | "24h";
   communityId?: string;
   organizerId?: string;
   players: MatchPlayerResult[];

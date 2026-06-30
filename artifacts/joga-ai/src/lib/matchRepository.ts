@@ -260,6 +260,31 @@ export type MatchStatus =
   | "concluida"
   | "expirada";
 
+export const OPEN_MATCH_STATUSES: MatchStatus[] = ["configurando", "ao_vivo"];
+
+export const CLOSED_MATCH_STATUSES: MatchStatus[] = [
+  "aguardando_auditoria",
+  "auditada",
+  "concluida",
+  "expirada",
+];
+
+function isClosedMatchStatus(status?: string): boolean {
+  return CLOSED_MATCH_STATUSES.includes(status as MatchStatus);
+}
+
+/** Remove partida da lista pública em Jogos (localStorage). */
+export function removeMatchFromListings(matchId: string): void {
+  const list = readLocalListings().filter((m) => m.id !== matchId);
+  writeLocalListings(list);
+
+  const details = readMatchDetailsMap();
+  if (details[matchId]) {
+    details[matchId] = { ...details[matchId], status: "concluida" };
+    writeMatchDetailsMap(details);
+  }
+}
+
 export type MatchRosterData = {
   gameMode: "fut5" | "fut7";
   teamCount: 2 | 3 | 4;
@@ -349,6 +374,9 @@ export async function saveMatchToFirestore(
       savedAt: serverTimestamp(),
     };
     await setDoc(ref, payload, { merge: true });
+    if (isClosedMatchStatus(data.status)) {
+      removeMatchFromListings(matchId);
+    }
   } catch (err) {
     console.warn("[matchRepository] saveMatchToFirestore:", err);
   }
@@ -365,11 +393,19 @@ export async function updateMatchStatus(
     savePostMatch({ ...local, status: status as SavedPostMatch["status"] });
   }
 
-  if (!isFirebaseConfigured()) return;
+  if (!isFirebaseConfigured()) {
+    if (isClosedMatchStatus(status)) {
+      removeMatchFromListings(matchId);
+    }
+    return;
+  }
 
   try {
     const ref = doc(db, "matches", matchId);
     await updateDoc(ref, { status, savedAt: serverTimestamp() });
+    if (isClosedMatchStatus(status)) {
+      removeMatchFromListings(matchId);
+    }
   } catch (err) {
     console.warn("[matchRepository] updateMatchStatus:", err);
   }

@@ -20,6 +20,7 @@ import {
   increment,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { OPEN_MATCH_STATUSES } from "./matchRepository";
 import { MAX_PROFILE_PHOTO_BYTES } from "./userRepository";
 
 export class CommunityCoverTooLargeError extends Error {
@@ -509,9 +510,11 @@ export async function deleteCommunity(communityId: string): Promise<void> {
   await batch.commit();
 }
 
-/** Partidas disponíveis (Firestore + cache local) */
+/** Partidas disponíveis (Firestore + cache local) — só abertas para jogar/entrar */
 export async function loadAvailableMatches(limitCount = 10): Promise<MatchListing[]> {
-  const localCreated = readLocalMatchListings();
+  const localCreated = readLocalMatchListings().filter(
+    (m) => !m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number]),
+  );
 
   if (!isFirebaseConfigured()) {
     return localCreated.slice(0, limitCount);
@@ -520,7 +523,7 @@ export async function loadAvailableMatches(limitCount = 10): Promise<MatchListin
   try {
     const q = query(
       collection(db, "matches"),
-      where("status", "in", ["configurando", "ao_vivo", "aguardando_auditoria"]),
+      where("status", "in", [...OPEN_MATCH_STATUSES]),
       orderBy("createdAt", "desc"),
       limit(limitCount),
     );

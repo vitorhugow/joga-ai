@@ -25,7 +25,6 @@ import Evolucao from "@/pages/Evolucao";
 import Ranking from "@/pages/Ranking";
 import Login from "@/pages/Login";
 import ComunidadeConfiguracoes from "@/pages/ComunidadeConfiguracoes";
-import JogadorPerfil from "@/pages/JogadorPerfil";
 import CriarComunidade from "@/pages/CriarComunidade";
 import Privacidade from "@/pages/Privacidade";
 import Termos from "@/pages/Termos";
@@ -46,8 +45,9 @@ function AnimatedRoutes() {
           <Switch location={location}>
             <Route path="/" component={Home} />
             <Route path="/perfil/evolucao" component={Evolucao} />
+            <Route path="/perfil/:viewId" component={Perfil} />
             <Route path="/perfil" component={Perfil} />
-            <Route path="/jogador/:id" component={JogadorPerfil} />
+            <Route path="/jogador/:id" component={Perfil} />
             <Route path="/comunidades/criar" component={CriarComunidade} />
             <Route path="/comunidades/:id/configuracoes" component={ComunidadeConfiguracoes} />
             <Route path="/comunidades" component={Comunidades} />

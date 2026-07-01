@@ -33,6 +33,7 @@ import {
 } from "@/lib/matchRsvpRepository";
 import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
 import { calculateOverall } from "@/lib/cardUtils";
+import { ensureAnonymousAuth } from "@/lib/auth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -312,7 +313,7 @@ function PlayerPicker({
 }
 
 export default function PreJogo() {
-  const { userId } = useAuth();
+  const { userId, isLinked } = useAuth();
   const { profile } = useUserProfile();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/pre-jogo");
@@ -326,6 +327,8 @@ export default function PreJogo() {
   const [cancelling, setCancelling] = useState(false);
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [rsvpBusy, setRsvpBusy] = useState(false);
+  const [showRsvpNameForm, setShowRsvpNameForm] = useState(false);
+  const [rsvpGuestName, setRsvpGuestName] = useState("");
   const [matchStatus, setMatchStatus] = useState<string>("configurando");
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
@@ -664,18 +667,26 @@ export default function PreJogo() {
     }
   }
 
-  async function handleConfirmPresence() {
-    if (!userId) return;
+  async function handleConfirmPresence(nameOverride?: string) {
+    const displayName = (nameOverride || profile.displayName || "").trim();
+    if (!displayName) {
+      setShowRsvpNameForm(true);
+      toast({ title: "Indica o teu nome", variant: "destructive" });
+      return;
+    }
+
     setRsvpBusy(true);
     try {
+      const uid = userId ?? (await ensureAnonymousAuth());
       const overall = profile.profileComplete
         ? calculateOverall(profile.attributes)
         : 50;
-      const result = await confirmPresence(matchId, userId, {
-        displayName: profile.displayName || "Jogador",
+      const result = await confirmPresence(matchId, uid, {
+        displayName,
         position: profile.position || "MEI",
         overall,
       });
+      setShowRsvpNameForm(false);
       const merged = await loadMatchFromFirestore(matchId);
       if (merged?.waitlist) setWaitlist(merged.waitlist);
       if (merged?.players) {
@@ -685,13 +696,13 @@ export default function PreJogo() {
           position: p.position,
           overall: p.overall,
           paid: p.paid ?? false,
-          isMe: p.userId === userId,
+          isMe: p.userId === uid,
           manual: p.manual,
           userId: p.userId,
           guestId: p.guestId,
           loanCard: p.loanCard,
         }));
-        setPlayers(linkPlayersInRoster(mapped, userId));
+        setPlayers(linkPlayersInRoster(mapped, uid));
         setPlayerTeams(merged.playerTeams ?? {});
       }
       toast({
@@ -1128,8 +1139,18 @@ export default function PreJogo() {
   const isInMatch = myPlayerIndex >= 0;
   const isOnWaitlist = myWaitlistIndex >= 0;
   const showRsvpBanner = Boolean(
-    userId && !isOrganizer && rosterHydrated && canConfirmPresence(matchStatus),
+    !isOrganizer && rosterHydrated && canConfirmPresence(matchStatus),
   );
+  const needsRsvpName = !isLinked || !profile.displayName?.trim();
+
+  function handleRsvpClick() {
+    if (needsRsvpName && !showRsvpNameForm) {
+      setShowRsvpNameForm(true);
+      return;
+    }
+    const name = rsvpGuestName.trim() || profile.displayName?.trim();
+    void handleConfirmPresence(name);
+  }
 
   return (
     <JogaPage theme="dark" padded={false}>
@@ -1265,12 +1286,24 @@ export default function PreJogo() {
             ) : (
               <>
                 <p className="text-white/80 text-sm font-bold">Queres jogar nesta pelada?</p>
+                {showRsvpNameForm && (
+                  <input
+                    type="text"
+                    value={rsvpGuestName}
+                    onChange={(e) => setRsvpGuestName(e.target.value)}
+                    placeholder="O teu nome"
+                    className="mt-3 w-full rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/35 outline-none"
+                    style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }}
+                    data-testid="rsvp-guest-name"
+                    autoFocus
+                  />
+                )}
                 <JogaButton
                   variant="primary"
                   size="md"
                   className="mt-3 w-full"
                   disabled={rsvpBusy}
-                  onClick={() => void handleConfirmPresence()}
+                  onClick={handleRsvpClick}
                 >
                   Confirmar presença
                 </JogaButton>

@@ -9,18 +9,35 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteField,
   serverTimestamp,
   type DocumentReference,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import type { PlayerAttributes } from "./cardUtils";
-import { applyParticipationGainsToCard, applyRatingGainsToCard, applyVoteGainsToCard, calculateOverall, computeRatingAttributeDeltas, generateInitialAttributes } from "./cardUtils";
 import {
+  applyParticipationGainsToCard,
+  applyRatingGainsToCard,
+  applyVoteGainsToCard,
+  calculateOverall,
+  computeRatingAttributeDeltas,
+  generateInitialAttributes,
+  revertParticipationGainsFromCard,
+  revertRatingGainsFromCard,
+  revertVoteGainsFromCard,
+} from "./cardUtils";
+import {
+  deleteUserMatchHistory,
+  getUserMatchHistoryEntry,
   hasParticipationApplied,
+  hasVoteEvolutionApplied,
+  loadUserMatchHistory,
   saveUserMatchHistory,
+  type MatchResult,
   type UserMatchHistoryEntry,
 } from "./matchHistoryRepository";
-import { collectLinkedPlayerUserIds } from "./evolutionUtils";
+import { collectLinkedPlayerUserIds, computePlayerMatchStats, isPlayerTopScorer, type MatchEvent } from "./evolutionUtils";
+import { deleteEvolutionRecordsForMatch } from "./evolutionRepository";
 
 export const PROFILE_UPDATED_EVENT = "joga-ai-profile-updated";
 
@@ -753,4 +770,185 @@ export function profileToPlayerCard(profile: UserProfile) {
     attributes: profile.attributes,
     seasonStats: profile.seasonStats,
   };
+}
+
+export type RevertMatchStatsInput = {
+  matchId: string;
+  organizerId?: string;
+  players: Array<{ id: string; userId?: string; position?: string }>;
+  events: MatchEvent[];
+  topScorers: Array<{ name: string; goals?: number }>;
+  votedUserIds?: string[];
+  matchResult?: MatchResult | null;
+};
+
+function revertAverageRating(
+  matches: number,
+  prevAvg: number,
+  rating: number,
+): number | undefined {
+  if (matches <= 0) return undefined;
+  if (matches === 1) return rating > 0 ? rating : undefined;
+  if (rating <= 0) return prevAvg > 0 ? prevAvg : undefined;
+  return Math.round(((prevAvg * matches - rating) / (matches - 1)) * 10) / 10;
+}
+
+function resolveLastMatchRatingAfterDelete(
+  history: UserMatchHistoryEntry[],
+  deletedMatchId: string,
+): number | undefined {
+  const remaining = history
+    .filter(
+      (entry) =>
+        entry.matchId !== deletedMatchId && entry.ratingReleased && (entry.rating ?? 0) > 0,
+    )
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return remaining[0]?.rating;
+}
+
+async function revertMatchStatsForPlayer(
+  userId: string,
+  player: { id: string; position?: string },
+  input: RevertMatchStatsInput,
+): Promise<void> {
+  const { matchId, events, topScorers, votedUserIds, matchResult } = input;
+
+  const historyEntry = await getUserMatchHistoryEntry(userId, matchId);
+  const participated =
+    historyEntry?.participationApplied ?? (await hasParticipationApplied(userId, matchId));
+  const voteApplied =
+    historyEntry?.voteEvolutionApplied ?? (await hasVoteEvolutionApplied(userId, matchId));
+  const ratingReleased =
+    historyEntry?.ratingReleased ?? Boolean(matchResult?.ratingsReleased);
+
+  if (!participated && !voteApplied && !ratingReleased && !historyEntry) {
+    return;
+  }
+
+  const local =
+    readLocalProfile(userId) ??
+    (isFirebaseConfigured()
+      ? await loadUserProfile(userId, undefined, { preferRemote: true })
+      : null);
+  if (!local) return;
+
+  const playerResult = matchResult?.players.find(
+    (row) => row.userId === userId || row.playerId === player.id,
+  );
+  const stats = computePlayerMatchStats(player.id, events);
+  const isTopScorer = isPlayerTopScorer(topScorers, player);
+  const voted = votedUserIds?.includes(userId) ?? voteApplied;
+  const rating = playerResult?.rating ?? historyEntry?.rating ?? 0;
+
+  let attrs = { ...local.attributes };
+  let seasonStats = { ...local.seasonStats };
+  const historyBeforeDelete = await loadUserMatchHistory(userId);
+
+  if (ratingReleased && rating > 0) {
+    attrs = revertRatingGainsFromCard(attrs, rating);
+    const revertedAvg = revertAverageRating(
+      seasonStats.matches,
+      seasonStats.averageRating ?? 0,
+      rating,
+    );
+    if (revertedAvg === undefined) {
+      delete seasonStats.averageRating;
+    } else {
+      seasonStats.averageRating = revertedAvg;
+    }
+  }
+
+  if (voteApplied) {
+    attrs = revertVoteGainsFromCard(attrs, {
+      goals: stats.goals,
+      assists: stats.assists,
+      saves: stats.saves,
+      fouls: stats.fouls,
+      yellowCards: stats.cards,
+      position: player.position ?? local.position,
+      voted,
+      isTopScorer,
+    });
+    seasonStats = {
+      ...seasonStats,
+      goals: Math.max(0, seasonStats.goals - stats.goals),
+      assists: Math.max(0, seasonStats.assists - stats.assists),
+      saves: Math.max(0, seasonStats.saves - stats.saves),
+      matches: participated ? seasonStats.matches : Math.max(0, seasonStats.matches - 1),
+    };
+  }
+
+  if (participated) {
+    attrs = revertParticipationGainsFromCard(attrs);
+    seasonStats = {
+      ...seasonStats,
+      matches: Math.max(0, seasonStats.matches - 1),
+    };
+  }
+
+  const clearEvolutionPointers = local.lastEvolutionMatchId === matchId;
+  const remainingHistory = historyBeforeDelete.filter((entry) => entry.matchId !== matchId);
+  const nextLastMatchRating = clearEvolutionPointers
+    ? resolveLastMatchRatingAfterDelete(historyBeforeDelete, matchId)
+    : local.lastMatchRating;
+
+  const updated: UserProfile = {
+    ...local,
+    attributes: attrs,
+    seasonStats,
+    lastMatchRating: nextLastMatchRating,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (clearEvolutionPointers) {
+    delete updated.lastAttributeDeltas;
+    delete updated.lastEvolutionMatchId;
+  }
+
+  if (isFirebaseConfigured() && !local.isAnonymous) {
+    try {
+      const patch: Record<string, unknown> = {
+        attributes: attrs,
+        seasonStats,
+        _revertForMatchId: matchId,
+        updatedAt: serverTimestamp(),
+      };
+      if (clearEvolutionPointers) {
+        patch.lastAttributeDeltas = deleteField();
+        patch.lastEvolutionMatchId = deleteField();
+      }
+      if (nextLastMatchRating === undefined) {
+        patch.lastMatchRating = deleteField();
+      } else {
+        patch.lastMatchRating = nextLastMatchRating;
+      }
+      await updateDoc(doc(db, "users", userId), patch);
+    } catch (err) {
+      console.warn("[userRepository] revertMatchStatsForPlayer:", err);
+    }
+  }
+
+  writeLocalProfile(updated);
+  notifyProfileUpdated(userId);
+  await deleteUserMatchHistory(userId, matchId);
+  await deleteEvolutionRecordsForMatch(userId, matchId);
+}
+
+/** Reverte ganhos de carta, seasonStats e histórico para todos os jogadores ligados. */
+export async function revertMatchStatsForPlayers(input: RevertMatchStatsInput): Promise<void> {
+  const userIds = collectLinkedPlayerUserIds(input.players, input.organizerId);
+  const playersByUserId = new Map<string, { id: string; position?: string }>();
+
+  for (const player of input.players) {
+    const uid = player.userId ?? (player.id === input.organizerId ? input.organizerId : undefined);
+    if (uid) playersByUserId.set(uid, player);
+  }
+
+  await Promise.all(
+    userIds.map((userId) => {
+      const player = playersByUserId.get(userId);
+      if (!player) return Promise.resolve();
+      return revertMatchStatsForPlayer(userId, player, input);
+    }),
+  );
 }

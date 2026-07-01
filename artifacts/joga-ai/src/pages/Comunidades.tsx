@@ -1,5 +1,5 @@
 import { Search, Plus, X, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   loadCommunities,
@@ -128,6 +128,7 @@ export default function Comunidades() {
   const { userId } = useAuth();
   const { requireLinked } = useAuthGate();
   const [, setLocation] = useLocation();
+  const [location] = useLocation();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todas");
   const [allCommunities, setAllCommunities] = useState<Community[]>([]);
@@ -136,7 +137,16 @@ export default function Comunidades() {
   useEffect(() => {
     loadCommunities(userId).then(setAllCommunities);
     if (userId) loadMyCommunities(userId).then(setMyCommunities);
-  }, [userId]);
+  }, [userId, location]);
+
+  const mergedMyCommunities = useMemo(() => {
+    const byId = new Map<string, Community>();
+    for (const c of myCommunities) byId.set(c.id, c);
+    for (const c of allCommunities.filter((row) => row.isMember)) {
+      if (!byId.has(c.id)) byId.set(c.id, { ...c, isMember: true });
+    }
+    return Array.from(byId.values());
+  }, [myCommunities, allCommunities]);
 
   const filters = ["todas", "fut5", "fut7", "futebol11"];
   const filterLabels: Record<string, string> = {
@@ -159,7 +169,7 @@ export default function Comunidades() {
     return matchSearch && matchesGameTypeFilter(c.gameType);
   });
 
-  const myIds = new Set(myCommunities.map((c) => c.id));
+  const myIds = new Set(mergedMyCommunities.map((c) => c.id));
   const showSections = search === "" && filter === "todas";
   const discoverList = filtered.filter(
     (c) => !myIds.has(c.id) && !c.isMember && !(c as Community & { joinPending?: boolean }).joinPending,
@@ -249,7 +259,7 @@ export default function Comunidades() {
           )}
         </div>
 
-        {showSections && myCommunities.length > 0 && (
+        {showSections && mergedMyCommunities.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display font-black text-white text-lg">As Minhas</h2>
@@ -257,11 +267,11 @@ export default function Comunidades() {
                 className="text-xs font-bold px-2.5 py-1 rounded-full"
                 style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)" }}
               >
-                {myCommunities.length}
+                {mergedMyCommunities.length}
               </span>
             </div>
             <div className="space-y-5">
-              {myCommunities.map((c) => (
+              {mergedMyCommunities.map((c) => (
                 <CommunityCard key={c.id} {...c} joined />
               ))}
             </div>

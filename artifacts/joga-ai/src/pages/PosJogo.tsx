@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { loadPostMatch, isPostMatchExpired, type SavedPostMatch } from "@/lib/postMatchStorage";
 import {
   saveMatchToFirestore,
   updateMatchStatus,
   loadMatchFromFirestore,
+  deleteMatch,
 } from "@/lib/matchRepository";
 import {
   registerAuditor,
@@ -17,6 +18,7 @@ import {
   createMatchFlowStore,
   currentMatchUserId,
   hasUserVotedInSession,
+  resetMatchFlowSession,
   resolveMatchId,
 } from "@/lib/matchFlowStorage";
 import {
@@ -259,6 +261,8 @@ export default function PosJogo() {
   const [voteRecords, setVoteRecords] = useState<MatchVoteRecord[]>([]);
   const [ratingsReleased, setRatingsReleased] = useState(false);
   const [finalizeBusy, setFinalizeBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [, setLocation] = useLocation();
   const [participationApplied, setParticipationApplied] = useState(false);
 
   const expiresAt = data?.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + 24 * 60 * 60 * 1000;
@@ -436,6 +440,29 @@ export default function PosJogo() {
       console.warn("[PosJogo] finalize voting:", err);
     } finally {
       setFinalizeBusy(false);
+    }
+  }
+
+  async function handleDeleteMatch() {
+    if (!data || !isOrganizer || deleteBusy || !userId) return;
+    if (
+      !window.confirm(
+        "Excluir esta pelada? Todos os ganhos de atributos e estatísticas serão revertidos para todos os jogadores.",
+      )
+    ) {
+      return;
+    }
+
+    setDeleteBusy(true);
+    try {
+      await deleteMatch(data.matchId, userId);
+      resetMatchFlowSession(matchId);
+      setLocation("/jogos");
+    } catch (err) {
+      console.warn("[PosJogo] delete match:", err);
+      window.alert("Não foi possível excluir a pelada. Tenta novamente.");
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -887,6 +914,17 @@ export default function PosJogo() {
               Todos votaram — as notas serão publicadas automaticamente.
             </p>
           )}
+
+          <JogaButton
+            variant="danger"
+            size="md"
+            className="w-full mt-4"
+            disabled={deleteBusy}
+            onClick={() => void handleDeleteMatch()}
+            data-testid="organizer-delete-match"
+          >
+            {deleteBusy ? "A excluir…" : "Excluir pelada e reverter estatísticas"}
+          </JogaButton>
         </section>
       )}
 

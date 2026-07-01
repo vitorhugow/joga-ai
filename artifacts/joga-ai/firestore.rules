@@ -16,6 +16,12 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/communities/$(communityId)).data.adminId == request.auth.uid;
     }
 
+    function isMatchOrganizer(matchId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/matches/$(matchId))
+        && get(/databases/$(database)/documents/matches/$(matchId)).data.organizerId == request.auth.uid;
+    }
+
     // Collection-group queries (loadMyCommunities, pedidos pendentes)
     match /{path=**}/members/{memberId} {
       allow read: if isSignedIn()
@@ -34,15 +40,25 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || (
+        isSignedIn()
+        && request.resource.data.keys().hasAll(['_revertForMatchId'])
+        && isMatchOrganizer(request.resource.data._revertForMatchId)
+      );
       allow delete: if false;
 
       match /evolution/{recordId} {
         allow read, write: if isOwner(userId);
+        allow delete: if isOwner(userId)
+          || (isSignedIn()
+            && resource.data.matchId is string
+            && isMatchOrganizer(resource.data.matchId));
       }
 
-      match /matchHistory/{matchId} {
+      match /matchHistory/{histMatchId} {
         allow read, write: if isOwner(userId);
+        allow delete: if isOwner(userId) || isMatchOrganizer(histMatchId);
       }
 
       match /notifications/{notifId} {
@@ -68,7 +84,7 @@ service cloud.firestore {
       match /votes/{userId} {
         allow read: if isSignedIn();
         allow create, update: if isOwner(userId);
-        allow delete: if false;
+        allow delete: if isMatchOrganizer(matchId);
       }
 
       match /events/{eventId} {

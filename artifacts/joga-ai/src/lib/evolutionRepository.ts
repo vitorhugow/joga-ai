@@ -14,12 +14,15 @@ import {
   setDoc,
   getDocs,
   query,
+  where,
   orderBy,
   limit,
+  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import type { EvolutionRecord } from "./evolutionStorage";
+import { deleteEvolutionRecordsForMatch as deleteEvolutionRecordsLocal } from "./evolutionStorage";
 
 const LOCAL_KEY = "joga-ai-evolution-history-v1";
 const MAX_HISTORY = 20;
@@ -93,5 +96,23 @@ export async function loadEvolutionFromFirestore(
   } catch (err) {
     console.warn("[evolutionRepository] loadEvolutionFromFirestore:", err);
     return local;
+  }
+}
+
+/** Remove registos de evolução ligados a uma partida (local + Firestore) */
+export async function deleteEvolutionRecordsForMatch(
+  userId: string,
+  matchId: string,
+): Promise<void> {
+  deleteEvolutionRecordsLocal(matchId, userId);
+
+  if (!isFirebaseConfigured()) return;
+
+  try {
+    const colRef = collection(db, "users", userId, "evolution");
+    const snap = await getDocs(query(colRef, where("matchId", "==", matchId)));
+    await Promise.all(snap.docs.map((entry) => deleteDoc(entry.ref)));
+  } catch (err) {
+    console.warn("[evolutionRepository] deleteEvolutionRecordsForMatch:", err);
   }
 }

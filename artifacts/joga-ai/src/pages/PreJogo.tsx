@@ -12,7 +12,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { loadMatchFromFirestore, saveMatchRoster } from "@/lib/matchRepository";
+import { loadMatchFromFirestore, saveMatchRoster, cancelMatch } from "@/lib/matchRepository";
 import { loadPreMatch } from "@/lib/preMatchStorage";
 import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
@@ -22,6 +22,17 @@ import { loadCommunityMembers } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaPage } from "@/components/joga";
+import { toast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const levelLabels: Record<string, string> = {
   recreativo: "Recreativo",
@@ -289,7 +300,10 @@ export default function PreJogo() {
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
   const [organizerId, setOrganizerId] = useState<string | null>(null);
-  const isOrganizer = userId === (organizerId ?? matchDetails?.organizerId ?? userId);
+  const resolvedOrganizerId = organizerId ?? matchDetails?.organizerId ?? null;
+  const isOrganizer = Boolean(userId && resolvedOrganizerId && userId === resolvedOrganizerId);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
@@ -1295,11 +1309,25 @@ export default function PreJogo() {
           </div>
         </section>
 
+        {isOrganizer && (
+          <JogaButton
+            variant="ghost"
+            size="md"
+            className="gap-2 text-red-300 border border-red-400/20"
+            onClick={() => setCancelOpen(true)}
+          >
+            <Trash2 className="w-4 h-4" />
+            Cancelar partida
+          </JogaButton>
+        )}
+
         <JogaButton
           variant="danger"
           size="lg"
           className="gap-3"
+          disabled={!isOrganizer}
           onClick={() => {
+            if (!isOrganizer) return;
             clearPostMatch(matchId);
             resetMatchFlowSession(matchId);
             savePreMatch({
@@ -1325,9 +1353,51 @@ export default function PreJogo() {
           }}
         >
           <Play className="w-6 h-6 fill-white" />
-          Iniciar Partida
+          {isOrganizer ? "Iniciar Partida" : "Só o organizador inicia"}
         </JogaButton>
       </div>
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent className="bg-[#0a0f1a] border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">Cancelar partida?</AlertDialogTitle>
+            <AlertDialogDescription className="text-white/50">
+              A partida deixa de aparecer em Jogos. Esta acção não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+              Voltar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={cancelling}
+              onClick={(e) => {
+                e.preventDefault();
+                setCancelling(true);
+                void cancelMatch(matchId)
+                  .then(() => {
+                    toast({ title: "Partida cancelada" });
+                    setLocation(returnTo);
+                  })
+                  .catch((err) => {
+                    toast({
+                      title: "Não foi possível cancelar",
+                      description: err instanceof Error ? err.message : "Tenta novamente.",
+                      variant: "destructive",
+                    });
+                  })
+                  .finally(() => {
+                    setCancelling(false);
+                    setCancelOpen(false);
+                  });
+              }}
+            >
+              {cancelling ? "A cancelar…" : "Sim, cancelar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <PlayerPicker
         open={Boolean(pickerSlot)}

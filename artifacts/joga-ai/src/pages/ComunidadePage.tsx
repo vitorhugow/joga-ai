@@ -9,6 +9,7 @@ import {
   loadAvailableMatches,
   loadCommunityMembers,
   requestToJoin,
+  joinCommunityPublic,
   leaveCommunity,
   getJoinRequestStatus,
   type Community,
@@ -91,15 +92,25 @@ export default function ComunidadePage() {
 
     setJoining(true);
     try {
-      await requestToJoin(id, userId, profile.displayName || "Jogador");
-      setJoinStatus("pending");
-      await refreshCommunity();
-      toast({
-        title: "Pedido enviado",
-        description: "O administrador vai rever o teu pedido.",
-      });
+      if (community.isPrivate) {
+        await requestToJoin(id, userId, profile.displayName || "Jogador");
+        setJoinStatus("pending");
+        await refreshCommunity();
+        toast({
+          title: "Pedido enviado",
+          description: "O administrador vai rever o teu pedido.",
+        });
+      } else {
+        await joinCommunityPublic(id, userId, profile.displayName || "Jogador");
+        await refreshCommunity();
+        loadCommunityMembers(id).then(setMembers);
+        toast({
+          title: "Entraste na comunidade!",
+          description: `Bem-vindo a ${community.name}.`,
+        });
+      }
     } catch {
-      toast({ title: "Erro ao pedir entrada", variant: "destructive" });
+      toast({ title: "Erro ao entrar", variant: "destructive" });
     } finally {
       setJoining(false);
     }
@@ -195,7 +206,7 @@ export default function ComunidadePage() {
               Comunidade de {gameTypeLabel[community.gameType] || community.gameType} em {community.city}.
               {community.isPrivate
                 ? " Entrada sujeita a aprovação do administrador."
-                : " Entrada sujeita a aprovação do administrador."}
+                : " Entrada livre — junta-te à malta."}
             </p>
             <div className="flex gap-4 mt-4 text-sm text-white/55">
               <span className="flex items-center gap-1.5">
@@ -208,7 +219,9 @@ export default function ComunidadePage() {
               </span>
             </div>
             <p className="text-white/35 text-xs mt-3">
-              Depois de aprovado vês a lista de membros, partidas e resultados.
+              {community.isPrivate
+                ? "Depois de aprovado vês a lista de membros, partidas e resultados."
+                : "Ao entrar vês membros, partidas e resultados."}
             </p>
           </JogaCard>
         )}
@@ -234,7 +247,11 @@ export default function ComunidadePage() {
             disabled={joining || joinPending}
             onClick={() => void handleRequestJoin()}
           >
-            {joinPending ? "Pedido pendente" : "Pedir para entrar"}
+            {joinPending
+              ? "Pedido pendente"
+              : community.isPrivate
+                ? "Pedir para entrar"
+                : "Entrar na comunidade"}
           </JogaButton>
         )}
 

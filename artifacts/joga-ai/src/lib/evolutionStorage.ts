@@ -66,6 +66,12 @@ export function saveEvolutionRecord(record: EvolutionRecord, userId?: string) {
   saveEvolutionToFirestore(uid, record).catch(console.warn);
 }
 
+export function deleteEvolutionRecordsForMatch(matchId: string, userId?: string): void {
+  const uid = userId || getCurrentUserId();
+  const history = loadEvolutionHistory(uid).filter((item) => item.matchId !== matchId);
+  localStorage.setItem(evolutionKey(uid), JSON.stringify(history));
+}
+
 export function buildEvolutionRecord(input: {
   matchId: string;
   player: { id: string; name: string };

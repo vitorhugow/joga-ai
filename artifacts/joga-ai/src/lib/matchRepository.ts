@@ -13,6 +13,9 @@ import {
   setDoc,
   getDoc,
   updateDoc,
+  deleteDoc,
+  getDocs,
+  collection,
   serverTimestamp,
   type DocumentData,
   type PartialWithFieldValue,
@@ -21,13 +24,18 @@ import { db, isFirebaseConfigured } from "./firebase";
 import {
   savePostMatch,
   loadPostMatch,
+  clearPostMatch,
   type SavedPostMatch,
 } from "./postMatchStorage";
+import { clearPreMatch } from "./preMatchStorage";
 
 import type { LivePlayer, LiveTeamKey } from "./preMatchStorage";
 import { savePreMatch, loadPreMatch, type SavedPreMatch } from "./preMatchStorage";
 import type { MatchListing } from "./communityRepository";
-import { applyParticipationForMatchRoster } from "./userRepository";
+import { applyParticipationForMatchRoster, revertMatchStatsForPlayers } from "./userRepository";
+import { deleteMatchResult, loadMatchResult } from "./matchHistoryRepository";
+import { getVotes } from "./auditRepository";
+import { collectAllEvents, computeTopScorers } from "./evolutionUtils";
 
 export type CreateMatchInput = {
   title: string;
@@ -259,7 +267,8 @@ export type MatchStatus =
   | "aguardando_auditoria"
   | "auditada"
   | "concluida"
-  | "expirada";
+  | "expirada"
+  | "cancelada";
 
 export const OPEN_MATCH_STATUSES: MatchStatus[] = ["configurando", "ao_vivo"];
 
@@ -268,10 +277,21 @@ export const CLOSED_MATCH_STATUSES: MatchStatus[] = [
   "auditada",
   "concluida",
   "expirada",
+  "cancelada",
 ];
 
 function isClosedMatchStatus(status?: string): boolean {
   return CLOSED_MATCH_STATUSES.includes(status as MatchStatus);
+}
+
+/** Cancela partida (organizador) — só em configurando ou ao_vivo */
+export async function cancelMatch(matchId: string): Promise<void> {
+  const local = loadPostMatch(matchId);
+  const status = local?.status ?? "configurando";
+  if (status !== "configurando" && status !== "ao_vivo") {
+    throw new Error("Só podes cancelar partidas em preparação ou ao vivo.");
+  }
+  await updateMatchStatus(matchId, "cancelada");
 }
 
 /** Remove partida da lista pública em Jogos (localStorage). */
@@ -281,8 +301,74 @@ export function removeMatchFromListings(matchId: string): void {
 
   const details = readMatchDetailsMap();
   if (details[matchId]) {
-    details[matchId] = { ...details[matchId], status: "concluida" };
+    delete details[matchId];
     writeMatchDetailsMap(details);
+  }
+}
+
+export class MatchDeleteForbiddenError extends Error {
+  constructor(message = "Apenas o organizador pode excluir esta partida.") {
+    super(message);
+    this.name = "MatchDeleteForbiddenError";
+  }
+}
+
+async function deleteFirestoreSubcollection(
+  matchId: string,
+  subcollection: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+  const snap = await getDocs(collection(db, "matches", matchId, subcollection));
+  await Promise.all(snap.docs.map((entry) => deleteDoc(entry.ref)));
+}
+
+/**
+ * Exclui uma partida e reverte todos os ganhos de carta/estatísticas
+ * para todos os jogadores ligados. Apenas o organizador pode executar.
+ */
+export async function deleteMatch(matchId: string, requesterId: string): Promise<void> {
+  const match = (await loadMatchFromFirestore(matchId)) ?? loadPostMatch(matchId);
+  if (!match) return;
+
+  if (!match.organizerId || match.organizerId !== requesterId) {
+    throw new MatchDeleteForbiddenError();
+  }
+
+  const matchResult = await loadMatchResult(matchId);
+  const events = collectAllEvents(match.miniGames ?? []);
+  const topScorers = matchResult?.topScorers ?? computeTopScorers(events);
+  const votes = await getVotes(matchId);
+  const votedUserIds = [
+    ...new Set([
+      ...(match.votedUserIds ?? []),
+      ...votes.map((vote) => vote.userId),
+    ]),
+  ];
+
+  await revertMatchStatsForPlayers({
+    matchId,
+    organizerId: match.organizerId,
+    players: match.players ?? [],
+    events,
+    topScorers,
+    votedUserIds,
+    matchResult,
+  });
+
+  clearPostMatch(matchId);
+  clearPreMatch(matchId);
+  removeMatchFromListings(matchId);
+
+  if (!isFirebaseConfigured()) return;
+
+  try {
+    await deleteMatchResult(matchId);
+    await deleteFirestoreSubcollection(matchId, "auditors");
+    await deleteFirestoreSubcollection(matchId, "votes");
+    await deleteDoc(doc(db, "matches", matchId));
+  } catch (err) {
+    console.warn("[matchRepository] deleteMatch firestore:", err);
+    throw err;
   }
 }
 

@@ -170,6 +170,16 @@ export function applyParticipationGainsToCard(
   };
 }
 
+/** Reverte +1 Físico de participação */
+export function revertParticipationGainsFromCard(
+  currentAttrs: PlayerAttributes,
+): PlayerAttributes {
+  return {
+    ...currentAttrs,
+    fisico: clampStat(currentAttrs.fisico - 1),
+  };
+}
+
 /** Ganhos na votação: eventos, votar (+Ritmo), faltas/cartões (−Ritmo), artilheiro */
 export function applyVoteGainsToCard(
   currentAttrs: PlayerAttributes,
@@ -196,6 +206,43 @@ export function applyVoteGainsToCard(
     defesa: clampStat(currentAttrs.defesa + defesaGain),
     drible: clampStat(currentAttrs.drible),
     fisico: clampStat(currentAttrs.fisico),
+  };
+}
+
+/** Reverte ganhos de votação aplicados por applyVoteGainsToCard */
+export function revertVoteGainsFromCard(
+  currentAttrs: PlayerAttributes,
+  events: MatchEventGains,
+): PlayerAttributes {
+  const fouls = events.fouls ?? 0;
+  const yellowCards = events.yellowCards ?? 0;
+
+  let ritmoDelta = 0;
+  if (events.voted) ritmoDelta -= 1;
+  ritmoDelta += fouls + yellowCards;
+
+  let finalizacaoLoss = events.goals > 0 ? events.goals : 0;
+  if (events.isTopScorer) finalizacaoLoss += 1;
+
+  return {
+    ritmo: clampStat(currentAttrs.ritmo + ritmoDelta),
+    finalizacao: clampStat(currentAttrs.finalizacao - finalizacaoLoss),
+    passe: clampStat(currentAttrs.passe - events.assists),
+    defesa: clampStat(currentAttrs.defesa - events.saves),
+    drible: currentAttrs.drible,
+    fisico: currentAttrs.fisico,
+  };
+}
+
+/** Reverte ganho de Drible por nota ≥ limiar */
+export function revertRatingGainsFromCard(
+  currentAttrs: PlayerAttributes,
+  rating: number,
+): PlayerAttributes {
+  const deltas = computeRatingAttributeDeltas(rating);
+  return {
+    ...currentAttrs,
+    drible: clampStat(currentAttrs.drible - (deltas.drible ?? 0)),
   };
 }
 

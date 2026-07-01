@@ -242,3 +242,12 @@ export async function deleteUserMatchHistory(userId: string, matchId: string): P
     console.warn("[matchHistory] deleteUserMatchHistory:", err);
   }
 }
+
+export async function deleteMatchResult(matchId: string): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+  try {
+    await deleteDoc(doc(db, "matches", matchId, "summary", "result"));
+  } catch (err) {
+    console.warn("[matchHistory] deleteMatchResult:", err);
+  }
+}

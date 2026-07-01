@@ -129,39 +129,61 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
   }
 }
 
-/** Comunidades onde o utilizador é membro */
+function mapCommunityDoc(
+  id: string,
+  data: Record<string, unknown>,
+  isMember = true,
+): Community {
+  return {
+    id,
+    name: String(data.name ?? "Comunidade"),
+    city: String(data.city ?? ""),
+    gameType: (data.gameType as Community["gameType"]) ?? "fut7",
+    isPrivate: Boolean(data.isPrivate),
+    memberCount: Number(data.memberCount ?? 1),
+    coverImage: data.coverImage ? String(data.coverImage) : undefined,
+    adminId: data.adminId ? String(data.adminId) : undefined,
+    isMember,
+  };
+}
+
+/** Comunidades onde o utilizador é membro ou administrador */
 export async function loadMyCommunities(userId: string): Promise<Community[]> {
   if (!isFirebaseConfigured() || !userId) return [];
+
+  const byId = new Map<string, Community>();
 
   try {
     const memberSnap = await getDocs(
       query(collectionGroup(db, "members"), where("userId", "==", userId)),
     );
 
-    const communities: Community[] = [];
     for (const memberDoc of memberSnap.docs) {
       const communityRef = memberDoc.ref.parent.parent;
       if (!communityRef) continue;
       const communitySnap = await getDoc(communityRef);
       if (!communitySnap.exists()) continue;
-      const data = communitySnap.data();
-      communities.push({
-        id: communitySnap.id,
-        name: data.name ?? "Comunidade",
-        city: data.city ?? "",
-        gameType: data.gameType ?? "fut7",
-        isPrivate: Boolean(data.isPrivate),
-        memberCount: Number(data.memberCount ?? 1),
-        coverImage: data.coverImage,
-        adminId: data.adminId,
-        isMember: true,
-      });
+      byId.set(communitySnap.id, mapCommunityDoc(communitySnap.id, communitySnap.data()));
     }
-    return communities;
   } catch (err) {
-    console.warn("[communityRepository] loadMyCommunities:", err);
-    return [];
+    console.warn("[communityRepository] loadMyCommunities members:", err);
   }
+
+  try {
+    const adminSnap = await getDocs(
+      query(collection(db, "communities"), where("adminId", "==", userId)),
+    );
+
+    for (const communityDoc of adminSnap.docs) {
+      if (!byId.has(communityDoc.id)) {
+        byId.set(communityDoc.id, mapCommunityDoc(communityDoc.id, communityDoc.data()));
+      }
+    }
+  } catch (err) {
+    console.warn("[communityRepository] loadMyCommunities admin:", err);
+  }
+
+  return Array.from(byId.values());
 }
 
 async function loadMemberCommunityIds(userId: string): Promise<Set<string>> {

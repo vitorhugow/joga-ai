@@ -7,7 +7,7 @@ export type PostMatchEventType = "golo" | "assistencia" | "defesa" | "cartao_ama
 export type SavedPostMatch = {
   version: 1;
   matchId: string;
-  status: "configurando" | "ao_vivo" | "aguardando_auditoria" | "auditada" | "concluida" | "expirada";
+  status: "configurando" | "ao_vivo" | "aguardando_auditoria" | "auditada" | "concluida" | "expirada" | "cancelada";
   createdAt: string;
   expiresAt: string;
   savedAt: string;

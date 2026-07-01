@@ -37,7 +37,7 @@ export default function CriarComunidade() {
 
     setSaving(true);
     try {
-      const id = await createCommunity({
+      await createCommunity({
         name: name.trim(),
         city: city.trim(),
         gameType,
@@ -46,7 +46,7 @@ export default function CriarComunidade() {
         adminDisplayName: profile.displayName || "Organizador",
       });
       toast({ title: "Comunidade criada!", description: "Já podes convidar a malta." });
-      setLocation(`/comunidades/${id}`);
+      setLocation("/comunidades");
     } catch {
       toast({
         title: "Não foi possível criar",

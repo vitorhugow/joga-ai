@@ -101,9 +101,9 @@ async function releaseRatingForUser(
     await applyDelayedRatingToProfile(userId, rating, matchId);
     await addNotification(userId, {
       title: "A tua nota saiu!",
-      body: `Recebeste ${rating.toFixed(1)} na pelada «${title}». Vê no Perfil.`,
+      body: `Recebeste ${rating.toFixed(1)} na pelada «${title}». Vê a tua evolução.`,
       type: "match",
-      link: "/perfil",
+      link: "/perfil/evolucao",
     });
   }
 

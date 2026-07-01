@@ -17,6 +17,9 @@ type PhotoCropDialogProps = {
   imageSrc: string | null;
   onOpenChange: (open: boolean) => void;
   onApply: (croppedDataUrl: string) => void;
+  outputSize?: number;
+  jpegQuality?: number;
+  applyLabel?: string;
 };
 
 export function PhotoCropDialog({
@@ -24,6 +27,9 @@ export function PhotoCropDialog({
   imageSrc,
   onOpenChange,
   onApply,
+  outputSize = OUTPUT_SIZE,
+  jpegQuality = 0.82,
+  applyLabel = "Aplicar na carta",
 }: PhotoCropDialogProps) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -60,8 +66,8 @@ export function PhotoCropDialog({
     if (!imageSrc || !natural.w) return;
 
     const canvas = document.createElement("canvas");
-    canvas.width = OUTPUT_SIZE;
-    canvas.height = OUTPUT_SIZE;
+    canvas.width = outputSize;
+    canvas.height = outputSize;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -82,13 +88,13 @@ export function PhotoCropDialog({
       const sw = Math.min(PREVIEW_SIZE / displayScale, natural.w - sx);
       const sh = Math.min(PREVIEW_SIZE / displayScale, natural.h - sy);
 
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outputSize, outputSize);
 
-      onApply(canvas.toDataURL("image/jpeg", 0.82));
+      onApply(canvas.toDataURL("image/jpeg", jpegQuality));
       onOpenChange(false);
     };
     img.src = imageSrc;
-  }, [imageSrc, natural, offset, onApply, onOpenChange, zoom]);
+  }, [imageSrc, natural, offset, onApply, onOpenChange, outputSize, jpegQuality, zoom]);
 
   if (!imageSrc) return null;
 
@@ -151,7 +157,7 @@ export function PhotoCropDialog({
         </div>
 
         <JogaButton variant="primary" size="lg" className="w-full mt-2" onClick={applyCrop}>
-          Aplicar na carta
+          {applyLabel}
         </JogaButton>
       </DialogContent>
     </Dialog>

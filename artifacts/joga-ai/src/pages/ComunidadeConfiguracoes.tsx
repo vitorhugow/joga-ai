@@ -18,7 +18,8 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { PhotoCropDialog } from "@/components/profile/PhotoCropDialog";
-import { imageDisplaySrc } from "@/lib/imageUtils";
+import { imageDisplaySrc, compressDataUrlToMaxBytes } from "@/lib/imageUtils";
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 
 const GAME_TYPES = [
@@ -84,13 +85,23 @@ export default function ComunidadeConfiguracoes() {
     e.preventDefault();
     setSaving(true);
     try {
-      await updateCommunity(id, { name, city, gameType, isPrivate, coverImage: coverImage || undefined });
+      let coverToSave = coverImage || undefined;
+      if (coverToSave?.startsWith("data:")) {
+        coverToSave = await compressDataUrlToMaxBytes(coverToSave, MAX_PROFILE_PHOTO_BYTES);
+      }
+      await updateCommunity(id, { name, city, gameType, isPrivate, coverImage: coverToSave });
+      const refreshed = await loadCommunity(id, userId);
+      if (refreshed) {
+        setCommunity(refreshed);
+        setCoverImage(refreshed.coverImage ?? "");
+      }
       toast({ title: "Comunidade actualizada" });
     } catch (err) {
       if (err instanceof CommunityCoverTooLargeError) {
         toast({ title: err.message, variant: "destructive" });
       } else {
-        toast({ title: "Erro ao guardar", variant: "destructive" });
+        const message = err instanceof Error ? err.message : "Erro desconhecido";
+        toast({ title: "Erro ao guardar", description: message, variant: "destructive" });
       }
     } finally {
       setSaving(false);
@@ -212,10 +223,15 @@ export default function ComunidadeConfiguracoes() {
             open={cropOpen}
             onOpenChange={setCropOpen}
             imageSrc={cropSource}
+            outputSize={320}
+            jpegQuality={0.78}
+            applyLabel="Aplicar capa"
             onApply={(dataUrl) => {
-              setCoverImage(dataUrl);
-              setCropOpen(false);
-              setCropSource(null);
+              void compressDataUrlToMaxBytes(dataUrl, MAX_PROFILE_PHOTO_BYTES).then((compressed) => {
+                setCoverImage(compressed);
+                setCropOpen(false);
+                setCropSource(null);
+              });
             }}
           />
           <label className="flex items-center gap-2 text-sm text-white/70">

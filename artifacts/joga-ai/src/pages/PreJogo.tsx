@@ -327,6 +327,7 @@ export default function PreJogo() {
   const [cancelling, setCancelling] = useState(false);
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [rsvpBusy, setRsvpBusy] = useState(false);
+  const [matchStatus, setMatchStatus] = useState<string>("configurando");
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
@@ -350,6 +351,7 @@ export default function PreJogo() {
       const pre = loadPreMatch(matchId);
       if (merged?.organizerId) setOrganizerId(merged.organizerId);
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
+      if (merged?.status) setMatchStatus(merged.status);
 
       if (cancelled) return;
 
@@ -1108,7 +1110,9 @@ export default function PreJogo() {
   const myWaitlistIndex = userId ? waitlist.findIndex((w) => w.userId === userId) : -1;
   const isInMatch = myPlayerIndex >= 0;
   const isOnWaitlist = myWaitlistIndex >= 0;
-  const showRsvpBanner = Boolean(userId && !isOrganizer && rosterHydrated);
+  const showRsvpBanner = Boolean(
+    userId && !isOrganizer && rosterHydrated && matchStatus === "configurando",
+  );
 
   return (
     <JogaPage theme="dark" padded={false}>

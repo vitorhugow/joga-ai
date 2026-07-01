@@ -98,6 +98,28 @@ export default function ComunidadePage() {
     void loadPublicProfiles(members.map((m) => m.userId)).then(setMemberProfiles);
   }, [members]);
 
+  const duelCandidates = useMemo(() => {
+    const statsById = new Map(playerStats.map((s) => [s.userId, s]));
+    return members
+      .filter((m) => m.userId !== userId)
+      .map((m) => {
+        const stats = statsById.get(m.userId);
+        const profile = memberProfiles.get(m.userId);
+        if (stats) return stats;
+        return {
+          userId: m.userId,
+          name: profile?.displayName || m.displayName,
+          goals: 0,
+          assists: 0,
+          matches: 0,
+          mvpCount: 0,
+          ratingSum: 0,
+          ratingCount: 0,
+          avgRating: 0,
+        } satisfies CommunityPlayerStats;
+      });
+  }, [members, playerStats, memberProfiles, userId]);
+
   if (!community) {
     return (
       <JogaPage theme="dark" className="py-10 text-center">
@@ -172,28 +194,6 @@ export default function ComunidadePage() {
   ] as const;
 
   const myStats = userId ? playerStats.find((s) => s.userId === userId) : null;
-
-  const duelCandidates = useMemo(() => {
-    const statsById = new Map(playerStats.map((s) => [s.userId, s]));
-    return members
-      .filter((m) => m.userId !== userId)
-      .map((m) => {
-        const stats = statsById.get(m.userId);
-        const profile = memberProfiles.get(m.userId);
-        if (stats) return stats;
-        return {
-          userId: m.userId,
-          name: profile?.displayName || m.displayName,
-          goals: 0,
-          assists: 0,
-          matches: 0,
-          mvpCount: 0,
-          ratingSum: 0,
-          ratingCount: 0,
-          avgRating: 0,
-        } satisfies CommunityPlayerStats;
-      });
-  }, [members, playerStats, memberProfiles, userId]);
 
   const duelTarget = duelTargetId
     ? duelCandidates.find((s) => s.userId === duelTargetId)

@@ -7,8 +7,6 @@ import { toPng } from "html-to-image";
 export type CardExportOptions = {
   filename?: string;
   pixelRatio?: number;
-  width?: number;
-  height?: number;
 };
 
 async function waitForImages(root: HTMLElement): Promise<void> {
@@ -28,8 +26,11 @@ async function waitForImages(root: HTMLElement): Promise<void> {
   );
 }
 
-/** Clona o nó para o viewport e remove filtros CSS que esvaziam cores no html-to-image */
+/** Clona o nó para o viewport com dimensões completas (evita corte e cores esvaziadas) */
 function prepareExportNode(element: HTMLElement): { node: HTMLElement; cleanup: () => void } {
+  const width = Math.ceil(element.scrollWidth || element.getBoundingClientRect().width);
+  const height = Math.ceil(element.scrollHeight || element.getBoundingClientRect().height);
+
   const clone = element.cloneNode(true) as HTMLElement;
   clone.style.position = "fixed";
   clone.style.left = "0";
@@ -37,10 +38,17 @@ function prepareExportNode(element: HTMLElement): { node: HTMLElement; cleanup: 
   clone.style.zIndex = "-1";
   clone.style.opacity = "1";
   clone.style.pointerEvents = "none";
+  clone.style.overflow = "visible";
+  clone.style.width = `${width}px`;
+  clone.style.height = `${height}px`;
+  clone.style.transform = "none";
   clone.style.background = "#0a0f1a";
 
   clone.querySelectorAll(".joga-new-player-card-wrap").forEach((node) => {
-    (node as HTMLElement).style.filter = "none";
+    const wrap = node as HTMLElement;
+    wrap.style.filter = "none";
+    wrap.style.width = `${width}px`;
+    wrap.style.maxWidth = "none";
   });
 
   document.body.appendChild(clone);
@@ -60,15 +68,21 @@ export async function exportElementToPng(
 
   try {
     await waitForImages(node);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const width = Math.ceil(node.scrollWidth || node.getBoundingClientRect().width);
+    const height = Math.ceil(node.scrollHeight || node.getBoundingClientRect().height);
 
     const dataUrl = await toPng(node, {
       pixelRatio: options.pixelRatio ?? 2,
       cacheBust: true,
       backgroundColor: "#0a0f1a",
-      width: options.width,
-      height: options.height,
+      width,
+      height,
       style: {
         transform: "none",
+        width: `${width}px`,
+        height: `${height}px`,
       },
     });
 
@@ -83,11 +97,7 @@ export async function exportPlayerCardPng(
   element: HTMLElement,
   options: CardExportOptions = {},
 ): Promise<Blob> {
-  return exportElementToPng(element, {
-    pixelRatio: options.pixelRatio ?? 2,
-    width: options.width,
-    height: options.height,
-  });
+  return exportElementToPng(element, options);
 }
 
 export async function shareOrDownloadPng(

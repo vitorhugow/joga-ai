@@ -12,9 +12,10 @@ import {
 import { loadPreMatch } from "./preMatchStorage";
 import { loadPostMatch, savePostMatch, type SavedPostMatch } from "./postMatchStorage";
 import type { LivePlayer } from "./preMatchStorage";
-import { loadCommunityMembers } from "./communityRepository";
+import { loadCommunityMembers, loadCommunity } from "./communityRepository";
 import { loadMatchDetails } from "./matchRepository";
 import { addNotification } from "./notificationsRepository";
+import { OPEN_MATCH_STATUSES, type MatchStatus } from "./matchRepository";
 
 export type WaitlistEntry = {
   userId: string;
@@ -79,11 +80,26 @@ async function persistRsvpState(
       });
     } catch (err) {
       console.warn("[matchRsvp] firestore update:", err);
+      const code = (err as { code?: string })?.code;
+      if (code === "permission-denied") {
+        throw new Error("Sem permissão para confirmar presença nesta pelada.");
+      }
       throw err;
     }
   }
 
   await saveMatchRoster(matchId, roster);
+}
+
+function normalizeMatchStatus(status?: string): MatchStatus {
+  const value = (status || "configurando").toLowerCase() as MatchStatus;
+  if (OPEN_MATCH_STATUSES.includes(value)) return value;
+  if (value === "configurando") return "configurando";
+  return value;
+}
+
+function canConfirmPresence(status?: string): boolean {
+  return normalizeMatchStatus(status) === "configurando";
 }
 
 /** Confirma presença — entra no plantel ou lista de espera */
@@ -97,9 +113,8 @@ export async function confirmPresence(
 
   const details = loadMatchDetails(matchId);
   const communityId = match.communityId ?? details?.communityId;
-  const matchStatus = match.status || "configurando";
 
-  if (matchStatus !== "configurando") {
+  if (!canConfirmPresence(match.status)) {
     throw new Error("Só podes confirmar presença antes do jogo começar.");
   }
 
@@ -285,6 +300,9 @@ export async function removePlayerAndPromote(
 }
 
 export async function isCommunityMember(communityId: string, userId: string): Promise<boolean> {
+  const community = await loadCommunity(communityId, userId);
+  if (community?.isMember || community?.adminId === userId) return true;
+
   const members = await loadCommunityMembers(communityId);
   return members.some((m) => m.userId === userId);
 }

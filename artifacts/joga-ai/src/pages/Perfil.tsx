@@ -355,7 +355,8 @@ export default function Perfil() {
           <div className="relative flex items-start justify-center gap-3 px-3 pt-2 pb-6 sm:gap-6 sm:px-4 sm:pt-3 sm:pb-7">
             <div
               ref={cardExportRef}
-              className="absolute -left-[9999px] top-0 w-[340px] pointer-events-none"
+              className="fixed left-0 top-0 -z-50 opacity-0 pointer-events-none"
+              style={{ width: "min(92vw, 390px)" }}
               aria-hidden
             >
               <PlayerCard

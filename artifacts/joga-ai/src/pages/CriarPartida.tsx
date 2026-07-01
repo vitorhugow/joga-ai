@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -99,9 +99,15 @@ export default function CriarPartida() {
     time: "",
     maxPlayers: "14",
     price: "",
-    openToExternal: true,
+    openToExternal: communityId ? false : true,
     notes: "",
   });
+
+  useEffect(() => {
+    if (communityId) {
+      setForm((prev) => ({ ...prev, openToExternal: false }));
+    }
+  }, [communityId]);
 
   function set(key: string, value: string | boolean) {
     setForm((prev) => ({ ...prev, [key]: value }));

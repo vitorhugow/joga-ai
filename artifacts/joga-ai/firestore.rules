@@ -48,8 +48,24 @@ service cloud.firestore {
       allow create: if isSignedIn() && requestUserId == request.auth.uid;
     }
 
+    function isCommunityMatchMember(communityId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid));
+    }
+
     function isMatchRsvpUpdate() {
       return isSignedIn()
+        && request.resource.data.organizerId == resource.data.organizerId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['players', 'waitlist', 'playerTeams', 'assignments', 'savedAt']);
+    }
+
+    function isCommunityMatchRsvpUpdate(matchId) {
+      let data = matchDoc(matchId);
+      return isSignedIn()
+        && data.communityId is string
+        && isCommunityMatchMember(data.communityId)
         && request.resource.data.organizerId == resource.data.organizerId
         && request.resource.data.status == resource.data.status
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -96,6 +112,7 @@ service cloud.firestore {
             .hasOnly(['currentPlayerId', 'players', 'savedAt'])
         )
         || isMatchRsvpUpdate()
+        || isCommunityMatchRsvpUpdate(matchId)
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;

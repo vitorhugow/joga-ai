@@ -216,7 +216,9 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     status: "configurando",
   };
 
-  const listings = [listing, ...readLocalListings().filter((m) => m.id !== matchId)];
+  const listings = input.communityId
+    ? readLocalListings().filter((m) => m.id !== matchId)
+    : [listing, ...readLocalListings().filter((m) => m.id !== matchId)];
   writeLocalListings(listings);
 
   saveMatchDetails({

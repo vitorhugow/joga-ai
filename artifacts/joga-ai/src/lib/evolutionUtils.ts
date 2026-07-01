@@ -1,3 +1,5 @@
+import { RATING_DRIBLE_MIN, RATING_RITMO_MIN } from "./cardUtils";
+
 export type EvolutionGain = {
   title: string;
   value: string;
@@ -98,6 +100,37 @@ export function computePlayerGains(
   }
 
   const hasRating = receivedRating != null && receivedRating > 0;
+
+  list.push({
+    title: "Ritmo",
+    value: hasRating
+      ? receivedRating >= RATING_RITMO_MIN
+        ? "+1"
+        : "—"
+      : "Com nota",
+    reason: hasRating
+      ? receivedRating >= RATING_RITMO_MIN
+        ? `Nota ${receivedRating.toFixed(1)} ≥ ${RATING_RITMO_MIN}`
+        : `Precisas de nota ≥ ${RATING_RITMO_MIN}`
+      : `Sobe +1 se a nota final for ≥ ${RATING_RITMO_MIN}`,
+    type: hasRating && receivedRating >= RATING_RITMO_MIN ? "up" : "pending",
+  });
+
+  list.push({
+    title: "Drible",
+    value: hasRating
+      ? receivedRating >= RATING_DRIBLE_MIN
+        ? "+1"
+        : "—"
+      : "Com nota",
+    reason: hasRating
+      ? receivedRating >= RATING_DRIBLE_MIN
+        ? `Nota ${receivedRating.toFixed(1)} ≥ ${RATING_DRIBLE_MIN}`
+        : `Precisas de nota ≥ ${RATING_DRIBLE_MIN}`
+      : `Sobe +1 se a nota final for ≥ ${RATING_DRIBLE_MIN}`,
+    type: hasRating && receivedRating >= RATING_DRIBLE_MIN ? "up" : "pending",
+  });
+
   list.push({
     title: "Nota dos colegas",
     value: hasRating ? receivedRating.toFixed(1) : "Em 24h",

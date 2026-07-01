@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import type { PlayerAttributes } from "./cardUtils";
-import { applyEventGainsToCard, calculateOverall, generateInitialAttributes } from "./cardUtils";
+import { applyEventGainsToCard, calculateOverall, generateInitialAttributes, applyRatingGainsToCard, computeRatingAttributeDeltas } from "./cardUtils";
 
 export const PROFILE_UPDATED_EVENT = "joga-ai-profile-updated";
 
@@ -531,10 +531,11 @@ export async function applyMatchResultToProfile(
   notifyProfileUpdated(userId);
 }
 
-/** Aplica nota média após período de 24h (não altera atributos da carta). */
+/** Aplica nota média + ganhos de Ritmo/Drible conforme limiares (≥7 / ≥8). */
 export async function applyDelayedRatingToProfile(
   userId: string,
   rating: number,
+  matchId?: string,
 ): Promise<void> {
   const local =
     readLocalProfile(userId) ??
@@ -555,20 +556,35 @@ export async function applyDelayedRatingToProfile(
     averageRating: Math.round(newAvg * 10) / 10,
   };
 
+  const ratingDeltas = computeRatingAttributeDeltas(rating);
+  const updatedAttrs = applyRatingGainsToCard(local.attributes, rating);
+  const mergeDisplayDeltas =
+    matchId && local.lastEvolutionMatchId === matchId && Object.keys(ratingDeltas).length > 0;
+  const lastAttributeDeltas = mergeDisplayDeltas
+    ? { ...(local.lastAttributeDeltas ?? {}), ...ratingDeltas }
+    : local.lastAttributeDeltas;
+
   const updated: UserProfile = {
     ...local,
+    attributes: updatedAttrs,
     seasonStats: updatedStats,
     lastMatchRating: rating,
+    lastAttributeDeltas,
     updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured() && !local.isAnonymous) {
     try {
-      await updateDoc(doc(db, "users", userId), {
+      const patch: Record<string, unknown> = {
+        attributes: updatedAttrs,
         seasonStats: updatedStats,
         lastMatchRating: rating,
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (mergeDisplayDeltas) {
+        patch.lastAttributeDeltas = lastAttributeDeltas;
+      }
+      await updateDoc(doc(db, "users", userId), patch);
     } catch (err) {
       console.warn("[userRepository] applyDelayedRatingToProfile:", err);
     }

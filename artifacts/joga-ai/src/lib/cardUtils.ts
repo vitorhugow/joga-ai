@@ -134,6 +134,31 @@ export type MatchEventGains = {
   position?: string;
 };
 
+/** Nota média dos colegas → evolução de Ritmo (PAC) e Drible (DRI) */
+export const RATING_RITMO_MIN = 7;
+export const RATING_DRIBLE_MIN = 8;
+
+export function computeRatingAttributeDeltas(
+  rating: number,
+): Partial<PlayerAttributes> {
+  const deltas: Partial<PlayerAttributes> = {};
+  if (rating >= RATING_RITMO_MIN) deltas.ritmo = 1;
+  if (rating >= RATING_DRIBLE_MIN) deltas.drible = 1;
+  return deltas;
+}
+
+export function applyRatingGainsToCard(
+  currentAttrs: PlayerAttributes,
+  rating: number,
+): PlayerAttributes {
+  const deltas = computeRatingAttributeDeltas(rating);
+  return {
+    ...currentAttrs,
+    ritmo: clampStat(currentAttrs.ritmo + (deltas.ritmo ?? 0)),
+    drible: clampStat(currentAttrs.drible + (deltas.drible ?? 0)),
+  };
+}
+
 /** Ganhos por desempenho na partida — alinhado com computePlayerGains. OVR sobe via média. */
 export function applyEventGainsToCard(
   currentAttrs: PlayerAttributes,

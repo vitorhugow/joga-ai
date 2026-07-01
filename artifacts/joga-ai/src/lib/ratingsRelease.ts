@@ -98,7 +98,7 @@ async function releaseRatingForUser(
   if (entry?.ratingReleased) return;
 
   if (rating > 0) {
-    await applyDelayedRatingToProfile(userId, rating);
+    await applyDelayedRatingToProfile(userId, rating, matchId);
     await addNotification(userId, {
       title: "A tua nota saiu!",
       body: `Recebeste ${rating.toFixed(1)} na pelada «${title}». Vê no Perfil.`,

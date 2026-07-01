@@ -430,6 +430,9 @@ export async function saveMatchRoster(
     miniGames: existing?.miniGames ?? [],
     votedUserIds: existing?.votedUserIds,
     waitlist: roster.waitlist ?? existing?.waitlist ?? [],
+    title: existing?.title,
+    communityId: existing?.communityId,
+    organizerId: existing?.organizerId,
   };
 
   await saveMatchToFirestore(matchId, updated);

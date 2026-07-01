@@ -102,6 +102,8 @@ function canConfirmPresence(status?: string): boolean {
   return normalizeMatchStatus(status) === "configurando";
 }
 
+export { canConfirmPresence };
+
 /** Confirma presença — entra no plantel ou lista de espera */
 export async function confirmPresence(
   matchId: string,

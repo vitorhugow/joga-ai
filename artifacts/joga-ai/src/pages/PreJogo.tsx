@@ -28,6 +28,7 @@ import {
   leaveMatch,
   removePlayerAndPromote,
   getMatchInviteUrl,
+  canConfirmPresence,
   type WaitlistEntry,
 } from "@/lib/matchRsvpRepository";
 import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
@@ -321,8 +322,6 @@ export default function PreJogo() {
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
   const [organizerId, setOrganizerId] = useState<string | null>(null);
-  const resolvedOrganizerId = organizerId ?? matchDetails?.organizerId ?? null;
-  const isOrganizer = Boolean(userId && resolvedOrganizerId && userId === resolvedOrganizerId);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
@@ -350,8 +349,12 @@ export default function PreJogo() {
       const merged = await loadMatchFromFirestore(matchId);
       const pre = loadPreMatch(matchId);
       if (merged?.organizerId) setOrganizerId(merged.organizerId);
+      else if (merged?.players?.length) {
+        const paidOrganizer = merged.players.find((p) => p.paid && p.userId);
+        if (paidOrganizer?.userId) setOrganizerId(paidOrganizer.userId);
+      }
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
-      if (merged?.status) setMatchStatus(merged.status);
+      setMatchStatus(merged?.status ?? "configurando");
 
       if (cancelled) return;
 
@@ -416,6 +419,14 @@ export default function PreJogo() {
   const [teamCount, setTeamCount] = useState<2 | 3 | 4>(2);
   const [players, setPlayers] = useState<Player[]>([]);
   const [manualName, setManualName] = useState("");
+
+  const resolvedOrganizerId =
+    organizerId ??
+    matchDetails?.organizerId ??
+    players.find((p) => p.paid && p.userId)?.userId ??
+    null;
+  const isOrganizer = Boolean(userId && resolvedOrganizerId && userId === resolvedOrganizerId);
+  const canManageRoster = isOrganizer;
   const [showCommunityList, setShowCommunityList] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("teams");
 
@@ -1088,8 +1099,10 @@ export default function PreJogo() {
 
   const communityPlayersNotInMatch = useMemo(() => {
     const inMatchIds = new Set(players.map((player) => player.userId ?? player.id));
+    const query = manualName.trim().toLowerCase();
     return communityMembers
       .filter((member) => !inMatchIds.has(member.userId))
+      .filter((member) => !query || member.displayName.toLowerCase().includes(query))
       .map((member) => ({
         id: member.userId,
         userId: member.userId,
@@ -1098,7 +1111,7 @@ export default function PreJogo() {
         overall: 50,
         paid: false,
       }));
-  }, [communityMembers, players]);
+  }, [communityMembers, players, manualName]);
 
   const totalPaid = players.filter((player) => player.paid).length;
   const benchCount = teamBuckets.BENCH.length;
@@ -1111,7 +1124,7 @@ export default function PreJogo() {
   const isInMatch = myPlayerIndex >= 0;
   const isOnWaitlist = myWaitlistIndex >= 0;
   const showRsvpBanner = Boolean(
-    userId && !isOrganizer && rosterHydrated && matchStatus === "configurando",
+    userId && !isOrganizer && rosterHydrated && canConfirmPresence(matchStatus),
   );
 
   return (
@@ -1376,14 +1389,14 @@ export default function PreJogo() {
               }}
               placeholder="Buscar na comunidade ou adicionar manual"
               className="flex-1 rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white outline-hidden"
-              disabled={!isOrganizer}
+              disabled={!canManageRoster}
             />
 
             <button
               onClick={addManualPlayer}
               className="w-12 rounded-2xl flex items-center justify-center cursor-pointer"
               style={{ background: "rgba(74,222,128,0.16)", border: "1px solid rgba(74,222,128,0.28)" }}
-              disabled={!isOrganizer}
+              disabled={!canManageRoster}
             >
               <Plus className="w-5 h-5 text-emerald-300" />
             </button>
@@ -1392,7 +1405,7 @@ export default function PreJogo() {
               onClick={addGuestPlayer}
               className="w-12 rounded-2xl flex items-center justify-center cursor-pointer"
               style={{ background: "rgba(251,191,36,0.14)", border: "1px solid rgba(251,191,36,0.28)" }}
-              disabled={!isOrganizer}
+              disabled={!canManageRoster}
               title="Visitante com carta emprestada"
             >
               <UserPlus className="w-5 h-5 text-amber-300" />

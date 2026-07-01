@@ -54,6 +54,8 @@ import {
 } from "@/lib/evolutionUtils";
 import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
+import { toast } from "@/hooks/use-toast";
+import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 
 const eventLabels: Record<string, string> = {
   golo: "Golo",
@@ -188,6 +190,7 @@ function getGameWinner(game: any, data?: SavedPostMatch | null) {
 
 
 export default function PosJogo() {
+  const { confirm, ConfirmDialog } = useJogaConfirm();
   useEffect(() => {
     document.body.classList.add("pos-jogo-open");
     return () => document.body.classList.remove("pos-jogo-open");
@@ -429,9 +432,8 @@ export default function PosJogo() {
 
   async function handleOrganizerFinalizeVoting() {
     if (!data || !isOrganizer || ratingsReleased || finalizeBusy) return;
-    if (!window.confirm("Finalizar a votação agora e publicar as notas com os votos actuais?")) {
-      return;
-    }
+    const ok = await confirm("Finalizar a votação agora e publicar as notas com os votos actuais?");
+    if (!ok) return;
 
     setFinalizeBusy(true);
     try {
@@ -445,13 +447,14 @@ export default function PosJogo() {
 
   async function handleDeleteMatch() {
     if (!data || !isOrganizer || deleteBusy || !userId) return;
-    if (
-      !window.confirm(
-        "Excluir esta pelada? Todos os ganhos de atributos e estatísticas serão revertidos para todos os jogadores.",
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Excluir pelada",
+      description:
+        "Remove esta pelada e reverte todos os ganhos de atributos e estatísticas para todos os jogadores.",
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
 
     setDeleteBusy(true);
     try {
@@ -460,7 +463,7 @@ export default function PosJogo() {
       setLocation("/jogos");
     } catch (err) {
       console.warn("[PosJogo] delete match:", err);
-      window.alert("Não foi possível excluir a pelada. Tenta novamente.");
+      toast({ title: "Não foi possível excluir a pelada.", variant: "destructive" });
     } finally {
       setDeleteBusy(false);
     }
@@ -564,7 +567,11 @@ export default function PosJogo() {
     );
 
     if (missing) {
-      window.alert("Dá nota de 1 a 10 para todos os jogadores antes de concluir.");
+      toast({
+        title: "Faltam notas",
+        description: "Dá nota de 1 a 10 para todos os jogadores antes de concluir.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -1048,6 +1055,7 @@ export default function PosJogo() {
           </JogaButton>
         )}
       </section>
+      {ConfirmDialog}
     </JogaPage>
   );
 }

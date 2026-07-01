@@ -16,10 +16,20 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/communities/$(communityId)).data.adminId == request.auth.uid;
     }
 
+    function matchDoc(matchId) {
+      return get(/databases/$(database)/documents/matches/$(matchId)).data;
+    }
+
     function isMatchOrganizer(matchId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/matches/$(matchId))
-        && get(/databases/$(database)/documents/matches/$(matchId)).data.organizerId == request.auth.uid;
+        && matchDoc(matchId).organizerId == request.auth.uid;
+    }
+
+    function isMatchLive(matchId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/matches/$(matchId))
+        && matchDoc(matchId).status == 'ao_vivo';
     }
 
     // Collection-group queries (loadMyCommunities, pedidos pendentes)
@@ -72,13 +82,22 @@ service cloud.firestore {
         && request.resource.data.organizerId == request.auth.uid;
       allow update: if isSignedIn() && (
         resource.data.organizerId == request.auth.uid
-        || resource.data.currentPlayerId == request.auth.uid
+        || (
+          resource.data.currentPlayerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['currentPlayerId', 'players', 'savedAt'])
+        )
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;
 
       match /auditors/{docId} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && (
+          isMatchOrganizer(matchId)
+          || resource.data.userId == request.auth.uid
+        );
       }
 
       match /votes/{userId} {
@@ -88,16 +107,22 @@ service cloud.firestore {
       }
 
       match /events/{eventId} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (
+          isMatchOrganizer(matchId) || isMatchLive(matchId)
+        );
       }
 
       match /miniGames/{gameId} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (
+          isMatchOrganizer(matchId) || isMatchLive(matchId)
+        );
       }
 
       match /summary/{docId} {
         allow read: if isSignedIn();
-        allow write: if isSignedIn();
+        allow write: if isSignedIn() && isMatchOrganizer(matchId);
       }
     }
 

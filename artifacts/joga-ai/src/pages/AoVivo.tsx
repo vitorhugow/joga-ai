@@ -12,6 +12,8 @@ import {
   setMatchLive,
 } from "@/lib/liveMatchRepository";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
+import { toast } from "@/hooks/use-toast";
+import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 
 type TeamKey = "A" | "B" | "C" | "D" | "BENCH";
 type EventType = "golo" | "assistencia" | "defesa" | "cartao_amarelo" | "falta";
@@ -74,6 +76,7 @@ function formatTime(seconds: number) {
 }
 
 export default function AoVivo() {
+  const { confirm, ConfirmDialog } = useJogaConfirm();
   const [, params] = useRoute("/partida/:id/ao-vivo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
   const [preMatch, setPreMatch] = useState<SavedPreMatch | null>(null);
@@ -197,7 +200,7 @@ export default function AoVivo() {
 
   function addEvent(type: EventType) {
     if (!canRegisterEvent) {
-      window.alert("O cronômetro precisa estar rodando para marcar eventos.");
+      toast({ title: "O cronómetro precisa estar a correr para marcar eventos.", variant: "destructive" });
       return;
     }
 
@@ -253,20 +256,20 @@ export default function AoVivo() {
 
   function toggleTimer() {
     if (showNextGamePicker) {
-      window.alert("Escolhe primeiro quais equipas vão jogar este mini jogo.");
+      toast({ title: "Escolhe primeiro quais equipas vão jogar este mini jogo.", variant: "destructive" });
       return;
     }
 
     setIsRunning((value) => !value);
   }
 
-  function finalizarMiniJogo() {
+  async function finalizarMiniJogo() {
     if (showNextGamePicker) {
-      window.alert("Escolhe primeiro quais equipas vão jogar antes de finalizar um mini jogo.");
+      toast({ title: "Escolhe as equipas antes de finalizar o mini jogo.", variant: "destructive" });
       return;
     }
 
-    const ok = window.confirm("Finalizar apenas este mini jogo? A pelada continuará aberta.");
+    const ok = await confirm("Finalizar apenas este mini jogo? A pelada continuará aberta.");
     if (!ok) return;
 
     const winner = scoreA === scoreB ? "Empate" : scoreA > scoreB ? teamNames[activeHomeTeam] : teamNames[activeAwayTeam];
@@ -311,7 +314,7 @@ export default function AoVivo() {
 
   function confirmarProximoJogo() {
     if (nextHomeTeam === nextAwayTeam) {
-      window.alert("Escolhe duas equipas diferentes.");
+      toast({ title: "Escolhe duas equipas diferentes.", variant: "destructive" });
       return;
     }
 
@@ -329,8 +332,12 @@ export default function AoVivo() {
     setShowNextGamePicker(false);
   }
 
-  function terminarPelada() {
-    const ok = window.confirm("Terminar a pelada e abrir o resumo?");
+  async function terminarPelada() {
+    const ok = await confirm({
+      description:
+        "Terminar a pelada e abrir o resumo? Quem está no plantel recebe +1 Físico automaticamente.",
+      confirmLabel: "Terminar pelada",
+    });
     if (!ok) return;
 
     setIsRunning(false);
@@ -822,6 +829,7 @@ export default function AoVivo() {
           )}
         </section>
       </div>
+      {ConfirmDialog}
     </JogaPage>
   );
 }

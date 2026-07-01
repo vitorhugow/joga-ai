@@ -40,6 +40,9 @@ function mapAuthError(err: unknown): string {
   if (code.includes("auth/email-already-in-use")) return "Este email já está registado.";
   if (code.includes("auth/weak-password")) return "A password deve ter pelo menos 6 caracteres.";
   if (code.includes("auth/popup-closed-by-user")) return "Login cancelado.";
+  if ((err as Error)?.name === "AuthAccountSwitchError") {
+    return (err as Error).message;
+  }
   if (code.includes("auth/too-many-requests")) return "Muitas tentativas. Tenta mais tarde.";
   if (import.meta.env.DEV) console.warn("[auth]", err);
   return "Não foi possível entrar. Tenta outra vez.";
@@ -249,7 +252,14 @@ export function LoginPanel({ onSuccess, compact = false, bare = false, initialMo
       </div>
 
       <p className="text-white/30 text-[11px] text-center mt-4 leading-relaxed">
-        Grátis para começar · Sem cartão · Os teus dados ficam guardados na cloud
+        Grátis para começar · Sem cartão ·{" "}
+        <a href="/privacidade" className="text-emerald-400/80 hover:text-emerald-300">
+          Privacidade
+        </a>
+        {" · "}
+        <a href="/termos" className="text-emerald-400/80 hover:text-emerald-300">
+          Termos
+        </a>
       </p>
     </>
   );

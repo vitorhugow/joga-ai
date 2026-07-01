@@ -129,18 +129,29 @@ export async function ensureAnonymousAuth(): Promise<string> {
 export async function signInWithGoogle(): Promise<UserCredential> {
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
-  if (auth.currentUser?.isAnonymous) {
+  const previousUid = auth.currentUser?.uid;
+  const wasAnonymous = Boolean(auth.currentUser?.isAnonymous);
+
+  let cred: UserCredential;
+
+  if (wasAnonymous && auth.currentUser) {
     try {
-      return await linkGoogleWithPopupOrRedirect(auth.currentUser);
+      cred = await linkGoogleWithPopupOrRedirect(auth.currentUser);
     } catch (err) {
       if ((err as Error).message === "auth/redirect-started") throw err;
       const existing = await signInWithExistingGoogleCredential(err);
-      if (existing) return existing;
-      throw err;
+      if (existing) cred = existing;
+      else throw err;
     }
+  } else {
+    cred = await googleWithPopupOrRedirect();
   }
 
-  return googleWithPopupOrRedirect();
+  if (wasAnonymous && previousUid && cred.user.uid !== previousUid) {
+    throw new AuthAccountSwitchError();
+  }
+
+  return cred;
 }
 
 // ─── Login Email/Password ─────────────────────────────────────────────────────
@@ -157,12 +168,18 @@ export async function registerWithEmail(
 
   if (auth.currentUser?.isAnonymous) {
     const credential = EmailAuthProvider.credential(email, password);
+    const previousUid = auth.currentUser.uid;
     try {
       cred = await linkWithCredential(auth.currentUser, credential);
     } catch (err) {
       const code = (err as { code?: string })?.code ?? "";
       if (credentialAlreadyInUse(code)) {
         cred = await signInWithEmailAndPassword(auth, email, password);
+        if (cred.user.uid !== previousUid) {
+          throw new AuthAccountSwitchError(
+            "Este email já está noutra conta. Entraste nessa conta — a carta anónima anterior não foi transferida.",
+          );
+        }
       } else {
         throw err;
       }
@@ -187,12 +204,19 @@ export async function loginWithEmail(
 
   if (auth.currentUser?.isAnonymous) {
     const credential = EmailAuthProvider.credential(email, password);
+    const previousUid = auth.currentUser.uid;
     try {
       return await linkWithCredential(auth.currentUser, credential);
     } catch (err) {
       const code = (err as { code?: string })?.code ?? "";
       if (credentialAlreadyInUse(code)) {
-        return signInWithEmailAndPassword(auth, email, password);
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        if (cred.user.uid !== previousUid) {
+          throw new AuthAccountSwitchError(
+            "Este email já está noutra conta. Entraste nessa conta — a carta anónima anterior não foi transferida.",
+          );
+        }
+        return cred;
       }
       throw err;
     }

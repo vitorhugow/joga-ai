@@ -26,11 +26,13 @@ import Ranking from "@/pages/Ranking";
 import Login from "@/pages/Login";
 import ComunidadeConfiguracoes from "@/pages/ComunidadeConfiguracoes";
 import CriarComunidade from "@/pages/CriarComunidade";
+import Privacidade from "@/pages/Privacidade";
+import Termos from "@/pages/Termos";
 import DemoCarta from "@/pages/DemoCarta";
 
 const queryClient = new QueryClient();
 
-const HIDE_NAV_RE = /\/partida\/[^/]+\/(ao-vivo|pos-jogo)|\/entrar|\/demo-carta/;
+const HIDE_NAV_RE = /\/partida\/[^/]+\/(ao-vivo|pos-jogo)|\/entrar|\/demo-carta|\/privacidade|\/termos/;
 
 function AnimatedRoutes() {
   const [location] = useLocation();
@@ -53,6 +55,8 @@ function AnimatedRoutes() {
             <Route path="/partida/:id/ao-vivo" component={AoVivo} />
             <Route path="/partida/:id/pos-jogo" component={PosJogo} />
             <Route path="/entrar" component={Login} />
+            <Route path="/privacidade" component={Privacidade} />
+            <Route path="/termos" component={Termos} />
             <Route path="/demo-carta" component={DemoCarta} />
             <Route path="/jogos" component={Jogos} />
             <Route path="/premium" component={Premium} />

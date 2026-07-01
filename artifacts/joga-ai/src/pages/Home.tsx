@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Plus, Search, ChevronRight, Trophy, Flame } from "lucide-react";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { calculateOverall } from "@/lib/cardUtils";
-import { loadCommunities, loadAvailableMatches, type Community, type MatchListing } from "@/lib/communityRepository";
+import { loadCommunities, loadMyCommunities, loadAvailableMatches, type Community, type MatchListing } from "@/lib/communityRepository";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -76,7 +76,18 @@ export default function Home() {
 
   // Hidrata comunidades e partidas do Firestore em background
   useEffect(() => {
-    loadCommunities(userId).then(setCommunities);
+    if (!userId) {
+      loadCommunities().then(setCommunities);
+    } else {
+      Promise.all([loadCommunities(userId), loadMyCommunities(userId)]).then(([all, mine]) => {
+        const mineIds = new Set(mine.map((c) => c.id));
+        const merged = [
+          ...mine,
+          ...all.filter((c) => !mineIds.has(c.id) && c.isMember),
+        ];
+        setCommunities(merged.length > 0 ? merged : all.filter((c) => c.isMember).slice(0, 6));
+      });
+    }
     loadAvailableMatches().then((matches) => {
       setAvailable(matches.filter((m) => m.spotsRemaining !== "Lotado"));
     });

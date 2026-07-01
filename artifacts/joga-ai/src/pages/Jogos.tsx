@@ -22,9 +22,13 @@ export default function Jogos() {
   const [typeFilter, setTypeFilter] = useState("todos");
   const [showFilters, setShowFilters] = useState(false);
   const [allMatches, setAllMatches] = useState<MatchListing[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(true);
 
   useEffect(() => {
-    loadAvailableMatches(50).then(setAllMatches);
+    setLoadingMatches(true);
+    loadAvailableMatches(50)
+      .then(setAllMatches)
+      .finally(() => setLoadingMatches(false));
   }, []);
 
   const filtered = allMatches.filter((m) => {
@@ -121,7 +125,11 @@ export default function Jogos() {
           <h2 className="font-display font-black text-white text-lg mb-3">
             Com vagas ({available.length})
           </h2>
-          {available.length === 0 ? (
+          {loadingMatches ? (
+            <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <p className="text-white/50 text-sm">A carregar jogos…</p>
+            </div>
+          ) : available.length === 0 ? (
             <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <p className="text-white/50 text-sm">Nenhum jogo encontrado.</p>
               {isLinked ? (

@@ -33,9 +33,9 @@ const HERO_PLAYER = {
 };
 
 const STATS = [
-  { value: "2.400+", label: "Peladas organizadas" },
-  { value: "18.000+", label: "Jogadores activos" },
-  { value: "94%", label: "Voltam a jogar" },
+  { value: "Carta", label: "Evolui a cada pelada" },
+  { value: "Ao vivo", label: "Golos e stats em tempo real" },
+  { value: "Comunidade", label: "A tua malta num só sítio" },
 ];
 
 const HERO_BULLETS = [

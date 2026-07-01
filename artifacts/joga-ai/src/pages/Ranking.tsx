@@ -81,12 +81,16 @@ export default function Ranking() {
         {entries.length === 0 ? (
           <div className="text-center py-20">
             <Trophy className="w-12 h-12 text-white/20 mx-auto mb-4" />
-            <h2 className="font-display font-black text-white text-xl">Ainda não há ranking</h2>
+            <h2 className="font-display font-black text-white text-xl">Liga em breve</h2>
             <p className="text-white/40 text-sm mt-2 max-w-xs mx-auto">
-              Joga peladas e os teus números aparecem aqui quando houver dados reais.
+              Joga peladas para veres os teus números aqui. O ranking global entre jogadores chega numa próxima versão.
             </p>
           </div>
         ) : (
+          <>
+            <p className="text-white/35 text-xs text-center mb-3">
+              Por agora vês só os teus dados — liga global em breve.
+            </p>
           <div className="space-y-2">
             {entries.map((entry) => (
               <div
@@ -116,6 +120,7 @@ export default function Ranking() {
               </div>
             ))}
           </div>
+          </>
         )}
       </div>
     </JogaPage>

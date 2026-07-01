@@ -104,9 +104,16 @@ export function NotificationsBell({
     if (!open || !isLinked || !userId) return;
 
     setLoading(true);
+    const timeout = window.setTimeout(() => setLoading(false), 12_000);
+
     void Promise.all([loadNotifications(userId), loadRequests(), processPendingNotifications(userId)])
       .then(([items]) => setNotifications(items))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        window.clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    return () => window.clearTimeout(timeout);
   }, [open, isLinked, userId, loadRequests]);
 
   function handleOpen() {

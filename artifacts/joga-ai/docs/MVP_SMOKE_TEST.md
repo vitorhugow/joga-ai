@@ -1,108 +1,90 @@
-# MVP Pelada — smoke test manual
+# Joga AI — checklist de release (smoke test)
+
+**Produção:** https://joga-ai.pages.dev  
+**Firebase:** `joga-ai-f7622`
+
+Correr com **2 contas** (organizador + jogador) antes de cada release grande.
 
 ## Pré-requisitos
 
-- `cp .env.example .env.local` e preencher Firebase
-- Firebase Console: Anonymous + Email/Password + Google activos
-- Publicar `firestore.rules`: `firebase deploy --only firestore:rules`
-- Domínio Cloudflare Pages autorizado em Firebase Auth → Settings → Authorized domains
+- Firebase Auth: Anonymous + Email/Password + Google activos
+- Domínio `joga-ai.pages.dev` em Authentication → Authorized domains
+- CI verde (Pages + Firestore rules/indexes)
+- Hard refresh após deploy: `Cmd+Shift+R`
 
-## Reset de conta (Fase 1 — feito ✓)
+## Reset de teste (opcional)
 
-Se apagaste **todos** os utilizadores em Authentication e a coleção `users` desapareceu do Firestore: **está tudo bem**. No Firestore as coleções vazias não aparecem na consola — não precisas de criar `users` à mão.
+1. DevTools → Local Storage → apagar chaves `joga-ai-*`
+2. Firestore: apagar `matches/*`, `communities/*` de teste
+3. Hard refresh e nova sessão
 
-A app recria `users/{uid}` automaticamente no primeiro acesso, em `loadUserProfile()` (`src/lib/userRepository.ts`), quando:
+---
 
-1. Abres o site (sessão anónima nova) **ou** fazes login Google/email
-2. A app carrega o perfil → grava o documento em Firestore
+## 1. Sessão e conta
 
-### Passos depois do reset total
+- [ ] Login Google em `/entrar` → Perfil mostra sessão ligada
+- [ ] Refresh 5× na Home — mantém sessão
+- [ ] Logout → nova sessão anónima
+- [ ] Ligar conta anónima a Google/email — **mesmo uid** preservado
+- [ ] Google já usado noutra conta → aviso claro (não troca silenciosa)
 
-1. **Browser** → DevTools → Application → Local Storage → apagar **todas** as chaves `joga-ai-*` (perfis antigos com uids apagados)
-2. Hard refresh: `Cmd+Shift+R`
-3. Abrir o site → montar carta ou ir a `/entrar` e registar de novo
-4. Confirmar no [Firestore](https://console.firebase.google.com/project/joga-ai-f7622/firestore): aparece `users/{novo-uid}`
+## 2. Carta e perfil
 
-Opcional — zerar também partidas e comunidades de teste:
+- [ ] Home mostra **teu** nome na carta (nunca dados demo)
+- [ ] Perfil → Editar carta / Partilhar funcionam
+- [ ] Ranking → empty state ou só os teus dados (“Liga em breve”)
 
-- Apagar `matches/*`
-- Apagar `communities/*` (inclui `members` e `joinRequests`)
+## 3. Partida (organizador)
 
-Depois do reset, faz hard refresh (`Cmd+Shift+R`).
+- [ ] `/criar-partida` → `/partida/m-XXXX/pre-jogo`
+- [ ] Só organizador vê **Iniciar partida** e **Cancelar partida**
+- [ ] Pré-jogo → Ao vivo → Pós-jogo sem erros
+- [ ] Ao terminar ao vivo: **+1 Físico** no Perfil **sem** abrir Pós-jogo (jogador no plantel)
 
-## Checklist pós-MVP real
+## 4. Pós-jogo e evolução
 
-### 1. Sessão estável
+- [ ] Votar → **+1 Ritmo** + golos/assistências/defesas na carta
+- [ ] Faltas/cartões → **−1 Ritmo** cada
+- [ ] Artilheiro → +1 extra (FIN ou Saída no GR)
+- [ ] Notas reveladas (todos votam / organizador / 24h) → Drible +1 se nota ≥ 8
+- [ ] `/perfil/evolucao` mostra ganhos da última pelada
+- [ ] Organizador **Excluir pelada** → stats revertem para **todos** os jogadores
 
-- [ ] Login Google em `/entrar` → Perfil mostra "Sessão: Google"
-- [ ] Refresh 5× na Home — continua logado (não volta a banner de visitante)
-- [ ] Logout → nova sessão anónima limpa
+## 5. Listagens
 
-### 2. Carta e perfil (sem Diogo)
+- [ ] `/jogos` mostra partidas de outras contas (“Com vagas”)
+- [ ] Partidas concluídas/canceladas **não** aparecem em Jogos
+- [ ] Home → Jogos disponíveis actualizado
 
-- [ ] Home mostra **teu** nome na carta (nunca "Diogo Ferreira")
-- [ ] Perfil → **Editar carta** abre o diálogo e fecha correctamente
-- [ ] Perfil → **Partilhar** copia link ou abre native share
-- [ ] Ranking mostra empty state ou só os teus dados reais
+## 6. Comunidades
 
-### 3. Criar partida real
+- [ ] Criar comunidade → aparece em **As Minhas** (refresh OK)
+- [ ] Capa: carregar → Guardar → persiste após refresh
+- [ ] Pública → entrada imediata; Privada → pedido pendente
+- [ ] Admin: aprovar/recusar no sino (tab Pedidos)
 
-- [ ] `/criar-partida` — preencher formulário e submeter
-- [ ] URL muda para `/partida/m-XXXX/pre-jogo` (id real)
-- [ ] Pré-jogo: só organizador + jogadores reais do match (sem roster fictício)
+## 7. Notificações
 
-### 4. Fluxo de jogo
+- [ ] Sino → tab **Para ti**: bem-vindo, votar, nota saiu, evolução
+- [ ] Sino → tab **Pedidos** (só admin): pedidos de entrada
+- [ ] Sem spinner infinito
 
-- [ ] Pré-jogo → Iniciar → Ao vivo → Pós-jogo sem erros
-- [ ] Evolução (`/perfil/evolucao`) acessível após partida
+## 8. Fora do MVP v1 (OK)
 
-### 5. Ligação de conta (preserva UID)
+- [ ] Premium / Campos → “Em breve”
+- [ ] Ranking global → “Liga em breve”
 
-- [ ] Com perfil criado **anónimo**, ir a `/entrar` e ligar Google ou email
-- [ ] **Mesmo uid** — nome/carta/partida continuam
-- [ ] Se `linkWithPopup` falhar, app avisa que pode mudar de conta (sem troca silenciosa)
+---
 
-### 6. Listagens
-
-- [ ] `/jogos` mostra partida criada em "Com vagas"
-- [ ] Home → "Jogos Disponíveis" inclui a partida
-- [ ] Empty state em Jogos com botão **Criar partida** quando logado
-
-### 7. Comunidades reais
-
-- [ ] `/comunidades` → **Criar** abre `/comunidades/criar`
-- [ ] Criar comunidade → aparece em **Descobrir**
-- [ ] Comunidade criada aparece em **As Minhas**
-- [ ] Noutra conta: **Pedir para entrar** → estado "Pedido pendente"
-- [ ] Sem dados fictícios / label "Demo"
-
-### 8. Features em breve (OK manter)
-
-- [ ] Premium botões "Em breve"
-- [ ] Campos "Em Breve"
-- [ ] Sino (notificações) → toast "Em breve" ou escondido
-
-## Deploy rápido
+## Deploy
 
 ```bash
-cd artifacts/joga-ai
-pnpm install
-PORT=5173 BASE_PATH=/ pnpm run dev
+cd artifacts/joga-ai && npx vite build
+git push origin main   # CI → Pages + Firestore (requer FIREBASE_TOKEN)
 ```
 
-Build:
+Deploy manual Firestore:
 
 ```bash
-PORT=5173 BASE_PATH=/ pnpm run build
-pnpm exec tsc --noEmit
+./scripts/deploy-firestore.sh
 ```
-
-Publicar regras e índices Firestore:
-
-```bash
-firebase deploy --only firestore
-```
-
-Push para GitHub → deploy automático Cloudflare Pages.
-
-Hard refresh no browser após deploy (`Cmd+Shift+R`).

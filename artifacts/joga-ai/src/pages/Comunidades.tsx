@@ -133,10 +133,19 @@ export default function Comunidades() {
   const [filter, setFilter] = useState("todas");
   const [allCommunities, setAllCommunities] = useState<Community[]>([]);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
+  const [loadingCommunities, setLoadingCommunities] = useState(true);
 
   useEffect(() => {
-    loadCommunities(userId).then(setAllCommunities);
-    if (userId) loadMyCommunities(userId).then(setMyCommunities);
+    setLoadingCommunities(true);
+    Promise.all([
+      loadCommunities(userId),
+      userId ? loadMyCommunities(userId) : Promise.resolve([] as Community[]),
+    ])
+      .then(([all, mine]) => {
+        setAllCommunities(all);
+        setMyCommunities(mine);
+      })
+      .finally(() => setLoadingCommunities(false));
   }, [userId, location]);
 
   const mergedMyCommunities = useMemo(() => {
@@ -259,7 +268,11 @@ export default function Comunidades() {
           )}
         </div>
 
-        {showSections && mergedMyCommunities.length > 0 && (
+        {showSections && loadingCommunities && (
+          <p className="text-white/40 text-sm text-center py-4">A carregar comunidades…</p>
+        )}
+
+        {showSections && !loadingCommunities && mergedMyCommunities.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display font-black text-white text-lg">As Minhas</h2>

@@ -534,6 +534,7 @@ export default function PosJogo() {
         saveEvolutionRecord(record, userId);
 
         await applyMatchResultToProfile(userId, {
+          matchId: data.matchId,
           goals: stats.goals,
           assists: stats.assists,
           saves: stats.saves,

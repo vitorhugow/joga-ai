@@ -42,6 +42,8 @@ export type UserProfile = {
   };
   lastMatchRating?: number;
   lastAttributeDeltas?: Partial<PlayerAttributes>;
+  /** Partida que originou os lastAttributeDeltas */
+  lastEvolutionMatchId?: string;
   updatedAt?: string;
 };
 
@@ -122,6 +124,9 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
     seasonStats: data.seasonStats as UserProfile["seasonStats"],
     lastMatchRating: data.lastMatchRating ? Number(data.lastMatchRating) : undefined,
     lastAttributeDeltas: data.lastAttributeDeltas as Partial<PlayerAttributes> | undefined,
+    lastEvolutionMatchId: data.lastEvolutionMatchId
+      ? String(data.lastEvolutionMatchId)
+      : undefined,
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }
@@ -426,6 +431,7 @@ export async function applyMatchGainsToProfile(
 }
 
 export type MatchResultStats = {
+  matchId?: string;
   goals: number;
   assists: number;
   saves: number;
@@ -496,6 +502,7 @@ export async function applyMatchResultToProfile(
     seasonStats: updatedStats,
     lastMatchRating: stats.deferRating ? local.lastMatchRating : rating || local.lastMatchRating,
     lastAttributeDeltas: attributeDeltas,
+    lastEvolutionMatchId: stats.matchId ?? local.lastEvolutionMatchId,
     isAnonymous: local.isAnonymous,
     updatedAt: new Date().toISOString(),
   };
@@ -508,6 +515,9 @@ export async function applyMatchResultToProfile(
         lastAttributeDeltas: attributeDeltas,
         updatedAt: serverTimestamp(),
       };
+      if (stats.matchId) {
+        patch.lastEvolutionMatchId = stats.matchId;
+      }
       if (!stats.deferRating && rating > 0) {
         patch.lastMatchRating = rating;
       }
@@ -568,12 +578,35 @@ export async function applyDelayedRatingToProfile(
   notifyProfileUpdated(userId);
 }
 
+export function getLastMatchAttributeDeltas(
+  profile: UserProfile,
+  latestMatchId?: string,
+): Partial<PlayerAttributes> | undefined {
+  if (!profile.lastAttributeDeltas || Object.keys(profile.lastAttributeDeltas).length === 0) {
+    return undefined;
+  }
+  if (!profile.lastEvolutionMatchId) {
+    return profile.lastAttributeDeltas;
+  }
+  if (latestMatchId && profile.lastEvolutionMatchId !== latestMatchId) {
+    return undefined;
+  }
+  return profile.lastAttributeDeltas;
+}
+
 export function getOverallDelta(profile: UserProfile): number {
-  if (!profile.lastAttributeDeltas) return 0;
-  const before = { ...profile.attributes };
-  const after = { ...profile.attributes };
-  (Object.keys(profile.lastAttributeDeltas) as (keyof PlayerAttributes)[]).forEach((key) => {
-    const d = profile.lastAttributeDeltas?.[key] ?? 0;
+  return getOverallDeltaFromDeltas(profile.attributes, profile.lastAttributeDeltas);
+}
+
+export function getOverallDeltaFromDeltas(
+  attributes: PlayerAttributes,
+  deltas?: Partial<PlayerAttributes>,
+): number {
+  if (!deltas || Object.keys(deltas).length === 0) return 0;
+  const before = { ...attributes };
+  const after = { ...attributes };
+  (Object.keys(deltas) as (keyof PlayerAttributes)[]).forEach((key) => {
+    const d = deltas[key] ?? 0;
     before[key] = Math.max(28, after[key] - d);
   });
   return calculateOverall(after) - calculateOverall(before);

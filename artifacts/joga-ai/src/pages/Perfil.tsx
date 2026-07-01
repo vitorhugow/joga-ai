@@ -3,7 +3,7 @@ import { Share2, TrendingUp, ChevronRight, Shield, LogOut, Link2 } from "lucide-
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
-import { profileToPlayerCard, getOverallDelta } from "@/lib/userRepository";
+import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
 import { loadUserMatchHistory, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
@@ -153,8 +153,8 @@ export default function Perfil() {
   const player = profileToPlayerCard(profile);
 
   const overall = calculateOverall(player.attributes);
-  const overallDelta = getOverallDelta(profile);
-  const attrDeltas = profile.lastAttributeDeltas;
+  const attrDeltas = getLastMatchAttributeDeltas(profile, matchHistory[0]?.matchId);
+  const overallDelta = getOverallDeltaFromDeltas(player.attributes, attrDeltas);
 
   const ATTR_LABELS: { key: keyof PlayerAttributes; label: string }[] = [
     { key: "ritmo", label: "Ritmo" },

@@ -1,0 +1,9 @@
+/** Proporção do banner em ComunidadePage (h-44 em ~390px de largura) */
+export const COMMUNITY_COVER_ASPECT = 390 / 176;
+
+export const COMMUNITY_COVER_OUTPUT_WIDTH = 840;
+export const COMMUNITY_COVER_OUTPUT_HEIGHT = Math.round(
+  COMMUNITY_COVER_OUTPUT_WIDTH / COMMUNITY_COVER_ASPECT,
+);
+
+export const COMMUNITY_COVER_LABEL = `${COMMUNITY_COVER_OUTPUT_WIDTH}×${COMMUNITY_COVER_OUTPUT_HEIGHT} px`;

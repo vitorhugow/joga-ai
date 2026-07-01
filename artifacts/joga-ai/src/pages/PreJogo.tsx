@@ -21,7 +21,7 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
-import { loadCommunityMembers } from "@/lib/communityRepository";
+import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import {
   confirmPresence,
@@ -405,10 +405,14 @@ export default function PreJogo() {
     const communityId = matchCommunityId ?? matchDetails?.communityId;
     if (!communityId) {
       setCommunityMembers([]);
+      setIsCommunityAdmin(false);
       return;
     }
     void loadCommunityMembers(communityId).then(setCommunityMembers);
-  }, [matchCommunityId, matchDetails?.communityId]);
+    void loadCommunity(communityId, userId).then((c) => {
+      setIsCommunityAdmin(Boolean(userId && c?.adminId === userId));
+    });
+  }, [matchCommunityId, matchDetails?.communityId, userId]);
 
   useEffect(() => {
     if (!userId || !rosterHydrated) return;
@@ -426,7 +430,8 @@ export default function PreJogo() {
     players.find((p) => p.paid && p.userId)?.userId ??
     null;
   const isOrganizer = Boolean(userId && resolvedOrganizerId && userId === resolvedOrganizerId);
-  const canManageRoster = isOrganizer;
+  const [isCommunityAdmin, setIsCommunityAdmin] = useState(false);
+  const canManageMatch = isOrganizer || isCommunityAdmin;
   const [showCommunityList, setShowCommunityList] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("teams");
 
@@ -642,17 +647,16 @@ export default function PreJogo() {
   }
 
   async function shareMatchUrl() {
-    const url = `${window.location.origin}/partida/${matchId}/pre-jogo`;
+    const url = getMatchInviteUrl(matchId);
     try {
       if (navigator.share) {
         await navigator.share({
           title: matchDetails?.title ?? "Pelada Joga AI",
-          text: "Entra na pelada!",
           url,
         });
       } else {
         await navigator.clipboard.writeText(url);
-        toast({ title: "Link copiado!", description: "Partilha com a malta." });
+        toast({ title: "Link copiado!", description: "Partilha só o link com a malta." });
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
@@ -1042,7 +1046,7 @@ export default function PreJogo() {
       return next;
     });
 
-    if (isOrganizer) {
+    if (canManageMatch) {
       void removePlayerAndPromote(matchId, playerId).then(async () => {
         const merged = await loadMatchFromFirestore(matchId);
         if (merged?.waitlist) setWaitlist(merged.waitlist);
@@ -1140,7 +1144,7 @@ export default function PreJogo() {
           </button>
 
           <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.22em]">Pré-Jogo Editável</p>
-          {isOrganizer ? (
+          {canManageMatch ? (
             <button
               onClick={() => void shareMatchUrl()}
               className="w-10 h-10 rounded-2xl flex items-center justify-center cursor-pointer"
@@ -1275,6 +1279,8 @@ export default function PreJogo() {
           </section>
         )}
 
+        {canManageMatch && (
+        <>
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-black text-white text-lg">Tipo de jogo</h2>
@@ -1320,6 +1326,8 @@ export default function PreJogo() {
             ))}
           </div>
         </section>
+        </>
+        )}
 
         <section>
           <div className="flex items-center justify-between mb-3">
@@ -1365,7 +1373,7 @@ export default function PreJogo() {
                       player={player}
                       teamColor={teamColors[team]}
                       onClick={() => setPickerSlot(slotId)}
-                      canEdit={isOrganizer}
+                      canEdit={canManageMatch}
                     />
                   </div>
                 );
@@ -1374,6 +1382,7 @@ export default function PreJogo() {
           </div>
         </section>
 
+        {canManageMatch && (
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-black text-white text-lg">Adicionar jogador</h2>
@@ -1389,14 +1398,14 @@ export default function PreJogo() {
               }}
               placeholder="Buscar na comunidade ou adicionar manual"
               className="flex-1 rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white outline-hidden"
-              disabled={!canManageRoster}
+              disabled={!canManageMatch}
             />
 
             <button
               onClick={addManualPlayer}
               className="w-12 rounded-2xl flex items-center justify-center cursor-pointer"
               style={{ background: "rgba(74,222,128,0.16)", border: "1px solid rgba(74,222,128,0.28)" }}
-              disabled={!canManageRoster}
+              disabled={!canManageMatch}
             >
               <Plus className="w-5 h-5 text-emerald-300" />
             </button>
@@ -1405,7 +1414,7 @@ export default function PreJogo() {
               onClick={addGuestPlayer}
               className="w-12 rounded-2xl flex items-center justify-center cursor-pointer"
               style={{ background: "rgba(251,191,36,0.14)", border: "1px solid rgba(251,191,36,0.28)" }}
-              disabled={!canManageRoster}
+              disabled={!canManageMatch}
               title="Visitante com carta emprestada"
             >
               <UserPlus className="w-5 h-5 text-amber-300" />
@@ -1434,8 +1443,9 @@ export default function PreJogo() {
             </div>
           )}
         </section>
+        )}
 
-        {(["C", "D"] as TeamKey[]).filter((team) => activeTeams.includes(team)).map((team) => (
+        {canManageMatch && (["C", "D"] as TeamKey[]).filter((team) => activeTeams.includes(team)).map((team) => (
           <section key={team}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display font-black text-white text-lg">{teamNames[team]}</h2>
@@ -1467,6 +1477,7 @@ export default function PreJogo() {
           <div className="flex items-center justify-between gap-3 mb-3">
             <h2 className="font-display font-black text-white text-lg">Confirmados</h2>
 
+            {canManageMatch && (
             <div className="flex items-center gap-2">
               <button
                 onClick={clearAllTeams}
@@ -1504,6 +1515,7 @@ export default function PreJogo() {
                 <option value="paid">Pagos</option>
               </select>
             </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -1529,6 +1541,7 @@ export default function PreJogo() {
                     <select
                       value={team}
                       onChange={(event) => moveToTeam(player.id, event.target.value as PlayerStatus)}
+                      disabled={!canManageMatch}
                       className="rounded-xl px-2 py-2 text-[11px] font-black outline-hidden cursor-pointer"
                       style={{
                         background: `${statusColor}22`,
@@ -1546,6 +1559,7 @@ export default function PreJogo() {
                   </div>
 
                   <div className="flex items-center gap-2 mt-3">
+                    {canManageMatch && (
                     <button
                       onClick={() => togglePaid(player.id)}
                       className="flex-1 rounded-xl py-2 text-[11px] font-black cursor-pointer"
@@ -1556,7 +1570,9 @@ export default function PreJogo() {
                     >
                       {player.paid ? "Pago" : "Pendente"}
                     </button>
+                    )}
 
+                    {canManageMatch && (
                     <button
                       onClick={() => removePlayer(player.id)}
                       className="w-11 rounded-xl flex items-center justify-center cursor-pointer"
@@ -1564,6 +1580,7 @@ export default function PreJogo() {
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
+                    )}
                   </div>
 
                   {slot ? (
@@ -1581,7 +1598,7 @@ export default function PreJogo() {
           </div>
         </section>
 
-        {isOrganizer && waitlist.length > 0 && (
+        {canManageMatch && waitlist.length > 0 && (
           <section data-testid="waitlist-section">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display font-black text-white text-lg">Lista de espera</h2>
@@ -1607,7 +1624,7 @@ export default function PreJogo() {
           </section>
         )}
 
-        {isOrganizer && (
+        {canManageMatch && (
           <JogaButton
             variant="ghost"
             size="sm"
@@ -1619,7 +1636,7 @@ export default function PreJogo() {
           </JogaButton>
         )}
 
-        {isOrganizer && (
+        {canManageMatch && (
           <JogaButton
             variant="ghost"
             size="md"

@@ -349,11 +349,13 @@ export default function ComunidadePage() {
                 </JogaButton>
               </Link>
             )}
-            {matches.length === 0 ? (
-              <p className="text-white/40 text-sm text-center py-8">Sem partidas nesta comunidade.</p>
-            ) : (
-              matches.map((m) => <MatchCard key={m.id} {...m} returnTo={`/comunidades/${id}`} />)
-            )}
+            <div className={`space-y-3 ${(isAdmin || isMember) ? "mt-6" : ""}`}>
+              {matches.length === 0 ? (
+                <p className="text-white/40 text-sm text-center py-8">Sem partidas nesta comunidade.</p>
+              ) : (
+                matches.map((m) => <MatchCard key={m.id} {...m} returnTo={`/comunidades/${id}`} />)
+              )}
+            </div>
           </div>
         )}
 
@@ -476,16 +478,18 @@ export default function ComunidadePage() {
                 const profile = memberProfiles.get(m.userId);
                 const photoSrc = imageDisplaySrc(profile?.photoUrl);
                 return (
-                  <JogaCard key={m.userId} variant="arena">
-                    <PlayerMiniCard
-                      name={profile?.displayName || m.displayName}
-                      position={profile?.position || (m.role === "admin" ? "ADM" : "MEM")}
-                      overall={profile?.overall ?? 50}
-                      photoUrl={photoSrc}
-                      variant="dark"
-                      subtitle={m.role === "admin" ? "Administrador" : "Membro"}
-                    />
-                  </JogaCard>
+                  <Link key={m.userId} href={`/jogador/${m.userId}?from=${encodeURIComponent(`/comunidades/${id}`)}`}>
+                    <JogaCard variant="arena" className="joga-tap">
+                      <PlayerMiniCard
+                        name={profile?.displayName || m.displayName}
+                        position={profile?.position || (m.role === "admin" ? "ADM" : "MEM")}
+                        overall={profile?.overall ?? 50}
+                        photoUrl={photoSrc}
+                        variant="dark"
+                        subtitle={m.role === "admin" ? "Administrador · Ver perfil" : "Membro · Ver perfil"}
+                      />
+                    </JogaCard>
+                  </Link>
                 );
               })
             )}

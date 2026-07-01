@@ -19,6 +19,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { PhotoCropDialog } from "@/components/profile/PhotoCropDialog";
 import { imageDisplaySrc, compressDataUrlToMaxBytes } from "@/lib/imageUtils";
+import {
+  COMMUNITY_COVER_ASPECT,
+  COMMUNITY_COVER_LABEL,
+  COMMUNITY_COVER_OUTPUT_HEIGHT,
+  COMMUNITY_COVER_OUTPUT_WIDTH,
+} from "@/lib/communityCover";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 
@@ -181,15 +187,20 @@ export default function ComunidadeConfiguracoes() {
           </div>
           <div>
             <label className="text-[10px] font-bold uppercase text-white/40">Capa da comunidade</label>
-            <div className="mt-2 flex items-center gap-3">
-              <div className="w-20 h-20 rounded-xl overflow-hidden border border-white/10 bg-white/6 shrink-0">
-                {coverImage ? (
-                  <img src={imageDisplaySrc(coverImage, "200")} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-white/25 text-xs">Sem capa</div>
-                )}
-              </div>
-              <div>
+            <p className="text-white/35 text-xs mt-1 mb-2">
+              Tamanho ideal: <span className="text-emerald-300/90 font-semibold">{COMMUNITY_COVER_LABEL}</span> (proporção do banner)
+            </p>
+            <div className="w-full max-w-[390px] h-44 rounded-2xl overflow-hidden border border-white/10 bg-white/6 mb-3">
+              {coverImage ? (
+                <img src={imageDisplaySrc(coverImage)} alt="Pré-visualização da capa" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-white/25 text-xs gap-1">
+                  <span>Pré-visualização do banner</span>
+                  <span className="text-[10px] text-white/20">390 × 176 px no telemóvel</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -210,21 +221,24 @@ export default function ComunidadeConfiguracoes() {
                 {coverImage && (
                   <button
                     type="button"
-                    className="block text-xs text-red-300 mt-2"
+                    className="text-xs text-red-300"
                     onClick={() => setCoverImage("")}
                   >
                     Remover capa
                   </button>
                 )}
-              </div>
             </div>
           </div>
           <PhotoCropDialog
             open={cropOpen}
             onOpenChange={setCropOpen}
             imageSrc={cropSource}
-            outputSize={320}
+            aspectRatio={COMMUNITY_COVER_ASPECT}
+            outputWidth={COMMUNITY_COVER_OUTPUT_WIDTH}
+            outputHeight={COMMUNITY_COVER_OUTPUT_HEIGHT}
             jpegQuality={0.78}
+            cropTitle="Enquadrar capa"
+            cropDescription={`Ajusta como no banner da comunidade (${COMMUNITY_COVER_LABEL}).`}
             applyLabel="Aplicar capa"
             onApply={(dataUrl) => {
               void compressDataUrlToMaxBytes(dataUrl, MAX_PROFILE_PHOTO_BYTES).then((compressed) => {

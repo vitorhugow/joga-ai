@@ -342,6 +342,58 @@ export type PublicUserProfile = {
   overall: number;
 };
 
+export type PublicPlayerProfile = PublicUserProfile & {
+  shirtNumber: number;
+  title: string;
+  attributes: PlayerAttributes;
+  seasonStats: UserProfile["seasonStats"];
+  badges?: string[];
+};
+
+function mapPublicPlayerProfile(userId: string, data: Record<string, unknown>): PublicPlayerProfile {
+  const attrs = (data.attributes as PlayerAttributes | undefined) ?? generateInitialAttributes(String(data.position ?? "MEI"));
+  return {
+    userId,
+    displayName: String(data.displayName ?? "Jogador").trim() || "Jogador",
+    position: String(data.position ?? "MEI"),
+    photoUrl: data.photoUrl ? String(data.photoUrl) : undefined,
+    overall: calculateOverall(attrs),
+    shirtNumber: Number(data.shirtNumber ?? 10),
+    title: String(data.title ?? "Jogador"),
+    attributes: attrs,
+    seasonStats: (data.seasonStats as UserProfile["seasonStats"]) ?? {
+      matches: 0,
+      goals: 0,
+      assists: 0,
+      saves: 0,
+      mvp: 0,
+    },
+    badges: Array.isArray(data.badges) ? (data.badges as string[]) : undefined,
+  };
+}
+
+/** Perfil público completo de um jogador (carta + estatísticas) */
+export async function loadPublicPlayerProfile(userId: string): Promise<PublicPlayerProfile | null> {
+  if (!userId) return null;
+
+  if (!isFirebaseConfigured()) {
+    const local = readLocalProfile(userId);
+    if (!local?.profileComplete) return null;
+    return mapPublicPlayerProfile(userId, local as unknown as Record<string, unknown>);
+  }
+
+  try {
+    const snap = await getDoc(doc(db, "users", userId));
+    if (!snap.exists()) return null;
+    const data = snap.data() as Record<string, unknown>;
+    if (!data.profileComplete && !data.displayName) return null;
+    return mapPublicPlayerProfile(userId, data);
+  } catch (err) {
+    console.warn("[userRepository] loadPublicPlayerProfile:", err);
+    return null;
+  }
+}
+
 /** Perfis públicos de outros jogadores (nome, foto, posição) */
 export async function loadPublicProfiles(
   userIds: string[],

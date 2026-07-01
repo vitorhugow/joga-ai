@@ -1,7 +1,8 @@
 # Joga AI — checklist de release (smoke test)
 
 **Produção:** https://joga-ai.pages.dev  
-**Firebase:** `joga-ai-f7622`
+**Firebase:** `joga-ai-f7622`  
+**Versão actual:** v1.1 (RSVP, export PNG, narrativa, Liga/Duelos, badges, carta loan)
 
 Correr com **2 contas** (organizador + jogador) antes de cada release grande.
 
@@ -31,48 +32,75 @@ Correr com **2 contas** (organizador + jogador) antes de cada release grande.
 ## 2. Carta e perfil
 
 - [ ] Home mostra **teu** nome na carta (nunca dados demo)
-- [ ] Perfil → Editar carta / Partilhar funcionam
-- [ ] Ranking → empty state ou só os teus dados (“Liga em breve”)
+- [ ] Perfil → Editar carta / **Partilhar** funcionam
+- [ ] Perfil → **Partilhar** descarrega PNG da carta (ou abre sheet nativo no mobile)
+- [ ] Ranking global → empty state ou só os teus dados (“Liga em breve” — ver §8)
 
 ## 3. Partida (organizador)
 
 - [ ] `/criar-partida` → `/partida/m-XXXX/pre-jogo`
 - [ ] Só organizador vê **Iniciar partida** e **Cancelar partida**
+- [ ] Organizador vê botão **Convidar** (ícone partilha) → link copiado para clipboard
 - [ ] Pré-jogo → Ao vivo → Pós-jogo sem erros
 - [ ] Ao terminar ao vivo: **+1 Físico** no Perfil **sem** abrir Pós-jogo (jogador no plantel)
 
-## 4. Pós-jogo e evolução
+## 4. RSVP e lista de espera (v1.1)
+
+*Requer 2 contas: organizador cria partida cheia ou com vagas limitadas.*
+
+- [ ] Jogador (não organizador) em `/partida/m-XXXX/pre-jogo` vê banner **Queres jogar nesta pelada?**
+- [ ] **Confirmar presença** → entra no plantel (ou **Lista de espera** se lotado)
+- [ ] Jogador confirmado vê **Estás confirmado nesta pelada** + **Sair da pelada**
+- [ ] Na lista de espera: posição visível + **Sair da lista**
+- [ ] Organizador remove jogador ou alguém sai → **primeiro da lista promovido** automaticamente
+- [ ] Organizador com lista de espera vê secção **Lista de espera** com contagem
+
+## 5. Pós-jogo e evolução
 
 - [ ] Votar → **+1 Ritmo** + golos/assistências/defesas na carta
 - [ ] Faltas/cartões → **−1 Ritmo** cada
 - [ ] Artilheiro → +1 extra (FIN ou Saída no GR)
 - [ ] Notas reveladas (todos votam / organizador / 24h) → Drible +1 se nota ≥ 8
+- [ ] Pós-jogo mostra bloco **Relato** com narrativa automática (`data-testid="match-narrative"`)
+- [ ] Pós-jogo → **Partilhar evolução** exporta PNG da carta com ganhos
 - [ ] `/perfil/evolucao` mostra ganhos da última pelada
 - [ ] Organizador **Excluir pelada** → stats revertem para **todos** os jogadores
 
-## 5. Listagens
+## 6. Listagens
 
 - [ ] `/jogos` mostra partidas de outras contas (“Com vagas”)
 - [ ] Partidas concluídas/canceladas **não** aparecem em Jogos
 - [ ] Home → Jogos disponíveis actualizado
 
-## 6. Comunidades
+## 7. Comunidades
 
 - [ ] Criar comunidade → aparece em **As Minhas** (refresh OK)
 - [ ] Capa: carregar → Guardar → persiste após refresh
 - [ ] Pública → entrada imediata; Privada → pedido pendente
 - [ ] Admin: aprovar/recusar no sino (tab Pedidos)
+- [ ] Tabs visíveis (membro): **Partidas**, **Resultados**, **Liga**, **Duelos**, **Membros**
+- [ ] Tab **Resultados** → narrativa por pelada (ou empty state “Sem resultados registados”)
+- [ ] Tab **Liga** → rankings Golos / Assistências / Nota média / MVP (ou “Sem dados de liga ainda”)
+- [ ] Tab **Duelos** → selector adversário + carta duelo; secção **As tuas rivalidades** após jogos
 
-## 7. Notificações
+## 8. Distintivos e carta loan (v1.1)
 
-- [ ] Sino → tab **Para ti**: bem-vindo, votar, nota saiu, evolução
+- [ ] Após pelada com nota revelada / marcos → secção **Distintivos** no Perfil (se desbloqueados)
+- [ ] Sino in-app mostra notificação de badge desbloqueado
+- [ ] Organizador adiciona visitante no pré-jogo → link `/entrar?claim=guest-...` copiado
+- [ ] Visitante abre link → registo/login → carta migrada para conta ligada (**mesmo uid** após claim)
+
+## 9. Notificações (in-app apenas)
+
+- [ ] Sino → tab **Para ti**: bem-vindo, votar, nota saiu, evolução, badges
 - [ ] Sino → tab **Pedidos** (só admin): pedidos de entrada
 - [ ] Sem spinner infinito
+- [ ] **Fora de âmbito v1.1:** push FCM / Cloud Functions (plano Spark) — só sino in-app
 
-## 8. Fora do MVP v1 (OK)
+## 10. Fora do MVP v1 (OK)
 
 - [ ] Premium / Campos → “Em breve”
-- [ ] Ranking global → “Liga em breve”
+- [ ] Ranking **global** (`/ranking`) → ainda “Liga em breve” (liga por comunidade está na tab **Liga**)
 
 ---
 

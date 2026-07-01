@@ -1,5 +1,8 @@
 import type { LivePlayer, LiveTeamKey } from "./preMatchStorage";
 import type { MiniGameSummary } from "./evolutionUtils";
+import type { WaitlistEntry } from "./matchRsvpRepository";
+
+export type { WaitlistEntry };
 
 export type PostMatchTeamKey = LiveTeamKey;
 export type PostMatchEventType = "golo" | "assistencia" | "defesa" | "cartao_amarelo" | "falta";
@@ -23,6 +26,9 @@ export type SavedPostMatch = {
   title?: string;
   communityId?: string;
   organizerId?: string;
+  waitlist?: WaitlistEntry[];
+  maxPlayers?: number;
+  openToExternal?: boolean;
 };
 
 const KEY_PREFIX = "joga-ai-post-match-v1-";

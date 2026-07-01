@@ -163,3 +163,6 @@ allowBuilds:
   '@firebase/util': true
   esbuild: true
   protobufjs: true
+  re2: false
+  sharp: false
+  workerd: false

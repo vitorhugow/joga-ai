@@ -48,6 +48,14 @@ service cloud.firestore {
       allow create: if isSignedIn() && requestUserId == request.auth.uid;
     }
 
+    function isMatchRsvpUpdate() {
+      return isSignedIn()
+        && request.resource.data.organizerId == resource.data.organizerId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['players', 'waitlist', 'playerTeams', 'assignments', 'savedAt']);
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId);
@@ -87,6 +95,7 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['currentPlayerId', 'players', 'savedAt'])
         )
+        || isMatchRsvpUpdate()
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;
@@ -162,6 +171,11 @@ service cloud.firestore {
           || isCommunityAdmin(communityId)
         );
         allow delete: if isCommunityAdmin(communityId);
+      }
+
+      match /rivalries/{pairId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
       }
     }
   }

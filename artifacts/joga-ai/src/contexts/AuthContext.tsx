@@ -15,6 +15,13 @@ import {
 import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
 import { processPendingRatings } from "@/lib/ratingsRelease";
 import { processPendingNotifications } from "@/lib/notificationsRepository";
+import { maybeRegisterFcmOnReturnVisit } from "@/lib/fcmUtils";
+import {
+  claimGuestCard,
+  parseGuestClaimParam,
+  storePendingGuestClaim,
+  consumePendingGuestClaim,
+} from "@/lib/guestClaimRepository";
 import { isFirebaseConfigured, auth } from "@/lib/firebase";
 
 type AuthState = {
@@ -96,6 +103,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await migrateLocalProfileIfNeeded(localUserIdRef.current, current.uid);
         void processPendingRatings(current.uid);
         void processPendingNotifications(current.uid);
+        void maybeRegisterFcmOnReturnVisit(current.uid);
+
+        const pendingClaim = consumePendingGuestClaim();
+        if (pendingClaim) {
+          const token = parseGuestClaimParam(pendingClaim);
+          if (token) {
+            void claimGuestCard(current.uid, token);
+          }
+        }
+      }
+
+      const claimParam = new URLSearchParams(window.location.search).get("claim");
+      if (current && !current.isAnonymous && claimParam?.startsWith("guest-")) {
+        const token = parseGuestClaimParam(claimParam);
+        if (token) {
+          void claimGuestCard(current.uid, token);
+        }
+      } else if (claimParam?.startsWith("guest-")) {
+        storePendingGuestClaim(claimParam);
       }
 
       setState(applyUserState(current, localUserIdRef.current));

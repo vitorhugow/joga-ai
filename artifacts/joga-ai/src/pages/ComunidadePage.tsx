@@ -22,6 +22,15 @@ import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { loadCommunityMatchResults, type MatchResult } from "@/lib/matchHistoryRepository";
+import { generateMatchNarrative } from "@/lib/matchNarrative";
+import { RankingList } from "@/components/RankingList";
+import {
+  loadCommunityPlayerStats,
+  computeLeaderboard,
+  loadCommunityRivalries,
+  type CommunityPlayerStats,
+} from "@/lib/communityStatsRepository";
+import { CommunityDuel, RivalryCard } from "@/components/CommunityDuel";
 import { imageDisplaySrc } from "@/lib/imageUtils";
 import { toast } from "@/hooks/use-toast";
 
@@ -37,7 +46,9 @@ export default function ComunidadePage() {
   const { userId, isLinked } = useAuth();
   const { profile } = useUserProfile();
   const [, params] = useRoute("/comunidades/:id");
-  const [activeTab, setActiveTab] = useState<"partidas" | "membros" | "resultados">("partidas");
+  const [activeTab, setActiveTab] = useState<
+    "partidas" | "membros" | "resultados" | "liga" | "duelos"
+  >("partidas");
   const id = params?.id || "";
 
   const [community, setCommunity] = useState<Community | null>(null);
@@ -46,6 +57,9 @@ export default function ComunidadePage() {
   const [joinStatus, setJoinStatus] = useState<JoinRequestStatus | null>(null);
   const [results, setResults] = useState<MatchResult[]>([]);
   const [joining, setJoining] = useState(false);
+  const [playerStats, setPlayerStats] = useState<CommunityPlayerStats[]>([]);
+  const [rivalries, setRivalries] = useState<Awaited<ReturnType<typeof loadCommunityRivalries>>>([]);
+  const [duelTargetId, setDuelTargetId] = useState<string>("");
 
   async function refreshCommunity() {
     const c = await loadCommunity(id, userId);
@@ -63,6 +77,10 @@ export default function ComunidadePage() {
       setMatches(all.filter((m) => m.communityId === id)),
     );
     loadCommunityMatchResults(id).then(setResults);
+    loadCommunityPlayerStats(id).then(setPlayerStats);
+    if (userId) {
+      loadCommunityRivalries(id, userId).then(setRivalries);
+    }
   }, [id, userId]);
 
   useEffect(() => {
@@ -138,8 +156,15 @@ export default function ComunidadePage() {
   const tabs = [
     { key: "partidas", label: "Partidas" },
     { key: "resultados", label: "Resultados" },
+    { key: "liga", label: "Liga" },
+    { key: "duelos", label: "Duelos" },
     { key: "membros", label: "Membros" },
   ] as const;
+
+  const myStats = userId ? playerStats.find((s) => s.userId === userId) : null;
+  const duelTarget = duelTargetId
+    ? playerStats.find((s) => s.userId === duelTargetId)
+    : null;
 
   return (
     <JogaPage theme="dark" padded={false}>
@@ -310,6 +335,9 @@ export default function ComunidadePage() {
                   <p className="text-white/40 text-xs mt-1">
                     {new Date(r.completedAt).toLocaleDateString("pt-PT")}
                   </p>
+                  <p className="text-white/55 text-sm mt-2 leading-relaxed">
+                    {generateMatchNarrative({ matchResult: r, miniGames: [] })}
+                  </p>
                   {r.topScorers?.[0] && (
                     <p className="text-emerald-400 text-sm mt-2">
                       Artilheiro: {r.topScorers[0].name} ({r.topScorers[0].goals} golos)
@@ -325,6 +353,70 @@ export default function ComunidadePage() {
                   </div>
                 </JogaCard>
               ))
+            )}
+          </div>
+        )}
+
+        {hasAccess && activeTab === "liga" && (
+          <div className="space-y-4">
+            {playerStats.length === 0 ? (
+              <p className="text-white/40 text-sm text-center py-8">Sem dados de liga ainda.</p>
+            ) : (
+              <>
+                <RankingList
+                  title="Golos"
+                  entries={computeLeaderboard(playerStats, "goals")}
+                />
+                <RankingList
+                  title="Assistências"
+                  entries={computeLeaderboard(playerStats, "assists")}
+                />
+                <RankingList
+                  title="Nota média"
+                  entries={computeLeaderboard(playerStats, "avgRating")}
+                />
+                <RankingList
+                  title="MVP"
+                  entries={computeLeaderboard(playerStats, "mvp")}
+                />
+              </>
+            )}
+          </div>
+        )}
+
+        {hasAccess && activeTab === "duelos" && (
+          <div className="space-y-4">
+            <JogaCard variant="arena" padding="md">
+              <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2">
+                Escolhe adversário
+              </p>
+              <select
+                value={duelTargetId}
+                onChange={(e) => setDuelTargetId(e.target.value)}
+                className="w-full rounded-xl px-3 py-3 bg-white/5 border border-white/10 text-white text-sm"
+              >
+                <option value="">Seleciona um membro</option>
+                {playerStats
+                  .filter((s) => s.userId !== userId)
+                  .map((s) => (
+                    <option key={s.userId} value={s.userId}>
+                      {s.name}
+                    </option>
+                  ))}
+              </select>
+            </JogaCard>
+
+            {myStats && duelTarget && (
+              <CommunityDuel playerA={myStats} playerB={duelTarget} />
+            )}
+
+            {rivalries.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-display font-black text-white text-lg">As tuas rivalidades</h3>
+                {rivalries.map((r) => (
+                  <RivalryCard key={r.pairId} rivalry={r} currentUserId={userId} />
+                ))}
+              </div>
             )}
           </div>
         )}

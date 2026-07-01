@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Share2, TrendingUp, ChevronRight, Shield, LogOut, Link2 } from "lucide-react";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link } from "wouter";
@@ -13,6 +13,8 @@ import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
 import { toast } from "@/hooks/use-toast";
+import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
+import { badgesFromIds } from "@/lib/badgeCatalog";
 
 /* ─── Pitch SVG texture ─── */
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -143,6 +145,7 @@ export default function Perfil() {
   const [isCardExpanded, setIsCardExpanded] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [matchHistory, setMatchHistory] = useState<UserMatchHistoryEntry[]>([]);
+  const cardExportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -171,29 +174,37 @@ export default function Perfil() {
     delta: attrDeltas?.[key],
   }));
 
-  const badges: BadgeItem[] = [];
+  const badges: BadgeItem[] = badgesFromIds(profile.badges ?? []);
   const pastCards: PastCardItem[] = profile.profileComplete
     ? [{ season: "Atual", overall, position: player.position, current: true }]
     : [];
 
   async function shareCard() {
-    const url = `${window.location.origin}/perfil`;
+    const exportNode = cardExportRef.current;
+    if (!exportNode) {
+      toast({ title: "Carta indisponível", variant: "destructive" });
+      return;
+    }
+
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `Carta ${player.name} — Joga AI`,
-          text: `Vê a minha carta no Joga AI (OVR ${overall})`,
-          url,
-        });
-      } else {
-        await navigator.clipboard.writeText(url);
-        toast({ title: "Link copiado!", description: "Cola e partilha com a malta." });
+      const blob = await exportPlayerCardPng(exportNode, {
+        pixelRatio: 2,
+      });
+      const result = await shareOrDownloadPng(
+        blob,
+        `joga-ai-carta-${overall}.png`,
+        `Carta ${player.name} — Joga AI`,
+      );
+      if (result === "shared") {
+        toast({ title: "Carta partilhada!" });
+      } else if (result === "downloaded") {
+        toast({ title: "PNG guardado", description: "Imagem da carta descarregada." });
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
       toast({
-        title: "Não foi possível partilhar",
-        description: "Tenta copiar o link manualmente.",
+        title: "Não foi possível exportar",
+        description: "Tenta novamente.",
         variant: "destructive",
       });
     }
@@ -342,6 +353,22 @@ export default function Perfil() {
           </div>
 
           <div className="relative flex items-start justify-center gap-3 px-3 pt-2 pb-6 sm:gap-6 sm:px-4 sm:pt-3 sm:pb-7">
+            <div
+              ref={cardExportRef}
+              className="absolute -left-[9999px] top-0 w-[340px] pointer-events-none"
+              aria-hidden
+            >
+              <PlayerCard
+                name={player.name}
+                position={player.position}
+                attributes={player.attributes}
+                shirtNumber={player.shirtNumber}
+                title={player.title}
+                photoUrl={player.photoUrl}
+                size="profile"
+                attributeDeltas={attrDeltas}
+              />
+            </div>
             <button
               type="button"
               onClick={() => setIsCardExpanded(true)}

@@ -12,6 +12,8 @@ import {
 import { loadMatchFromFirestore } from "./matchRepository";
 import { addNotification } from "./notificationsRepository";
 import { applyDelayedRatingToProfile } from "./userRepository";
+import { checkAndUnlockBadges } from "./badgeService";
+import { trackRivalriesFromMatchResult } from "./communityStatsRepository";
 import {
   averageRatingsForPlayer,
   collectAllEvents,
@@ -99,6 +101,7 @@ async function releaseRatingForUser(
 
   if (rating > 0) {
     await applyDelayedRatingToProfile(userId, rating, matchId);
+    await checkAndUnlockBadges(userId, { lastRating: rating });
     await addNotification(userId, {
       title: "A tua nota saiu!",
       body: `Recebeste ${rating.toFixed(1)} na pelada «${title}». Vê a tua evolução.`,
@@ -172,6 +175,18 @@ export async function releaseMatchRatings(
     ratingsReleasedAt: new Date().toISOString(),
     ratingsReleaseReason: reason,
   });
+
+  if (result.communityId) {
+    await trackRivalriesFromMatchResult(result.communityId, {
+      ...result,
+      ratingsReleased: true,
+    });
+  }
+
+  for (const player of result.players) {
+    if (!player.userId) continue;
+    await checkAndUnlockBadges(player.userId, { lastRating: player.rating });
+  }
 
   return true;
 }

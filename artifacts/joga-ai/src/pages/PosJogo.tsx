@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { loadPostMatch, isPostMatchExpired, type SavedPostMatch } from "@/lib/postMatchStorage";
 import {
@@ -54,6 +54,11 @@ import {
 } from "@/lib/evolutionUtils";
 import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
+import { PlayerCard } from "@/components/PlayerCard";
+import { profileToPlayerCard, getLastMatchAttributeDeltas } from "@/lib/userRepository";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { generateMatchNarrative } from "@/lib/matchNarrative";
+import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { toast } from "@/hooks/use-toast";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 
@@ -267,6 +272,9 @@ export default function PosJogo() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [, setLocation] = useLocation();
   const [participationApplied, setParticipationApplied] = useState(false);
+  const { profile } = useUserProfile();
+  const evolutionCardRef = useRef<HTMLDivElement>(null);
+  const [shareEvolutionBusy, setShareEvolutionBusy] = useState(false);
 
   const expiresAt = data?.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + 24 * 60 * 60 * 1000;
   const isExpired = isPostMatchExpired(data) || Date.now() > expiresAt;
@@ -275,6 +283,29 @@ export default function PosJogo() {
 
   const allEvents = useMemo(() => collectAllEvents(games), [games]);
   const topScorers = useMemo(() => computeTopScorers(allEvents), [allEvents]);
+  const matchNarrative = useMemo(
+    () =>
+      generateMatchNarrative({
+        matchResult: data
+          ? {
+              title: data.title ?? `Pelada ${matchId}`,
+              topScorers,
+              players: players.map((p: { id: string; name: string; userId?: string }) => ({
+                playerId: p.id,
+                name: p.name,
+                userId: p.userId,
+                goals: 0,
+                assists: 0,
+                saves: 0,
+                rating: 0,
+              })),
+            }
+          : null,
+        events: allEvents,
+        miniGames: games,
+      }),
+    [data, topScorers, players, allEvents, games],
+  );
   const hasVoted = hasUserVotedInSession(userId, matchId);
 
   const currentPlayer = useMemo(() => {
@@ -385,6 +416,21 @@ export default function PosJogo() {
     participationApplied,
     receivedRating,
   ]);
+
+  async function shareEvolutionCard() {
+    const node = evolutionCardRef.current;
+    if (!node) return;
+    setShareEvolutionBusy(true);
+    try {
+      const blob = await exportPlayerCardPng(node);
+      await shareOrDownloadPng(blob, `joga-ai-evolucao-${matchId}.png`, "Evolução Joga AI");
+      toast({ title: "Evolução partilhada!" });
+    } catch {
+      toast({ title: "Erro ao exportar", variant: "destructive" });
+    } finally {
+      setShareEvolutionBusy(false);
+    }
+  }
 
   const isAuditor = auditors.includes(userId);
   const hasConfirmed = confirmed.includes(userId);
@@ -711,10 +757,34 @@ export default function PosJogo() {
           ))}
         </div>
 
+        <div
+          ref={evolutionCardRef}
+          className="absolute -left-[9999px] top-0 w-[340px] pointer-events-none"
+          aria-hidden
+        >
+          {profile.profileComplete && (
+            <PlayerCard
+              {...profileToPlayerCard(profile)}
+              size="profile"
+              attributeDeltas={getLastMatchAttributeDeltas(profile, data?.matchId)}
+            />
+          )}
+        </div>
+
+        <JogaButton
+          variant="primary"
+          size="lg"
+          className="mt-4"
+          disabled={shareEvolutionBusy || !profile.profileComplete}
+          onClick={() => void shareEvolutionCard()}
+        >
+          Partilhar evolução
+        </JogaButton>
+
         <JogaButton
           variant="gold"
           size="lg"
-          className="mt-4"
+          className="mt-2"
           onClick={() => {
             window.location.href = "/perfil/evolucao";
           }}
@@ -812,6 +882,17 @@ export default function PosJogo() {
           Confere o que aconteceu antes de votar. As notas saem quando todos votam, o organizador finaliza, ou após 24h.
         </p>
       </JogaHero>
+
+      {matchNarrative && (
+        <section
+          className="mt-4 rounded-3xl p-4"
+          style={{ background: "rgba(74,222,128,0.06)", border: "1px solid rgba(74,222,128,0.18)" }}
+          data-testid="match-narrative"
+        >
+          <p className="text-emerald-300/80 text-[10px] font-black uppercase tracking-[0.2em]">Relato</p>
+          <p className="text-white/75 text-sm mt-2 leading-relaxed">{matchNarrative}</p>
+        </section>
+      )}
 
       {mustAuditBeforeVote && (
         <section className="mt-4 rounded-3xl p-4" style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.22)" }}>

@@ -77,6 +77,22 @@ jobs:
           pnpm exec firebase deploy --only firestore:rules,firestore:indexes --non-interactive --token "$FIREBASE_TOKEN"
           echo "status=deployed" >> "$GITHUB_OUTPUT"
 
+      - name: Deploy Cloud Functions
+        id: functions
+        working-directory: artifacts/joga-ai
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            echo "::warning::FIREBASE_TOKEN em falta — functions não publicadas"
+            exit 0
+          fi
+          cd functions && npm install && npm run build
+          cd ..
+          pnpm exec firebase deploy --only functions --non-interactive --token "$FIREBASE_TOKEN"
+          echo "status=deployed" >> "$GITHUB_OUTPUT"
+
       - name: Deploy summary
         run: |
           {
@@ -94,6 +110,11 @@ jobs:
               echo "| Firestore rules + indexes | ✅ ${FIREBASE_PROJECT} |"
             else
               echo "| Firestore rules + indexes | ⚠️ saltado — configura FIREBASE_TOKEN |"
+            fi
+            if [ "${{ steps.functions.outputs.status }}" = "deployed" ]; then
+              echo "| Cloud Functions | ✅ sendPushReminders |"
+            else
+              echo "| Cloud Functions | ⚠️ saltado |"
             fi
             echo ""
             echo "Configuração única: \`./scripts/setup-github-deploy-secrets.sh\`"

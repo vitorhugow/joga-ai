@@ -67,6 +67,7 @@ export type UserProfile = {
   lastAttributeDeltas?: Partial<PlayerAttributes>;
   /** Partida que originou os lastAttributeDeltas */
   lastEvolutionMatchId?: string;
+  badges?: string[];
   updatedAt?: string;
 };
 
@@ -150,6 +151,7 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
     lastEvolutionMatchId: data.lastEvolutionMatchId
       ? String(data.lastEvolutionMatchId)
       : undefined,
+    badges: Array.isArray(data.badges) ? (data.badges as string[]) : undefined,
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }

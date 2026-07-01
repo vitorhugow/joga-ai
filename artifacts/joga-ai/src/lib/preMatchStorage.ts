@@ -10,6 +10,8 @@ export type LivePlayer = {
   isMe?: boolean;
   manual?: boolean;
   userId?: string;
+  guestId?: string;
+  loanCard?: boolean;
 };
 
 export type LiveAssignment = {

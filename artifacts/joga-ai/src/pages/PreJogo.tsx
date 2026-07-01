@@ -11,6 +11,9 @@ import {
   Trash2,
   Users,
   X,
+  Share2,
+  Link as LinkIcon,
+  UserPlus,
 } from "lucide-react";
 import { loadMatchFromFirestore, saveMatchRoster, cancelMatch } from "@/lib/matchRepository";
 import { loadPreMatch } from "@/lib/preMatchStorage";
@@ -20,6 +23,16 @@ import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
 import { loadCommunityMembers } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
+import {
+  confirmPresence,
+  leaveMatch,
+  removePlayerAndPromote,
+  getMatchInviteUrl,
+  type WaitlistEntry,
+} from "@/lib/matchRsvpRepository";
+import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
+import { calculateOverall } from "@/lib/cardUtils";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { toast } from "@/hooks/use-toast";
@@ -61,6 +74,8 @@ type Player = {
   isMe?: boolean;
   manual?: boolean;
   userId?: string;
+  guestId?: string;
+  loanCard?: boolean;
 };
 
 
@@ -152,10 +167,15 @@ function PlayerBadge({ player }: { player: Player }) {
         <div className="flex items-center gap-1">
           {!player.paid && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
           <p className="text-sm font-bold text-white/85 truncate">{player.name}</p>
+          {player.loanCard && (
+            <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 shrink-0">
+              VISITANTE
+            </span>
+          )}
         </div>
 
         <p className={player.paid ? "text-[11px] font-bold text-emerald-300/80" : "text-[11px] font-black text-red-300"}>
-          {player.paid ? "Pago" : "Pendente"}
+          {player.loanCard ? "Visitante" : player.paid ? "Pago" : "Pendente"}
         </p>
       </div>
     </div>
@@ -292,6 +312,7 @@ function PlayerPicker({
 
 export default function PreJogo() {
   const { userId } = useAuth();
+  const { profile } = useUserProfile();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/pre-jogo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
@@ -304,6 +325,8 @@ export default function PreJogo() {
   const isOrganizer = Boolean(userId && resolvedOrganizerId && userId === resolvedOrganizerId);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [rsvpBusy, setRsvpBusy] = useState(false);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
@@ -342,8 +365,11 @@ export default function PreJogo() {
           isMe: p.isMe,
           manual: p.manual,
           userId: p.userId,
+          guestId: p.guestId,
+          loanCard: p.loanCard,
         }));
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
+        setWaitlist(merged?.waitlist ?? []);
         setGameMode(source.gameMode ?? "fut5");
         setTeamCount(source.teamCount ?? 2);
         setPlayerTeams(source.playerTeams ?? {});
@@ -408,8 +434,9 @@ export default function PreJogo() {
       players,
       playerTeams,
       assignments,
+      waitlist,
     });
-  }, [matchId, gameMode, teamCount, players, playerTeams, assignments]);
+  }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist]);
 
   useEffect(() => {
     if (!rosterHydrated) return;
@@ -562,6 +589,145 @@ export default function PreJogo() {
     }));
 
     setManualName("");
+  }
+
+  function addGuestPlayer() {
+    const name = manualName.trim();
+    if (!name) return;
+
+    const guestId = Math.random().toString(36).slice(2, 9);
+    const id = `guest-${guestId}`;
+
+    setPlayers((current) => [
+      ...current,
+      {
+        id,
+        guestId,
+        name,
+        position: "MEI",
+        overall: 50,
+        paid: false,
+        manual: true,
+        loanCard: true,
+      },
+    ]);
+
+    setPlayerTeams((current) => ({
+      ...current,
+      [id]: "BENCH",
+    }));
+
+    const claimUrl = buildGuestClaimLink(matchId, guestId);
+    void navigator.clipboard.writeText(claimUrl).then(() => {
+      toast({
+        title: "Visitante adicionado",
+        description: "Link de reclamação copiado — envia ao jogador.",
+      });
+    });
+
+    setManualName("");
+  }
+
+  async function shareMatchUrl() {
+    const url = `${window.location.origin}/partida/${matchId}/pre-jogo`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: matchDetails?.title ?? "Pelada Joga AI",
+          text: "Entra na pelada!",
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast({ title: "Link copiado!", description: "Partilha com a malta." });
+      }
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      toast({ title: "Não foi possível partilhar", variant: "destructive" });
+    }
+  }
+
+  async function handleConfirmPresence() {
+    if (!userId) return;
+    setRsvpBusy(true);
+    try {
+      const overall = profile.profileComplete
+        ? calculateOverall(profile.attributes)
+        : 50;
+      const result = await confirmPresence(matchId, userId, {
+        displayName: profile.displayName || "Jogador",
+        position: profile.position || "MEI",
+        overall,
+      });
+      const merged = await loadMatchFromFirestore(matchId);
+      if (merged?.waitlist) setWaitlist(merged.waitlist);
+      if (merged?.players) {
+        const mapped = merged.players.map((p) => ({
+          id: p.id,
+          name: p.name,
+          position: p.position,
+          overall: p.overall,
+          paid: p.paid ?? false,
+          isMe: p.userId === userId,
+          manual: p.manual,
+          userId: p.userId,
+          guestId: p.guestId,
+          loanCard: p.loanCard,
+        }));
+        setPlayers(linkPlayersInRoster(mapped, userId));
+        setPlayerTeams(merged.playerTeams ?? {});
+      }
+      toast({
+        title: result === "waitlist" ? "Lista de espera" : "Presença confirmada!",
+        description:
+          result === "waitlist"
+            ? `Estás na posição ${waitlist.length + 1} — avisamos se abrir vaga.`
+            : "Entraste no plantel desta pelada.",
+      });
+    } catch (err) {
+      toast({
+        title: "Não foi possível confirmar",
+        description: err instanceof Error ? err.message : "Tenta novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setRsvpBusy(false);
+    }
+  }
+
+  async function handleLeaveMatch() {
+    if (!userId) return;
+    setRsvpBusy(true);
+    try {
+      await leaveMatch(matchId, userId);
+      const merged = await loadMatchFromFirestore(matchId);
+      if (merged?.waitlist) setWaitlist(merged.waitlist);
+      if (merged?.players) {
+        const mapped = merged.players.map((p) => ({
+          id: p.id,
+          name: p.name,
+          position: p.position,
+          overall: p.overall,
+          paid: p.paid ?? false,
+          isMe: p.userId === userId,
+          manual: p.manual,
+          userId: p.userId,
+          guestId: p.guestId,
+          loanCard: p.loanCard,
+        }));
+        setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
+        setPlayerTeams(merged.playerTeams ?? {});
+      }
+      toast({ title: "Saíste da pelada" });
+    } catch (err) {
+      toast({
+        title: "Erro ao sair",
+        description: err instanceof Error ? err.message : "Tenta novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setRsvpBusy(false);
+    }
   }
 
   function randomizeTeams() {
@@ -862,6 +1028,13 @@ export default function PreJogo() {
       delete next[playerId];
       return next;
     });
+
+    if (isOrganizer) {
+      void removePlayerAndPromote(matchId, playerId).then(async () => {
+        const merged = await loadMatchFromFirestore(matchId);
+        if (merged?.waitlist) setWaitlist(merged.waitlist);
+      });
+    }
   }
 
   function togglePaid(playerId: string) {
@@ -929,6 +1102,14 @@ export default function PreJogo() {
   const benchCount = teamBuckets.BENCH.length;
   const teamsWithPlayers = (["A", "B", "C", "D"] as TeamKey[]).filter((team) => teamBuckets[team].length > 0).length;
 
+  const myPlayerIndex = userId
+    ? players.findIndex((p) => p.userId === userId || p.id === userId)
+    : -1;
+  const myWaitlistIndex = userId ? waitlist.findIndex((w) => w.userId === userId) : -1;
+  const isInMatch = myPlayerIndex >= 0;
+  const isOnWaitlist = myWaitlistIndex >= 0;
+  const showRsvpBanner = Boolean(userId && !isOrganizer && rosterHydrated);
+
   return (
     <JogaPage theme="dark" padded={false}>
       <div className="relative overflow-hidden" style={{ background: "linear-gradient(155deg, #031408 0%, #052010 28%, #0a5a1e 65%, #0d6826 100%)" }}>
@@ -942,7 +1123,19 @@ export default function PreJogo() {
           </button>
 
           <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.22em]">Pré-Jogo Editável</p>
-          <div className="w-10" />
+          {isOrganizer ? (
+            <button
+              onClick={() => void shareMatchUrl()}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center cursor-pointer"
+              style={{ background: "rgba(74,222,128,0.14)", border: "1px solid rgba(74,222,128,0.28)" }}
+              title="Convidar"
+              data-testid="button-invite-match"
+            >
+              <Share2 className="w-4 h-4 text-emerald-300" />
+            </button>
+          ) : (
+            <div className="w-10" />
+          )}
         </div>
 
         <div className="relative px-5 pb-8 pt-3">
@@ -1013,6 +1206,58 @@ export default function PreJogo() {
       </div>
 
       <div className="px-4 space-y-5 pt-5">
+        {showRsvpBanner && (
+          <section
+            className="rounded-2xl p-4"
+            style={{ background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.22)" }}
+            data-testid="rsvp-banner"
+          >
+            {isInMatch ? (
+              <>
+                <p className="text-blue-200 text-sm font-bold">Estás confirmado nesta pelada.</p>
+                <JogaButton
+                  variant="ghost"
+                  size="sm"
+                  className="mt-3 w-full text-red-300 border border-red-400/20"
+                  disabled={rsvpBusy}
+                  onClick={() => void handleLeaveMatch()}
+                >
+                  Sair da pelada
+                </JogaButton>
+              </>
+            ) : isOnWaitlist ? (
+              <>
+                <p className="text-amber-300 text-sm font-bold">
+                  Lista de espera — posição {myWaitlistIndex + 1}
+                </p>
+                <p className="text-white/45 text-xs mt-1">Avisamos quando abrir vaga.</p>
+                <JogaButton
+                  variant="ghost"
+                  size="sm"
+                  className="mt-3 w-full"
+                  disabled={rsvpBusy}
+                  onClick={() => void handleLeaveMatch()}
+                >
+                  Sair da lista
+                </JogaButton>
+              </>
+            ) : (
+              <>
+                <p className="text-white/80 text-sm font-bold">Queres jogar nesta pelada?</p>
+                <JogaButton
+                  variant="primary"
+                  size="md"
+                  className="mt-3 w-full"
+                  disabled={rsvpBusy}
+                  onClick={() => void handleConfirmPresence()}
+                >
+                  Confirmar presença
+                </JogaButton>
+              </>
+            )}
+          </section>
+        )}
+
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-black text-white text-lg">Tipo de jogo</h2>
@@ -1137,6 +1382,16 @@ export default function PreJogo() {
               disabled={!isOrganizer}
             >
               <Plus className="w-5 h-5 text-emerald-300" />
+            </button>
+
+            <button
+              onClick={addGuestPlayer}
+              className="w-12 rounded-2xl flex items-center justify-center cursor-pointer"
+              style={{ background: "rgba(251,191,36,0.14)", border: "1px solid rgba(251,191,36,0.28)" }}
+              disabled={!isOrganizer}
+              title="Visitante com carta emprestada"
+            >
+              <UserPlus className="w-5 h-5 text-amber-300" />
             </button>
           </div>
 
@@ -1308,6 +1563,44 @@ export default function PreJogo() {
             })}
           </div>
         </section>
+
+        {isOrganizer && waitlist.length > 0 && (
+          <section data-testid="waitlist-section">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display font-black text-white text-lg">Lista de espera</h2>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full text-amber-300" style={{ background: "rgba(251,191,36,0.12)" }}>
+                {waitlist.length} à espera
+              </span>
+            </div>
+            <div className="space-y-2">
+              {waitlist.map((entry, index) => (
+                <div
+                  key={entry.userId}
+                  className="rounded-2xl px-4 py-3 flex items-center justify-between"
+                  style={{ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.18)" }}
+                >
+                  <div>
+                    <p className="text-white font-bold text-sm">{entry.name}</p>
+                    <p className="text-white/35 text-xs">{entry.position} · OVR {entry.overall}</p>
+                  </div>
+                  <span className="text-amber-300 font-black text-sm">#{index + 1}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {isOrganizer && (
+          <JogaButton
+            variant="ghost"
+            size="sm"
+            className="gap-2 w-full"
+            onClick={() => void shareMatchUrl()}
+          >
+            <LinkIcon className="w-4 h-4" />
+            Copiar link da pelada
+          </JogaButton>
+        )}
 
         {isOrganizer && (
           <JogaButton

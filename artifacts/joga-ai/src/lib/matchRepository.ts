@@ -35,7 +35,9 @@ import type { MatchListing } from "./communityRepository";
 import { applyParticipationForMatchRoster, revertMatchStatsForPlayers } from "./userRepository";
 import { deleteMatchResult, loadMatchResult } from "./matchHistoryRepository";
 import { getVotes } from "./auditRepository";
-import { collectAllEvents, computeTopScorers } from "./evolutionUtils";
+import { collectAllEvents, computeTopScorers, collectLinkedPlayerUserIds } from "./evolutionUtils";
+import type { WaitlistEntry } from "./matchRsvpRepository";
+import { checkAndUnlockBadges } from "./badgeService";
 
 export type CreateMatchInput = {
   title: string;
@@ -379,6 +381,7 @@ export type MatchRosterData = {
   players: LivePlayer[];
   playerTeams: Record<string, LiveTeamKey>;
   assignments: Record<string, string | null>;
+  waitlist?: WaitlistEntry[];
 };
 
 /** Persiste o plantel da partida (local + Firestore) */
@@ -424,6 +427,7 @@ export async function saveMatchRoster(
     currentPlayerId,
     miniGames: existing?.miniGames ?? [],
     votedUserIds: existing?.votedUserIds,
+    waitlist: roster.waitlist ?? existing?.waitlist ?? [],
   };
 
   await saveMatchToFirestore(matchId, updated);
@@ -449,7 +453,12 @@ export async function saveMatchToFirestore(
       communityId: data.communityId,
       organizerId: data.organizerId,
       players: data.players,
-    }).catch((err) => console.warn("[matchRepository] participation:", err));
+    })
+      .then(() => {
+        const userIds = collectLinkedPlayerUserIds(data.players ?? [], data.organizerId);
+        return Promise.all(userIds.map((uid) => checkAndUnlockBadges(uid)));
+      })
+      .catch((err) => console.warn("[matchRepository] participation:", err));
   }
 
   if (!isFirebaseConfigured()) return;
@@ -470,6 +479,7 @@ export async function saveMatchToFirestore(
       createdAt: data.createdAt,
       expiresAt: data.expiresAt,
       votedUserIds: data.votedUserIds ?? [],
+      waitlist: data.waitlist ?? [],
       title: data.title,
       communityId: data.communityId,
       organizerId: data.organizerId,
@@ -552,6 +562,7 @@ export async function loadMatchFromFirestore(
       currentPlayerId: remote.currentPlayerId ?? "",
       miniGames: remote.miniGames ?? [],
       votedUserIds: remote.votedUserIds,
+      waitlist: remote.waitlist ?? [],
       title: remote.title,
       communityId: remote.communityId,
       organizerId: remote.organizerId,
@@ -645,6 +656,7 @@ function mergeMatchSources(
     currentPlayerId: base?.currentPlayerId ?? bestRoster.players.find((player) => player.isMe)?.id ?? bestRoster.players[0]?.id ?? "",
     miniGames,
     votedUserIds: base?.votedUserIds,
+    waitlist: remoteValid?.waitlist ?? localValid?.waitlist ?? [],
     title: base?.title,
     communityId: base?.communityId,
     organizerId: base?.organizerId,

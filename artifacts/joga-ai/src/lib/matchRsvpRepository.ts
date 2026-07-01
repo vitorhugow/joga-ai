@@ -94,16 +94,23 @@ export async function confirmPresence(
 ): Promise<"confirmed" | "waitlist"> {
   const match = await loadMatchState(matchId);
   if (!match) throw new Error("Partida não encontrada.");
-  if (match.status !== "configurando") {
+
+  const details = loadMatchDetails(matchId);
+  const communityId = match.communityId ?? details?.communityId;
+  const matchStatus = match.status || "configurando";
+
+  if (matchStatus !== "configurando") {
     throw new Error("Só podes confirmar presença antes do jogo começar.");
   }
 
-  const details = loadMatchDetails(matchId);
-  await assertCommunityAccess(
-    match.communityId ?? details?.communityId,
-    details?.openToExternal,
-    userId,
-  );
+  if (communityId) {
+    const isMember = await isCommunityMember(communityId, userId);
+    if (!isMember) {
+      await assertCommunityAccess(communityId, details?.openToExternal, userId);
+    }
+  } else {
+    await assertCommunityAccess(communityId, details?.openToExternal, userId);
+  }
 
   const waitlist: WaitlistEntry[] = [...(match.waitlist ?? [])];
   const players: LivePlayer[] = [...(match.players ?? [])];

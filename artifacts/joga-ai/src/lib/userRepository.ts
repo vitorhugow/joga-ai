@@ -334,6 +334,59 @@ export async function loadUserProfile(
   }
 }
 
+export type PublicUserProfile = {
+  userId: string;
+  displayName: string;
+  position: string;
+  photoUrl?: string;
+  overall: number;
+};
+
+/** Perfis públicos de outros jogadores (nome, foto, posição) */
+export async function loadPublicProfiles(
+  userIds: string[],
+): Promise<Map<string, PublicUserProfile>> {
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  const map = new Map<string, PublicUserProfile>();
+  if (!uniqueIds.length) return map;
+
+  const addProfile = (userId: string, data: Record<string, unknown>) => {
+    const attrs = data.attributes as PlayerAttributes | undefined;
+    map.set(userId, {
+      userId,
+      displayName: String(data.displayName ?? "Jogador").trim() || "Jogador",
+      position: String(data.position ?? "MEI"),
+      photoUrl: data.photoUrl ? String(data.photoUrl) : undefined,
+      overall: attrs ? calculateOverall(attrs) : 50,
+    });
+  };
+
+  if (!isFirebaseConfigured()) {
+    for (const userId of uniqueIds) {
+      const local = readLocalProfile(userId);
+      if (local) {
+        addProfile(userId, local as unknown as Record<string, unknown>);
+      }
+    }
+    return map;
+  }
+
+  await Promise.all(
+    uniqueIds.map(async (userId) => {
+      try {
+        const snap = await getDoc(doc(db, "users", userId));
+        if (snap.exists()) {
+          addProfile(userId, snap.data() as Record<string, unknown>);
+        }
+      } catch (err) {
+        console.warn("[userRepository] loadPublicProfiles:", userId, err);
+      }
+    }),
+  );
+
+  return map;
+}
+
 export type ProfileSetupInput = {
   displayName: string;
   position: string;

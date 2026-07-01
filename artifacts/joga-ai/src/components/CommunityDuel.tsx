@@ -26,12 +26,14 @@ export function CommunityDuel({ playerA, playerB }: CommunityDuelProps) {
           position="JOG"
           overall={Math.round(playerA.avgRating * 10) || 50}
           subtitle={`${playerA.goals} golos`}
+          variant="dark"
         />
         <PlayerMiniCard
           name={playerB.name}
           position="JOG"
           overall={Math.round(playerB.avgRating * 10) || 50}
           subtitle={`${playerB.goals} golos`}
+          variant="dark"
         />
       </div>
 

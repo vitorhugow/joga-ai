@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRoute } from "wouter";
 import { Users, MapPin, ChevronLeft, Lock, Calendar } from "lucide-react";
 import { Link } from "wouter";
@@ -6,7 +6,7 @@ import { MatchCard } from "@/components/MatchCard";
 import { PlayerMiniCard } from "@/components/PlayerMiniCard";
 import {
   loadCommunity,
-  loadAvailableMatches,
+  loadCommunityMatches,
   loadCommunityMembers,
   requestToJoin,
   joinCommunityPublic,
@@ -32,6 +32,7 @@ import {
 } from "@/lib/communityStatsRepository";
 import { CommunityDuel, RivalryCard } from "@/components/CommunityDuel";
 import { imageDisplaySrc } from "@/lib/imageUtils";
+import { loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 
 const gameTypeLabel: Record<string, string> = {
@@ -60,6 +61,7 @@ export default function ComunidadePage() {
   const [playerStats, setPlayerStats] = useState<CommunityPlayerStats[]>([]);
   const [rivalries, setRivalries] = useState<Awaited<ReturnType<typeof loadCommunityRivalries>>>([]);
   const [duelTargetId, setDuelTargetId] = useState<string>("");
+  const [memberProfiles, setMemberProfiles] = useState<Map<string, PublicUserProfile>>(new Map());
 
   async function refreshCommunity() {
     const c = await loadCommunity(id, userId);
@@ -73,9 +75,7 @@ export default function ComunidadePage() {
   useEffect(() => {
     if (!id) return;
     void refreshCommunity();
-    loadAvailableMatches().then((all) =>
-      setMatches(all.filter((m) => m.communityId === id)),
-    );
+    loadCommunityMatches(id).then(setMatches);
     loadCommunityMatchResults(id).then(setResults);
     loadCommunityPlayerStats(id).then(setPlayerStats);
     if (userId) {
@@ -84,9 +84,19 @@ export default function ComunidadePage() {
   }, [id, userId]);
 
   useEffect(() => {
-    if (!id || !community?.isMember) return;
+    if (!id || !community) return;
+    const hasMemberAccess = community.isMember || community.adminId === userId;
+    if (!hasMemberAccess) return;
     loadCommunityMembers(id).then(setMembers);
-  }, [id, community?.isMember]);
+  }, [id, community?.isMember, community?.adminId, userId]);
+
+  useEffect(() => {
+    if (!members.length) {
+      setMemberProfiles(new Map());
+      return;
+    }
+    void loadPublicProfiles(members.map((m) => m.userId)).then(setMemberProfiles);
+  }, [members]);
 
   if (!community) {
     return (
@@ -162,8 +172,31 @@ export default function ComunidadePage() {
   ] as const;
 
   const myStats = userId ? playerStats.find((s) => s.userId === userId) : null;
+
+  const duelCandidates = useMemo(() => {
+    const statsById = new Map(playerStats.map((s) => [s.userId, s]));
+    return members
+      .filter((m) => m.userId !== userId)
+      .map((m) => {
+        const stats = statsById.get(m.userId);
+        const profile = memberProfiles.get(m.userId);
+        if (stats) return stats;
+        return {
+          userId: m.userId,
+          name: profile?.displayName || m.displayName,
+          goals: 0,
+          assists: 0,
+          matches: 0,
+          mvpCount: 0,
+          ratingSum: 0,
+          ratingCount: 0,
+          avgRating: 0,
+        } satisfies CommunityPlayerStats;
+      });
+  }, [members, playerStats, memberProfiles, userId]);
+
   const duelTarget = duelTargetId
-    ? playerStats.find((s) => s.userId === duelTargetId)
+    ? duelCandidates.find((s) => s.userId === duelTargetId)
     : null;
 
   return (
@@ -396,18 +429,31 @@ export default function ComunidadePage() {
                 className="w-full rounded-xl px-3 py-3 bg-white/5 border border-white/10 text-white text-sm"
               >
                 <option value="">Seleciona um membro</option>
-                {playerStats
-                  .filter((s) => s.userId !== userId)
-                  .map((s) => (
-                    <option key={s.userId} value={s.userId}>
-                      {s.name}
-                    </option>
-                  ))}
+                {duelCandidates.map((s) => (
+                  <option key={s.userId} value={s.userId}>
+                    {s.name}
+                  </option>
+                ))}
               </select>
             </JogaCard>
 
-            {myStats && duelTarget && (
-              <CommunityDuel playerA={myStats} playerB={duelTarget} />
+            {duelTarget && (
+              <CommunityDuel
+                playerA={
+                  myStats ?? {
+                    userId: userId ?? "",
+                    name: profile.displayName || "Tu",
+                    goals: 0,
+                    assists: 0,
+                    matches: 0,
+                    mvpCount: 0,
+                    ratingSum: 0,
+                    ratingCount: 0,
+                    avgRating: 0,
+                  }
+                }
+                playerB={duelTarget}
+              />
             )}
 
             {rivalries.length > 0 && (
@@ -426,16 +472,22 @@ export default function ComunidadePage() {
             {members.length === 0 ? (
               <p className="text-white/40 text-sm text-center py-8">Sem membros listados.</p>
             ) : (
-              members.map((m) => (
-                <JogaCard key={m.userId} variant="arena">
-                  <PlayerMiniCard
-                    name={m.displayName}
-                    position={m.role === "admin" ? "ADM" : "MEM"}
-                    overall={0}
-                    subtitle={m.role === "admin" ? "Administrador" : "Membro"}
-                  />
-                </JogaCard>
-              ))
+              members.map((m) => {
+                const profile = memberProfiles.get(m.userId);
+                const photoSrc = imageDisplaySrc(profile?.photoUrl);
+                return (
+                  <JogaCard key={m.userId} variant="arena">
+                    <PlayerMiniCard
+                      name={profile?.displayName || m.displayName}
+                      position={profile?.position || (m.role === "admin" ? "ADM" : "MEM")}
+                      overall={profile?.overall ?? 50}
+                      photoUrl={photoSrc}
+                      variant="dark"
+                      subtitle={m.role === "admin" ? "Administrador" : "Membro"}
+                    />
+                  </JogaCard>
+                );
+              })
             )}
           </div>
         )}

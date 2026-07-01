@@ -532,11 +532,14 @@ export async function deleteCommunity(communityId: string): Promise<void> {
   await batch.commit();
 }
 
-/** Partidas disponíveis (Firestore + cache local) — só abertas para jogar/entrar */
+function isOpenPublicMatch(m: MatchListing): boolean {
+  if (m.communityId) return false;
+  return !m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number]);
+}
+
+/** Partidas públicas (Firestore + cache local) — exclui peladas de comunidade */
 export async function loadAvailableMatches(limitCount = 10): Promise<MatchListing[]> {
-  const localCreated = readLocalMatchListings().filter(
-    (m) => !m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number]),
-  );
+  const localCreated = readLocalMatchListings().filter(isOpenPublicMatch);
 
   if (!isFirebaseConfigured()) {
     return localCreated.slice(0, limitCount);
@@ -547,6 +550,46 @@ export async function loadAvailableMatches(limitCount = 10): Promise<MatchListin
       collection(db, "matches"),
       where("status", "in", [...OPEN_MATCH_STATUSES]),
       orderBy("createdAt", "desc"),
+      limit(limitCount * 3),
+    );
+    const snap = await getDocs(q);
+
+    const remote = snap.docs
+      .map((d) => mapMatchDoc(d.id, d.data()))
+      .filter(isOpenPublicMatch);
+
+    const merged = [
+      ...localCreated,
+      ...remote.filter((m) => !localCreated.some((l) => l.id === m.id)),
+    ];
+    return merged.slice(0, limitCount);
+  } catch (err) {
+    console.warn("[communityRepository] loadAvailableMatches:", err);
+    return localCreated.slice(0, limitCount);
+  }
+}
+
+/** Partidas abertas de uma comunidade */
+export async function loadCommunityMatches(
+  communityId: string,
+  limitCount = 20,
+): Promise<MatchListing[]> {
+  const localCreated = readLocalMatchListings().filter(
+    (m) =>
+      m.communityId === communityId &&
+      (!m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number])),
+  );
+
+  if (!isFirebaseConfigured()) {
+    return localCreated.slice(0, limitCount);
+  }
+
+  try {
+    const q = query(
+      collection(db, "matches"),
+      where("communityId", "==", communityId),
+      where("status", "in", [...OPEN_MATCH_STATUSES]),
+      orderBy("savedAt", "desc"),
       limit(limitCount),
     );
     const snap = await getDocs(q);
@@ -559,7 +602,7 @@ export async function loadAvailableMatches(limitCount = 10): Promise<MatchListin
     ];
     return merged.slice(0, limitCount);
   } catch (err) {
-    console.warn("[communityRepository] loadAvailableMatches:", err);
+    console.warn("[communityRepository] loadCommunityMatches:", err);
     return localCreated.slice(0, limitCount);
   }
 }

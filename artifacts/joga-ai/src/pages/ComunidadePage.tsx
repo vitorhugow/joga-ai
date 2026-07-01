@@ -8,6 +8,7 @@ import {
   loadCommunity,
   loadCommunityMatches,
   loadCommunityMembers,
+  syncCommunityMemberCount,
   requestToJoin,
   joinCommunityPublic,
   leaveCommunity,
@@ -87,8 +88,14 @@ export default function ComunidadePage() {
     if (!id || !community) return;
     const hasMemberAccess = community.isMember || community.adminId === userId;
     if (!hasMemberAccess) return;
-    loadCommunityMembers(id).then(setMembers);
-  }, [id, community?.isMember, community?.adminId, userId]);
+    void loadCommunityMembers(id).then(async (list) => {
+      setMembers(list);
+      if (list.length !== community.memberCount) {
+        const synced = await syncCommunityMemberCount(id);
+        setCommunity((c) => (c ? { ...c, memberCount: synced } : c));
+      }
+    });
+  }, [id, community?.isMember, community?.adminId, community?.memberCount, userId]);
 
   useEffect(() => {
     if (!members.length) {
@@ -133,6 +140,7 @@ export default function ComunidadePage() {
   const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
   const hasAccess = isMember || isAdmin;
   const coverSrc = imageDisplaySrc(community.coverImage);
+  const displayMemberCount = members.length > 0 ? members.length : community.memberCount;
 
   async function handleRequestJoin() {
     if (!requireLinked({ mode: "register", title: "Cria conta para entrar na comunidade" })) {
@@ -230,7 +238,7 @@ export default function ComunidadePage() {
             </div>
             <div className="flex items-center gap-1 text-white/80 text-xs">
               <Users className="w-3 h-3" />
-              <span>{community.memberCount} membros</span>
+              <span>{displayMemberCount} membros</span>
             </div>
             <span className="bg-white/20 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
               {gameTypeLabel[community.gameType] || community.gameType}
@@ -253,7 +261,9 @@ export default function ComunidadePage() {
         )}
 
         {isAdmin && isMember && (
-          <p className="text-emerald-400 text-xs font-semibold text-center">És o administrador desta comunidade</p>
+          <p className="text-emerald-400 text-xs font-semibold text-center mt-5 pt-1">
+            És o administrador desta comunidade
+          </p>
         )}
 
         {/* Pré-visualização para não-membros */}
@@ -269,7 +279,7 @@ export default function ComunidadePage() {
             <div className="flex gap-4 mt-4 text-sm text-white/55">
               <span className="flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-emerald-400" />
-                {community.memberCount} membros
+                {displayMemberCount} membros
               </span>
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-emerald-400" />
@@ -478,7 +488,7 @@ export default function ComunidadePage() {
                 const profile = memberProfiles.get(m.userId);
                 const photoSrc = imageDisplaySrc(profile?.photoUrl);
                 return (
-                  <Link key={m.userId} href={`/jogador/${m.userId}?from=${encodeURIComponent(`/comunidades/${id}`)}`}>
+                  <Link key={m.userId} href={`/perfil/${m.userId}?from=${encodeURIComponent(`/comunidades/${id}`)}`}>
                     <JogaCard variant="arena" className="joga-tap">
                       <PlayerMiniCard
                         name={profile?.displayName || m.displayName}

@@ -51,6 +51,10 @@ export function ProfileSetupDialog({
   const [position, setPosition] = useState("AVA");
   const [shirtNumber, setShirtNumber] = useState("10");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
+  const [instagram, setInstagram] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [showInstagramPublic, setShowInstagramPublic] = useState(false);
+  const [showWhatsappPublic, setShowWhatsappPublic] = useState(false);
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,8 +72,22 @@ export function ProfileSetupDialog({
     setPosition(profile?.position ?? "AVA");
     setShirtNumber(String(profile?.shirtNumber ?? 10));
     setPhotoUrl(profile?.photoUrl);
+    setInstagram(profile?.instagram ? `@${profile.instagram.replace(/^@/, "")}` : "");
+    setWhatsapp(profile?.whatsapp ?? "");
+    setShowInstagramPublic(Boolean(profile?.showInstagramPublic));
+    setShowWhatsappPublic(Boolean(profile?.showWhatsappPublic));
     setError("");
-  }, [open, profile?.displayName, profile?.position, profile?.shirtNumber, profile?.photoUrl]);
+  }, [
+    open,
+    profile?.displayName,
+    profile?.position,
+    profile?.shirtNumber,
+    profile?.photoUrl,
+    profile?.instagram,
+    profile?.whatsapp,
+    profile?.showInstagramPublic,
+    profile?.showWhatsappPublic,
+  ]);
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -120,10 +138,19 @@ export function ProfileSetupDialog({
         photoUrl,
       };
 
+      const socialInput = isEditing
+        ? {
+            instagram,
+            whatsapp,
+            showInstagramPublic,
+            showWhatsappPublic,
+          }
+        : undefined;
+
       const saveTask = isEditing
         ? updateUserProfile(
             userId,
-            { displayName: name, shirtNumber: num, photoUrl },
+            { displayName: name, shirtNumber: num, photoUrl, ...socialInput },
             !isLinked,
           )
         : completeUserProfile(userId, input, !isLinked);
@@ -320,6 +347,60 @@ export function ProfileSetupDialog({
               Guardado no perfil; a carta ainda não mostra o número visualmente.
             </p>
           </div>
+
+          {isEditing && (
+            <div className="space-y-3 pt-1 border-t border-white/8">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                Redes sociais (opcional)
+              </p>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                  Instagram
+                </label>
+                <input
+                  value={instagram}
+                  onChange={(e) => setInstagram(e.target.value)}
+                  placeholder="@utilizador ou link"
+                  className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50"
+                  data-testid="input-setup-instagram"
+                />
+                <label className="mt-2 flex items-center gap-2 text-white/55 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showInstagramPublic}
+                    onChange={(e) => setShowInstagramPublic(e.target.checked)}
+                    className="accent-emerald-500"
+                    data-testid="checkbox-instagram-public"
+                  />
+                  Mostrar no perfil público
+                </label>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                  WhatsApp
+                </label>
+                <input
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  placeholder="+351 912 345 678 ou wa.me/..."
+                  className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50"
+                  data-testid="input-setup-whatsapp"
+                />
+                <label className="mt-2 flex items-center gap-2 text-white/55 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showWhatsappPublic}
+                    onChange={(e) => setShowWhatsappPublic(e.target.checked)}
+                    className="accent-emerald-500"
+                    data-testid="checkbox-whatsapp-public"
+                  />
+                  Mostrar no perfil público
+                </label>
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-red-400 text-sm">{error}</p>}
 

@@ -419,6 +419,22 @@ export async function loadCommunityMembers(communityId: string): Promise<Communi
   }
 }
 
+/** Corrige memberCount no documento com base na subcoleção members */
+export async function syncCommunityMemberCount(communityId: string): Promise<number> {
+  const members = await loadCommunityMembers(communityId);
+  const count = Math.max(1, members.length);
+
+  if (isFirebaseConfigured()) {
+    try {
+      await updateDoc(doc(db, "communities", communityId), { memberCount: count });
+    } catch (err) {
+      console.warn("[communityRepository] syncCommunityMemberCount:", err);
+    }
+  }
+
+  return count;
+}
+
 export type UpdateCommunityInput = {
   name?: string;
   city?: string;

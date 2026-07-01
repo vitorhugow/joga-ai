@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Share2, TrendingUp, ChevronRight, Shield, LogOut, Link2 } from "lucide-react";
+import { Share2, TrendingUp, ChevronRight, ChevronLeft, Shield, LogOut, Link2 } from "lucide-react";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
-import { Link } from "wouter";
+import { Link, useRoute } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
-import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas } from "@/lib/userRepository";
+import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
 import { loadUserMatchHistory, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
@@ -12,6 +12,7 @@ import { useUserId, useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
+import { ProfileSocialLinks } from "@/components/profile/ProfileSocialLinks";
 import { toast } from "@/hooks/use-toast";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { badgesFromIds } from "@/lib/badgeCatalog";
@@ -136,10 +137,39 @@ function MiniEpoca({ card }: { card: PastCardItem }) {
 }
 
 export default function Perfil() {
-  const { isLinked, displayName, loading: authLoading, logout } = useAuth();
+  const { isLinked, displayName, loading: authLoading, logout, userId: authUserId } = useAuth();
   const { openAuth } = useAuthGate();
   const userId = useUserId();
-  const { profile, refresh } = useUserProfile();
+  const [, perfilParams] = useRoute("/perfil/:viewId");
+  const [, jogadorParams] = useRoute("/jogador/:id");
+  const viewUserId =
+    jogadorParams?.id ??
+    (perfilParams?.viewId && perfilParams.viewId !== "evolucao" ? perfilParams.viewId : undefined);
+  const isViewingOther = Boolean(viewUserId && viewUserId !== userId);
+  const backHref =
+    new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("from") ||
+    "/comunidades";
+
+  const { profile, refresh, loading: ownProfileLoading } = useUserProfile();
+  const [viewedProfile, setViewedProfile] = useState<UserProfile | null>(null);
+  const [viewLoading, setViewLoading] = useState(Boolean(viewUserId));
+
+  useEffect(() => {
+    if (!viewUserId) {
+      setViewedProfile(null);
+      setViewLoading(false);
+      return;
+    }
+    setViewLoading(true);
+    void loadUserProfile(viewUserId, createIncompleteSeedProfile(viewUserId, false), {
+      preferRemote: true,
+    })
+      .then(setViewedProfile)
+      .finally(() => setViewLoading(false));
+  }, [viewUserId]);
+
+  const activeProfile = (isViewingOther ? viewedProfile : profile) ?? profile;
+  const profileLoading = isViewingOther ? viewLoading : ownProfileLoading;
   const [showSetup, setShowSetup] = useState(false);
   const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");
   const [isCardExpanded, setIsCardExpanded] = useState(false);
@@ -148,15 +178,15 @@ export default function Perfil() {
   const cardExportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || isViewingOther) return;
     loadMyCommunities(userId).then(setMyCommunities);
     loadUserMatchHistory(userId).then(setMatchHistory);
-  }, [userId]);
+  }, [userId, isViewingOther]);
 
-  const player = profileToPlayerCard(profile);
+  const player = profileToPlayerCard(activeProfile);
 
   const overall = calculateOverall(player.attributes);
-  const attrDeltas = getLastMatchAttributeDeltas(profile, matchHistory[0]?.matchId);
+  const attrDeltas = isViewingOther ? undefined : getLastMatchAttributeDeltas(activeProfile, matchHistory[0]?.matchId);
   const overallDelta = getOverallDeltaFromDeltas(player.attributes, attrDeltas);
 
   const ATTR_LABELS: { key: keyof PlayerAttributes; label: string }[] = [
@@ -174,8 +204,8 @@ export default function Perfil() {
     delta: attrDeltas?.[key],
   }));
 
-  const badges: BadgeItem[] = badgesFromIds(profile.badges ?? []);
-  const pastCards: PastCardItem[] = profile.profileComplete
+  const badges: BadgeItem[] = badgesFromIds(activeProfile.badges ?? []);
+  const pastCards: PastCardItem[] = activeProfile.profileComplete
     ? [{ season: "Atual", overall, position: player.position, current: true }]
     : [];
 
@@ -210,8 +240,28 @@ export default function Perfil() {
     }
   }
 
+  if (isViewingOther && viewLoading) {
+    return (
+      <JogaPage theme="dark" className="py-10 text-center">
+        <p className="text-white/50">A carregar perfil…</p>
+      </JogaPage>
+    );
+  }
+
+  if (isViewingOther && !viewedProfile) {
+    return (
+      <JogaPage theme="dark" className="py-10 text-center px-4">
+        <p className="text-white/50">Perfil não encontrado.</p>
+        <Link href={backHref} className="text-emerald-400 text-sm mt-4 inline-block">
+          Voltar
+        </Link>
+      </JogaPage>
+    );
+  }
+
   return (
     <JogaPage theme="dark" padded={false} className="pb-28">
+      {!isViewingOther && (
       <ProfileSetupDialog
         open={showSetup}
         onOpenChange={setShowSetup}
@@ -222,8 +272,18 @@ export default function Perfil() {
           void refresh();
         }}
       />
+      )}
 
-      {!authLoading && !isLinked && !profile.profileComplete && (
+      {isViewingOther && (
+        <div className="px-4 pt-4">
+          <Link href={backHref} className="joga-tap inline-flex items-center gap-1 text-white/50 text-sm">
+            <ChevronLeft className="w-4 h-4" />
+            Voltar
+          </Link>
+        </div>
+      )}
+
+      {!isViewingOther && !authLoading && !isLinked && !activeProfile.profileComplete && (
         <div className="px-4 pt-4">
           <JogaCard
             variant="arena"
@@ -260,7 +320,7 @@ export default function Perfil() {
         </div>
       )}
 
-      {!authLoading && !isLinked && profile.profileComplete && (
+      {!isViewingOther && !authLoading && !isLinked && activeProfile.profileComplete && (
         <div className="px-4 pt-4">
           <JogaCard
             variant="arena"
@@ -291,7 +351,7 @@ export default function Perfil() {
         </div>
       )}
 
-      {!authLoading && isLinked && (
+      {!isViewingOther && !authLoading && isLinked && (
         <div className="px-4 pt-4 flex items-center justify-between gap-3">
           <p className="text-white/45 text-sm truncate">
             Sessão: <span className="text-white/70 font-medium">{displayName || "Conta ligada"}</span>
@@ -317,8 +377,9 @@ export default function Perfil() {
         <div className="relative mx-auto w-full" style={{ maxWidth: 760 }}>
           <div className="relative flex items-center justify-between px-4 pt-4 pb-0 sm:px-5 sm:pt-5">
             <h1 className="font-display font-black text-xl tracking-tight text-white" data-testid="header-title">
-              O Meu Perfil
+              {isViewingOther ? `Perfil de ${player.name.split(" ")[0]}` : "O Meu Perfil"}
             </h1>
+            {!isViewingOther && (
             <div className="flex items-center gap-2">
               <JogaButton
                 variant="ghost"
@@ -350,6 +411,7 @@ export default function Perfil() {
                 Partilhar
               </JogaButton>
             </div>
+            )}
           </div>
 
           <div className="relative flex items-start justify-center gap-3 px-3 pt-2 pb-6 sm:gap-6 sm:px-4 sm:pt-3 sm:pb-7">
@@ -392,7 +454,9 @@ export default function Perfil() {
             </button>
 
             <JogaCard variant="arena" className="relative z-10 flex-1 min-w-0 max-w-[240px] bg-white/6! border-white/10! backdrop-blur-md">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] mb-1 text-emerald-300/80">O Meu Perfil</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] mb-1 text-emerald-300/80">
+                {isViewingOther ? "Jogador" : "O Meu Perfil"}
+              </p>
               <h2 className="font-display font-black uppercase leading-none tracking-tight text-xl text-white">
                 {player.name.split(" ")[0]}
               </h2>
@@ -458,6 +522,8 @@ export default function Perfil() {
           <StatTile icon="🎯" label="Assist." value={player.seasonStats.assists} accent="#60a5fa" />
           <StatTile icon="🏆" label="MVP"     value={player.seasonStats.mvp}     accent="#fbbf24" />
         </div>
+
+        <ProfileSocialLinks profile={activeProfile} />
 
         <JogaCard variant="arena" padding="none" className="overflow-hidden">
           <div className="flex gap-2 p-3 border-b border-white/8">
@@ -542,6 +608,7 @@ export default function Perfil() {
         </div>
         )}
 
+        {!isViewingOther && (
         <div>
           <h2 className="font-display font-black text-white text-lg mb-3">Peladas anteriores</h2>
           {matchHistory.length === 0 ? (
@@ -564,7 +631,9 @@ export default function Perfil() {
             </div>
           )}
         </div>
+        )}
 
+        {!isViewingOther && (
         <div>
           <h2 className="font-display font-black text-white text-lg mb-3">Comunidades</h2>
           {myCommunities.length === 0 ? (
@@ -587,10 +656,12 @@ export default function Perfil() {
           </div>
           )}
         </div>
+        )}
 
         {/* ════════════════════════════════════
             CTA — Ver Evolução
         ════════════════════════════════════ */}
+        {!isViewingOther && (
         <Link href="/perfil/evolucao" className="block">
           <JogaButton
             variant="primary"
@@ -603,6 +674,7 @@ export default function Perfil() {
             <ChevronRight className="w-5 h-5 text-white/50" />
           </JogaButton>
         </Link>
+        )}
 
       </div>
 

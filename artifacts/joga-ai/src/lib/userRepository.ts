@@ -68,8 +68,112 @@ export type UserProfile = {
   /** Partida que originou os lastAttributeDeltas */
   lastEvolutionMatchId?: string;
   badges?: string[];
+  /** Handle Instagram (sem @) */
+  instagram?: string;
+  /** Número WhatsApp (apenas dígitos, com indicativo) */
+  whatsapp?: string;
+  showInstagramPublic?: boolean;
+  showWhatsappPublic?: boolean;
   updatedAt?: string;
 };
+
+export type SocialLinksInput = {
+  instagram?: string;
+  whatsapp?: string;
+  showInstagramPublic?: boolean;
+  showWhatsappPublic?: boolean;
+};
+
+export type VisibleSocialLinks = {
+  instagram?: string;
+  whatsapp?: string;
+};
+
+/** Extrai handle Instagram de URL ou texto (@opcional). */
+export function sanitizeInstagramInput(input: string): string | undefined {
+  const trimmed = input.trim();
+  if (!trimmed) return undefined;
+
+  const urlMatch = trimmed.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
+  if (urlMatch?.[1]) return urlMatch[1].replace(/^@/, "").toLowerCase();
+
+  const handle = trimmed.replace(/^@/, "").replace(/\s/g, "");
+  return handle ? handle.toLowerCase() : undefined;
+}
+
+/** Normaliza número ou link wa.me para dígitos. */
+export function sanitizeWhatsappInput(input: string): string | undefined {
+  const trimmed = input.trim();
+  if (!trimmed) return undefined;
+
+  const waMatch = trimmed.match(/wa\.me\/(\d+)/i);
+  if (waMatch?.[1]) return waMatch[1];
+
+  const phoneMatch = trimmed.match(/phone=(\d+)/i);
+  if (phoneMatch?.[1]) return phoneMatch[1];
+
+  const digits = trimmed.replace(/\D/g, "");
+  return digits || undefined;
+}
+
+export function getInstagramUrl(handle?: string): string | undefined {
+  if (!handle) return undefined;
+  return `https://instagram.com/${handle.replace(/^@/, "")}`;
+}
+
+export function getWhatsappUrl(number?: string): string | undefined {
+  if (!number) return undefined;
+  return `https://wa.me/${number.replace(/\D/g, "")}`;
+}
+
+export function formatInstagramDisplay(handle: string): string {
+  return `@${handle.replace(/^@/, "")}`;
+}
+
+export function formatWhatsappDisplay(number: string): string {
+  const digits = number.replace(/\D/g, "");
+  if (digits.length <= 4) return digits;
+  return `+${digits}`;
+}
+
+export function getVisibleSocialLinks(profile: UserProfile): VisibleSocialLinks | null {
+  const links: VisibleSocialLinks = {};
+
+  if (profile.instagram && profile.showInstagramPublic) {
+    links.instagram = profile.instagram;
+  }
+  if (profile.whatsapp && profile.showWhatsappPublic) {
+    links.whatsapp = profile.whatsapp;
+  }
+
+  return links.instagram || links.whatsapp ? links : null;
+}
+
+function applySocialLinksPatch(
+  current: UserProfile,
+  patch: SocialLinksInput,
+): Pick<UserProfile, "instagram" | "whatsapp" | "showInstagramPublic" | "showWhatsappPublic"> {
+  const instagram =
+    patch.instagram !== undefined
+      ? sanitizeInstagramInput(patch.instagram)
+      : current.instagram;
+  const whatsapp =
+    patch.whatsapp !== undefined ? sanitizeWhatsappInput(patch.whatsapp) : current.whatsapp;
+
+  const showInstagramPublic = instagram
+    ? patch.showInstagramPublic ?? current.showInstagramPublic ?? false
+    : false;
+  const showWhatsappPublic = whatsapp
+    ? patch.showWhatsappPublic ?? current.showWhatsappPublic ?? false
+    : false;
+
+  return {
+    instagram,
+    whatsapp,
+    showInstagramPublic,
+    showWhatsappPublic,
+  };
+}
 
 const LOCAL_PROFILE_PREFIX = "joga-ai-user-profile-v2";
 const LEGACY_PROFILE_KEY = "joga-ai-user-profile-v1";
@@ -152,6 +256,10 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
       ? String(data.lastEvolutionMatchId)
       : undefined,
     badges: Array.isArray(data.badges) ? (data.badges as string[]) : undefined,
+    instagram: data.instagram ? sanitizeInstagramInput(String(data.instagram)) : undefined,
+    whatsapp: data.whatsapp ? sanitizeWhatsappInput(String(data.whatsapp)) : undefined,
+    showInstagramPublic: Boolean(data.showInstagramPublic),
+    showWhatsappPublic: Boolean(data.showWhatsappPublic),
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }
@@ -348,6 +456,10 @@ export type PublicPlayerProfile = PublicUserProfile & {
   attributes: PlayerAttributes;
   seasonStats: UserProfile["seasonStats"];
   badges?: string[];
+  instagram?: string;
+  whatsapp?: string;
+  showInstagramPublic?: boolean;
+  showWhatsappPublic?: boolean;
 };
 
 function mapPublicPlayerProfile(userId: string, data: Record<string, unknown>): PublicPlayerProfile {
@@ -369,6 +481,10 @@ function mapPublicPlayerProfile(userId: string, data: Record<string, unknown>): 
       mvp: 0,
     },
     badges: Array.isArray(data.badges) ? (data.badges as string[]) : undefined,
+    instagram: data.instagram ? sanitizeInstagramInput(String(data.instagram)) : undefined,
+    whatsapp: data.whatsapp ? sanitizeWhatsappInput(String(data.whatsapp)) : undefined,
+    showInstagramPublic: Boolean(data.showInstagramPublic),
+    showWhatsappPublic: Boolean(data.showWhatsappPublic),
   };
 }
 
@@ -485,7 +601,7 @@ export async function completeUserProfile(
 
 export async function updateUserProfile(
   userId: string,
-  patch: Partial<ProfileSetupInput & { title: string }>,
+  patch: Partial<ProfileSetupInput & { title: string } & SocialLinksInput>,
   isAnonymous = true,
 ): Promise<UserProfile> {
   const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
@@ -493,6 +609,8 @@ export async function updateUserProfile(
   const photoUrl = validatePhotoUrlForFirestore(
     patch.photoUrl !== undefined ? patch.photoUrl : current.photoUrl,
   );
+
+  const socialPatch = applySocialLinksPatch(current, patch);
 
   const updated: UserProfile = {
     ...current,
@@ -504,6 +622,7 @@ export async function updateUserProfile(
     attributes: current.attributes,
     profileComplete: true,
     isAnonymous,
+    ...socialPatch,
     updatedAt: new Date().toISOString(),
   };
 

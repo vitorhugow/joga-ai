@@ -1,10 +1,17 @@
-import { RATING_DRIBLE_MIN, RATING_RITMO_MIN } from "./cardUtils";
+import { RATING_DRIBLE_MIN } from "./cardUtils";
 
 export type EvolutionGain = {
   title: string;
   value: string;
   reason: string;
   type: "up" | "pending";
+};
+
+export type ComputePlayerGainsOptions = {
+  receivedRating?: number | null;
+  isTopScorer?: boolean;
+  hasVoted?: boolean;
+  participationApplied?: boolean;
 };
 
 export type MatchEvent = {
@@ -50,25 +57,40 @@ export function computeTopScorers(events: MatchEvent[]) {
   return sorted.filter((item) => item.goals === bestGoals);
 }
 
+export function isPlayerTopScorer(
+  topScorers: Array<{ name: string }>,
+  player: { id: string; name?: string },
+): boolean {
+  if (topScorers.length === 0) return false;
+  return topScorers.some(
+    (scorer) => scorer.name === player.name || scorer.name === player.id,
+  );
+}
+
 export function computePlayerGains(
   player: { id: string; name?: string; position?: string } | null | undefined,
   events: MatchEvent[],
-  receivedRating?: number | null,
+  options: ComputePlayerGainsOptions = {},
 ): EvolutionGain[] {
   if (!player) return [];
 
+  const { receivedRating, isTopScorer, hasVoted, participationApplied } = options;
   const playerEvents = events.filter((event) => event.playerId === player.id);
   const goals = playerEvents.filter((event) => event.type === "golo").length;
   const assists = playerEvents.filter((event) => event.type === "assistencia").length;
   const saves = playerEvents.filter((event) => event.type === "defesa").length;
+  const fouls = playerEvents.filter((event) => event.type === "falta").length;
+  const yellowCards = playerEvents.filter((event) => event.type === "cartao_amarelo").length;
   const isGoalkeeper = String(player.position || "").toUpperCase().includes("GR");
 
   const list: EvolutionGain[] = [
     {
       title: isGoalkeeper ? "Reflexos" : "Físico",
-      value: "+1",
-      reason: "Evolução aplicada no perfil",
-      type: "up",
+      value: participationApplied ? "+1" : "+1",
+      reason: participationApplied
+        ? "Por jogar a pelada"
+        : "Aplica quando a partida termina (estás no plantel)",
+      type: participationApplied ? "up" : "pending",
     },
   ];
 
@@ -76,8 +98,17 @@ export function computePlayerGains(
     list.push({
       title: isGoalkeeper ? "Saída" : "Finalização",
       value: `+${goals}`,
-      reason: "Evolução aplicada no perfil",
-      type: "up",
+      reason: "Golos nesta pelada",
+      type: hasVoted ? "up" : "pending",
+    });
+  }
+
+  if (isTopScorer) {
+    list.push({
+      title: isGoalkeeper ? "Saída (artilheiro)" : "Artilheiro",
+      value: "+1",
+      reason: "Mais golos da pelada",
+      type: hasVoted ? "up" : "pending",
     });
   }
 
@@ -85,8 +116,8 @@ export function computePlayerGains(
     list.push({
       title: "Passe",
       value: `+${assists}`,
-      reason: "Evolução aplicada no perfil",
-      type: "up",
+      reason: "Assistências nesta pelada",
+      type: hasVoted ? "up" : "pending",
     });
   }
 
@@ -94,28 +125,37 @@ export function computePlayerGains(
     list.push({
       title: "Defesa",
       value: `+${saves}`,
-      reason: "Evolução aplicada no perfil",
-      type: "up",
+      reason: "Defesas nesta pelada",
+      type: hasVoted ? "up" : "pending",
     });
   }
 
-  const hasRating = receivedRating != null && receivedRating > 0;
+  if (fouls > 0) {
+    list.push({
+      title: "Ritmo",
+      value: `-${fouls}`,
+      reason: `${fouls} falta(s) — −1 Ritmo cada`,
+      type: hasVoted ? "up" : "pending",
+    });
+  }
+
+  if (yellowCards > 0) {
+    list.push({
+      title: "Ritmo",
+      value: `-${yellowCards}`,
+      reason: `${yellowCards} cartão(ões) — −1 Ritmo cada`,
+      type: hasVoted ? "up" : "pending",
+    });
+  }
 
   list.push({
     title: "Ritmo",
-    value: hasRating
-      ? receivedRating >= RATING_RITMO_MIN
-        ? "+1"
-        : "—"
-      : "Com nota",
-    reason: hasRating
-      ? receivedRating >= RATING_RITMO_MIN
-        ? `Nota ${receivedRating.toFixed(1)} ≥ ${RATING_RITMO_MIN}`
-        : `Precisas de nota ≥ ${RATING_RITMO_MIN}`
-      : `Sobe +1 se a nota final for ≥ ${RATING_RITMO_MIN}`,
-    type: hasRating && receivedRating >= RATING_RITMO_MIN ? "up" : "pending",
+    value: hasVoted ? "+1" : "Por votar",
+    reason: hasVoted ? "Votaste nos colegas" : "Sobe +1 ao concluir a votação",
+    type: hasVoted ? "up" : "pending",
   });
 
+  const hasRating = receivedRating != null && receivedRating > 0;
   list.push({
     title: "Drible",
     value: hasRating

@@ -53,6 +53,8 @@ export type UserMatchHistoryEntry = {
   communityId?: string;
   ratingPending?: boolean;
   ratingReleased?: boolean;
+  participationApplied?: boolean;
+  voteEvolutionApplied?: boolean;
 };
 
 const LOCAL_HISTORY_PREFIX = "joga-ai-match-history-v1";
@@ -97,6 +99,39 @@ export async function loadMatchResult(matchId: string): Promise<MatchResult | nu
   } catch {
     return null;
   }
+}
+
+export async function getUserMatchHistoryEntry(
+  userId: string,
+  matchId: string,
+): Promise<UserMatchHistoryEntry | null> {
+  const local = readLocalHistory(userId).find((e) => e.matchId === matchId);
+  if (local) return local;
+
+  if (!isFirebaseConfigured() || !userId) return null;
+
+  try {
+    const snap = await getDoc(doc(db, "users", userId, "matchHistory", matchId));
+    return snap.exists() ? (snap.data() as UserMatchHistoryEntry) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function hasParticipationApplied(
+  userId: string,
+  matchId: string,
+): Promise<boolean> {
+  const entry = await getUserMatchHistoryEntry(userId, matchId);
+  return Boolean(entry?.participationApplied);
+}
+
+export async function hasVoteEvolutionApplied(
+  userId: string,
+  matchId: string,
+): Promise<boolean> {
+  const entry = await getUserMatchHistoryEntry(userId, matchId);
+  return Boolean(entry?.voteEvolutionApplied);
 }
 
 export async function hasUserMatchHistoryEntry(

@@ -27,6 +27,7 @@ import {
 import type { LivePlayer, LiveTeamKey } from "./preMatchStorage";
 import { savePreMatch, loadPreMatch, type SavedPreMatch } from "./preMatchStorage";
 import type { MatchListing } from "./communityRepository";
+import { applyParticipationForMatchRoster } from "./userRepository";
 
 export type CreateMatchInput = {
   title: string;
@@ -347,8 +348,23 @@ export async function saveMatchToFirestore(
   matchId: string,
   data: SavedPostMatch,
 ): Promise<void> {
+  const prev = loadPostMatch(matchId);
+  const enteringPostMatch =
+    data.status === "aguardando_auditoria" &&
+    prev?.status !== "aguardando_auditoria";
+
   // Escreve em localStorage sempre (cache optimista)
   savePostMatch(data);
+
+  if (enteringPostMatch && data.players?.length) {
+    void applyParticipationForMatchRoster({
+      matchId,
+      title: data.title,
+      communityId: data.communityId,
+      organizerId: data.organizerId,
+      players: data.players,
+    }).catch((err) => console.warn("[matchRepository] participation:", err));
+  }
 
   if (!isFirebaseConfigured()) return;
 

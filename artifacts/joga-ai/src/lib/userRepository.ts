@@ -14,7 +14,13 @@ import {
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import type { PlayerAttributes } from "./cardUtils";
-import { applyEventGainsToCard, calculateOverall, generateInitialAttributes, applyRatingGainsToCard, computeRatingAttributeDeltas } from "./cardUtils";
+import { applyParticipationGainsToCard, applyRatingGainsToCard, applyVoteGainsToCard, calculateOverall, computeRatingAttributeDeltas, generateInitialAttributes } from "./cardUtils";
+import {
+  hasParticipationApplied,
+  saveUserMatchHistory,
+  type UserMatchHistoryEntry,
+} from "./matchHistoryRepository";
+import { collectLinkedPlayerUserIds } from "./evolutionUtils";
 
 export const PROFILE_UPDATED_EVENT = "joga-ai-profile-updated";
 
@@ -435,9 +441,13 @@ export type MatchResultStats = {
   goals: number;
   assists: number;
   saves: number;
+  fouls?: number;
+  yellowCards?: number;
   mvp: boolean;
   rating?: number;
   position?: string;
+  voted?: boolean;
+  isTopScorer?: boolean;
   /** Se true, não actualiza média/nota — fica para liberação após 24h */
   deferRating?: boolean;
 };
@@ -454,6 +464,94 @@ function computeAttributeDeltas(
   return deltas;
 }
 
+/** +1 Físico para todos os jogadores ligados no plantel quando a partida termina. */
+export async function applyParticipationForMatchRoster(input: {
+  matchId: string;
+  title?: string;
+  communityId?: string;
+  organizerId?: string;
+  players: Array<{ id: string; userId?: string }>;
+}): Promise<void> {
+  const userIds = collectLinkedPlayerUserIds(input.players, input.organizerId);
+  await Promise.all(
+    userIds.map((userId) =>
+      applyParticipationToProfile(userId, {
+        matchId: input.matchId,
+        title: input.title ?? `Pelada ${input.matchId}`,
+        communityId: input.communityId,
+      }),
+    ),
+  );
+}
+
+export async function applyParticipationToProfile(
+  userId: string,
+  input: {
+    matchId: string;
+    title: string;
+    communityId?: string;
+  },
+): Promise<void> {
+  if (await hasParticipationApplied(userId, input.matchId)) return;
+
+  const local =
+    readLocalProfile(userId) ??
+    (isFirebaseConfigured()
+      ? await loadUserProfile(userId, undefined, { preferRemote: true })
+      : null);
+  if (!local) return;
+
+  const beforeAttrs = local.attributes;
+  const updatedAttrs = applyParticipationGainsToCard(beforeAttrs);
+  const participationDeltas = computeAttributeDeltas(beforeAttrs, updatedAttrs);
+
+  const updatedStats = {
+    ...local.seasonStats,
+    matches: local.seasonStats.matches + 1,
+  };
+
+  const updated: UserProfile = {
+    ...local,
+    attributes: updatedAttrs,
+    seasonStats: updatedStats,
+    lastAttributeDeltas: participationDeltas,
+    lastEvolutionMatchId: input.matchId,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (isFirebaseConfigured() && !local.isAnonymous) {
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        attributes: updatedAttrs,
+        seasonStats: updatedStats,
+        lastAttributeDeltas: participationDeltas,
+        lastEvolutionMatchId: input.matchId,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn("[userRepository] applyParticipationToProfile:", err);
+    }
+  }
+
+  writeLocalProfile(updated);
+  notifyProfileUpdated(userId);
+
+  const historyEntry: UserMatchHistoryEntry = {
+    matchId: input.matchId,
+    title: input.title,
+    date: new Date().toISOString(),
+    rating: 0,
+    goals: 0,
+    assists: 0,
+    communityId: input.communityId,
+    participationApplied: true,
+    voteEvolutionApplied: false,
+    ratingPending: true,
+    ratingReleased: false,
+  };
+  await saveUserMatchHistory(userId, historyEntry);
+}
+
 export async function applyMatchResultToProfile(
   userId: string,
   stats: MatchResultStats,
@@ -465,14 +563,26 @@ export async function applyMatchResultToProfile(
       : null);
   if (!local) return;
 
+  const participated = stats.matchId
+    ? await hasParticipationApplied(userId, stats.matchId)
+    : false;
+
   const beforeAttrs = local.attributes;
-  const updatedAttrs = applyEventGainsToCard(beforeAttrs, {
+  const updatedAttrs = applyVoteGainsToCard(beforeAttrs, {
     goals: stats.goals,
     assists: stats.assists,
     saves: stats.saves,
+    fouls: stats.fouls,
+    yellowCards: stats.yellowCards,
     position: stats.position ?? local.position,
+    voted: stats.voted ?? true,
+    isTopScorer: stats.isTopScorer,
   });
-  const attributeDeltas = computeAttributeDeltas(beforeAttrs, updatedAttrs);
+  const voteDeltas = computeAttributeDeltas(beforeAttrs, updatedAttrs);
+  const attributeDeltas = {
+    ...(local.lastEvolutionMatchId === stats.matchId ? local.lastAttributeDeltas : {}),
+    ...voteDeltas,
+  };
 
   const prevMatches = local.seasonStats.matches;
   const rating = stats.deferRating ? 0 : (stats.rating ?? 0);
@@ -486,7 +596,7 @@ export async function applyMatchResultToProfile(
 
   const updatedStats = {
     ...local.seasonStats,
-    matches: local.seasonStats.matches + 1,
+    matches: participated ? local.seasonStats.matches : local.seasonStats.matches + 1,
     goals: local.seasonStats.goals + stats.goals,
     assists: local.seasonStats.assists + stats.assists,
     saves: local.seasonStats.saves + stats.saves,
@@ -531,7 +641,7 @@ export async function applyMatchResultToProfile(
   notifyProfileUpdated(userId);
 }
 
-/** Aplica nota média + ganhos de Ritmo/Drible conforme limiares (≥7 / ≥8). */
+/** Aplica nota média + ganho de Drible (≥8) quando a nota é revelada. */
 export async function applyDelayedRatingToProfile(
   userId: string,
   rating: number,

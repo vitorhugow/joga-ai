@@ -131,18 +131,20 @@ export type MatchEventGains = {
   goals: number;
   assists: number;
   saves: number;
+  fouls?: number;
+  yellowCards?: number;
   position?: string;
+  voted?: boolean;
+  isTopScorer?: boolean;
 };
 
-/** Nota média dos colegas → evolução de Ritmo (PAC) e Drible (DRI) */
-export const RATING_RITMO_MIN = 7;
+/** Nota média dos colegas → Drible (DRI) */
 export const RATING_DRIBLE_MIN = 8;
 
 export function computeRatingAttributeDeltas(
   rating: number,
 ): Partial<PlayerAttributes> {
   const deltas: Partial<PlayerAttributes> = {};
-  if (rating >= RATING_RITMO_MIN) deltas.ritmo = 1;
   if (rating >= RATING_DRIBLE_MIN) deltas.drible = 1;
   return deltas;
 }
@@ -154,32 +156,55 @@ export function applyRatingGainsToCard(
   const deltas = computeRatingAttributeDeltas(rating);
   return {
     ...currentAttrs,
-    ritmo: clampStat(currentAttrs.ritmo + (deltas.ritmo ?? 0)),
     drible: clampStat(currentAttrs.drible + (deltas.drible ?? 0)),
   };
 }
 
-/** Ganhos por desempenho na partida — alinhado com computePlayerGains. OVR sobe via média. */
+/** +1 Físico por jogar a pelada */
+export function applyParticipationGainsToCard(
+  currentAttrs: PlayerAttributes,
+): PlayerAttributes {
+  return {
+    ...currentAttrs,
+    fisico: clampStat(currentAttrs.fisico + 1),
+  };
+}
+
+/** Ganhos na votação: eventos, votar (+Ritmo), faltas/cartões (−Ritmo), artilheiro */
+export function applyVoteGainsToCard(
+  currentAttrs: PlayerAttributes,
+  events: MatchEventGains,
+): PlayerAttributes {
+  const fouls = events.fouls ?? 0;
+  const yellowCards = events.yellowCards ?? 0;
+
+  let ritmoDelta = 0;
+  if (events.voted) ritmoDelta += 1;
+  ritmoDelta -= fouls + yellowCards;
+
+  let finalizacaoGain = events.goals > 0 ? events.goals : 0;
+  const defesaGain = events.saves;
+
+  if (events.isTopScorer) {
+    finalizacaoGain += 1;
+  }
+
+  return {
+    ritmo: clampStat(currentAttrs.ritmo + ritmoDelta),
+    finalizacao: clampStat(currentAttrs.finalizacao + finalizacaoGain),
+    passe: clampStat(currentAttrs.passe + events.assists),
+    defesa: clampStat(currentAttrs.defesa + defesaGain),
+    drible: clampStat(currentAttrs.drible),
+    fisico: clampStat(currentAttrs.fisico),
+  };
+}
+
+/** @deprecated Use applyVoteGainsToCard */
 export function applyEventGainsToCard(
   currentAttrs: PlayerAttributes,
   events: MatchEventGains,
 ): PlayerAttributes {
-  const isGoalkeeper = String(events.position || "").toUpperCase().includes("GR");
-
-  return {
-    ritmo: clampStat(currentAttrs.ritmo),
-    finalizacao: clampStat(
-      currentAttrs.finalizacao + (events.goals > 0 && !isGoalkeeper ? events.goals : 0),
-    ),
-    passe: clampStat(currentAttrs.passe + events.assists),
-    defesa: clampStat(
-      currentAttrs.defesa +
-        events.saves +
-        (isGoalkeeper && events.goals > 0 ? events.goals : 0),
-    ),
-    drible: clampStat(currentAttrs.drible),
-    fisico: clampStat(currentAttrs.fisico + 1),
-  };
+  return applyVoteGainsToCard(currentAttrs, { ...events, voted: true });
 }
 
 /** @deprecated Use applyEventGainsToCard — mantido para compatibilidade interna */
@@ -187,9 +212,10 @@ export function applyMatchStatsToCard(
   currentAttrs: PlayerAttributes,
   matchPerformance: number,
 ): PlayerAttributes {
-  return applyEventGainsToCard(currentAttrs, {
+  return applyVoteGainsToCard(currentAttrs, {
     goals: matchPerformance > 8 ? 1 : 0,
     assists: 0,
     saves: 0,
+    voted: true,
   });
 }

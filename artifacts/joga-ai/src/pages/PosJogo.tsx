@@ -28,7 +28,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   saveMatchResult,
   saveUserMatchHistory,
-  hasUserMatchHistoryEntry,
+  hasVoteEvolutionApplied,
+  hasParticipationApplied,
   loadMatchResult,
 } from "@/lib/matchHistoryRepository";
 import { getVotes } from "@/lib/auditRepository";
@@ -43,7 +44,10 @@ import {
   computePlayerGains,
   computePlayerMatchStats,
   computeTopScorers,
+  computeRatingByPlayer,
+  averageRatingsForPlayer,
   collectLinkedPlayerUserIds,
+  isPlayerTopScorer,
   type EvolutionGain,
 } from "@/lib/evolutionUtils";
 import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
@@ -225,6 +229,11 @@ export default function PosJogo() {
   }, [matchId]);
 
   useEffect(() => {
+    if (!data || !authUserId) return;
+    void hasParticipationApplied(authUserId, data.matchId).then(setParticipationApplied);
+  }, [data?.matchId, authUserId]);
+
+  useEffect(() => {
     if (!authUserId) return;
     setData((current) => (current ? applyAuthToMatchData(current, authUserId) : current));
   }, [authUserId]);
@@ -250,6 +259,7 @@ export default function PosJogo() {
   const [voteRecords, setVoteRecords] = useState<MatchVoteRecord[]>([]);
   const [ratingsReleased, setRatingsReleased] = useState(false);
   const [finalizeBusy, setFinalizeBusy] = useState(false);
+  const [participationApplied, setParticipationApplied] = useState(false);
 
   const expiresAt = data?.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + 24 * 60 * 60 * 1000;
   const isExpired = isPostMatchExpired(data) || Date.now() > expiresAt;
@@ -257,6 +267,8 @@ export default function PosJogo() {
   const games: any[] = data?.miniGames || [];
 
   const allEvents = useMemo(() => collectAllEvents(games), [games]);
+  const topScorers = useMemo(() => computeTopScorers(allEvents), [allEvents]);
+  const hasVoted = hasUserVotedInSession(userId, matchId);
 
   const currentPlayer = useMemo(() => {
     return (
@@ -266,10 +278,33 @@ export default function PosJogo() {
     );
   }, [players, data]);
 
+  const receivedRating = useMemo(() => {
+    if (!ratingsReleased || !currentPlayer) return null;
+    const ratingByPlayer = computeRatingByPlayer(voteRecords);
+    const avg = averageRatingsForPlayer(ratingByPlayer, currentPlayer.id);
+    return avg > 0 ? avg : null;
+  }, [ratingsReleased, currentPlayer, voteRecords]);
+
   useEffect(() => {
     if (!gainsMode || !currentPlayer || displayGains) return;
-    setDisplayGains(computePlayerGains(currentPlayer, allEvents));
-  }, [gainsMode, currentPlayer, displayGains, allEvents]);
+    const isTopScorer = isPlayerTopScorer(topScorers, currentPlayer);
+    setDisplayGains(
+      computePlayerGains(currentPlayer, allEvents, {
+        isTopScorer,
+        hasVoted: true,
+        participationApplied,
+        receivedRating,
+      }),
+    );
+  }, [
+    gainsMode,
+    currentPlayer,
+    displayGains,
+    allEvents,
+    topScorers,
+    participationApplied,
+    receivedRating,
+  ]);
 
   // Registo de auditor e listeners em tempo real (Firestore + localStorage fallback)
   useEffect(() => {
@@ -322,16 +357,30 @@ export default function PosJogo() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, isExpired]);
 
-  const topScorers = useMemo(() => computeTopScorers(allEvents), [allEvents]);
-
-  const gains = useMemo(
-    () => displayGains ?? computePlayerGains(currentPlayer, allEvents),
-    [allEvents, currentPlayer, displayGains],
-  );
+  const gains = useMemo(() => {
+    const isTopScorer = isPlayerTopScorer(topScorers, currentPlayer ?? { id: "" });
+    return (
+      displayGains ??
+      computePlayerGains(currentPlayer, allEvents, {
+        isTopScorer,
+        hasVoted: hasVoted || gainsMode,
+        participationApplied,
+        receivedRating,
+      })
+    );
+  }, [
+    allEvents,
+    currentPlayer,
+    displayGains,
+    topScorers,
+    hasVoted,
+    gainsMode,
+    participationApplied,
+    receivedRating,
+  ]);
 
   const isAuditor = auditors.includes(userId);
   const hasConfirmed = confirmed.includes(userId);
-  const hasVoted = hasUserVotedInSession(userId, matchId);
   const auditClosed = isExpired || confirmed.length >= 3;
   const mustAuditBeforeVote = isAuditor && !hasConfirmed && !auditClosed;
   const isOrganizer = Boolean(data?.organizerId && userId === data.organizerId);
@@ -514,11 +563,16 @@ export default function PosJogo() {
 
     void (async () => {
       const stats = computePlayerMatchStats(currentPlayer.id, allEvents);
-      const gainsWithEvents = computePlayerGains(currentPlayer, allEvents);
+      const isTopScorer = isPlayerTopScorer(topScorers, currentPlayer);
+      const gainsWithEvents = computePlayerGains(currentPlayer, allEvents, {
+        isTopScorer,
+        hasVoted: true,
+        participationApplied: true,
+      });
       setDisplayGains(gainsWithEvents);
 
-      const alreadyApplied = await hasUserMatchHistoryEntry(userId, data.matchId);
-      if (!alreadyApplied) {
+      const alreadyVoted = await hasVoteEvolutionApplied(userId, data.matchId);
+      if (!alreadyVoted) {
         const record = buildEvolutionRecord({
           matchId,
           player: { id: currentPlayer.id, name: currentPlayer.name },
@@ -538,9 +592,13 @@ export default function PosJogo() {
           goals: stats.goals,
           assists: stats.assists,
           saves: stats.saves,
+          fouls: stats.fouls,
+          yellowCards: stats.cards,
           mvp: false,
           deferRating: true,
           position: currentPlayer.position,
+          voted: true,
+          isTopScorer,
         });
 
         await saveUserMatchHistory(userId, {
@@ -553,6 +611,8 @@ export default function PosJogo() {
           goals: stats.goals,
           assists: stats.assists,
           communityId: data.communityId,
+          participationApplied: true,
+          voteEvolutionApplied: true,
         });
       }
 

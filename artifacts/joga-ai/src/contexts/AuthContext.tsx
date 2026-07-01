@@ -15,7 +15,6 @@ import {
 import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
 import { processPendingRatings } from "@/lib/ratingsRelease";
 import { processPendingNotifications } from "@/lib/notificationsRepository";
-import { maybeRegisterFcmOnReturnVisit } from "@/lib/fcmUtils";
 import {
   claimGuestCard,
   parseGuestClaimParam,
@@ -103,7 +102,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await migrateLocalProfileIfNeeded(localUserIdRef.current, current.uid);
         void processPendingRatings(current.uid);
         void processPendingNotifications(current.uid);
-        void maybeRegisterFcmOnReturnVisit(current.uid);
 
         const pendingClaim = consumePendingGuestClaim();
         if (pendingClaim) {

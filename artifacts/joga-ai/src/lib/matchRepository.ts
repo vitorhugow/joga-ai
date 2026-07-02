@@ -143,7 +143,7 @@ export async function startMatchLive(
   if (!existing) return;
 
   const now = new Date().toISOString();
-  await saveMatchToFirestore(matchId, {
+  await saveMatchToFirestoreOrThrow(matchId, {
     ...existing,
     status: "ao_vivo",
     organizerId: organizerId || existing.organizerId,
@@ -563,17 +563,36 @@ export async function saveMatchRoster(
   await saveMatchToFirestore(matchId, updated);
 }
 
-/** Salva ou actualiza o documento `matches/{matchId}` */
-export async function saveMatchToFirestore(
-  matchId: string,
-  data: SavedPostMatch,
-): Promise<void> {
+function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
+  return {
+    matchId: data.matchId,
+    status: data.status,
+    gameMode: data.gameMode,
+    teamCount: data.teamCount,
+    teamNames: data.teamNames,
+    players: data.players,
+    playerTeams: data.playerTeams,
+    assignments: data.assignments ?? {},
+    currentPlayerId: data.currentPlayerId,
+    miniGames: data.miniGames,
+    createdAt: data.createdAt,
+    expiresAt: data.expiresAt,
+    votedUserIds: data.votedUserIds ?? [],
+    waitlist: data.waitlist ?? [],
+    title: data.title,
+    communityId: data.communityId,
+    organizerId: data.organizerId,
+    savedAt: serverTimestamp(),
+  };
+}
+
+/** Aplica cache local + efeitos colaterais (participação, notificações, badges). */
+function applyLocalMatchUpdate(matchId: string, data: SavedPostMatch) {
   const prev = loadPostMatch(matchId);
   const enteringPostMatch =
     data.status === "aguardando_auditoria" &&
     prev?.status !== "aguardando_auditoria";
 
-  // Escreve em localStorage sempre (cache optimista)
   savePostMatch(data);
   syncLocalMatchListingStatus(matchId, data.status as MatchStatus);
 
@@ -594,37 +613,45 @@ export async function saveMatchToFirestore(
       })
       .catch((err) => console.warn("[matchRepository] participation:", err));
   }
+}
+
+/** Salva ou actualiza o documento `matches/{matchId}` (melhor esforço, não propaga erros). */
+export async function saveMatchToFirestore(
+  matchId: string,
+  data: SavedPostMatch,
+): Promise<void> {
+  applyLocalMatchUpdate(matchId, data);
 
   if (!isFirebaseConfigured()) return;
 
   try {
     const ref = doc(db, "matches", matchId);
-    const payload: PartialWithFieldValue<DocumentData> = {
-      matchId,
-      status: data.status,
-      gameMode: data.gameMode,
-      teamCount: data.teamCount,
-      teamNames: data.teamNames,
-      players: data.players,
-      playerTeams: data.playerTeams,
-      assignments: data.assignments ?? {},
-      currentPlayerId: data.currentPlayerId,
-      miniGames: data.miniGames,
-      createdAt: data.createdAt,
-      expiresAt: data.expiresAt,
-      votedUserIds: data.votedUserIds ?? [],
-      waitlist: data.waitlist ?? [],
-      title: data.title,
-      communityId: data.communityId,
-      organizerId: data.organizerId,
-      savedAt: serverTimestamp(),
-    };
-    await setDoc(ref, payload, { merge: true });
+    await setDoc(ref, buildMatchDocPayload(data), { merge: true });
     if (isListingRemovedStatus(data.status)) {
       removeMatchFromListings(matchId);
     }
   } catch (err) {
     console.warn("[matchRepository] saveMatchToFirestore:", err);
+  }
+}
+
+/**
+ * Igual a `saveMatchToFirestore`, mas propaga erros do Firestore (ex: permissão
+ * negada). Usa-se em transições críticas de estado (iniciar/terminar ao vivo)
+ * onde a UI precisa de saber se a escrita realmente foi aceite antes de navegar.
+ */
+export async function saveMatchToFirestoreOrThrow(
+  matchId: string,
+  data: SavedPostMatch,
+): Promise<void> {
+  applyLocalMatchUpdate(matchId, data);
+
+  if (!isFirebaseConfigured()) return;
+
+  const ref = doc(db, "matches", matchId);
+  await setDoc(ref, buildMatchDocPayload(data), { merge: true });
+  if (isListingRemovedStatus(data.status)) {
+    removeMatchFromListings(matchId);
   }
 }
 

@@ -72,6 +72,22 @@ service cloud.firestore {
           .hasOnly(['players', 'waitlist', 'playerTeams', 'assignments', 'savedAt']);
     }
 
+    // Qualquer participante presente (não só o organizador) pode fechar a
+    // partida ao vivo e mandá-la para votação — evita ficar presa em "ao_vivo"
+    // quando quem termina não é o organizador.
+    function isMatchLiveEndUpdate(matchId) {
+      let data = matchDoc(matchId);
+      return isSignedIn()
+        && data.status == 'ao_vivo'
+        && request.resource.data.status == 'aguardando_auditoria'
+        && request.resource.data.organizerId == resource.data.organizerId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'status', 'miniGames', 'players', 'playerTeams',
+            'currentPlayerId', 'assignments', 'savedAt'
+          ]);
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isSignedIn();
       allow create: if isOwner(userId);
@@ -113,6 +129,7 @@ service cloud.firestore {
         )
         || isMatchRsvpUpdate()
         || isCommunityMatchRsvpUpdate(matchId)
+        || isMatchLiveEndUpdate(matchId)
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;

@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { ChevronLeft, Pause, Play, RotateCcw, StopCircle, X } from "lucide-react";
 import { loadPreMatch, type SavedPreMatch } from "@/lib/preMatchStorage";
-import { loadMatchFromFirestore, saveMatchToFirestore, getMatchReturnPath } from "@/lib/matchRepository";
+import {
+  loadMatchFromFirestore,
+  saveMatchToFirestoreOrThrow,
+  getMatchReturnPath,
+} from "@/lib/matchRepository";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { getCurrentUserId } from "@/lib/auth";
 import {
@@ -369,8 +373,6 @@ export default function AoVivo() {
     const finalMiniGames = currentMiniGame ? [...miniGames, currentMiniGame] : miniGames;
     const mePlayer = players.find((player) => player.isMe) || players[0];
 
-    resetMatchFlowSession(matchId);
-
     const existing = await loadMatchFromFirestore(matchId);
 
     const postMatchData = {
@@ -389,6 +391,7 @@ export default function AoVivo() {
       },
       players,
       playerTeams,
+      assignments: existing?.assignments ?? {},
       currentPlayerId: mePlayer?.id || existing?.currentPlayerId || "",
       miniGames: finalMiniGames,
       savedAt: new Date().toISOString(),
@@ -399,12 +402,22 @@ export default function AoVivo() {
       waitlist: existing?.waitlist,
     } as const;
 
-    await saveMatchToFirestore(
-      matchId,
-      postMatchData as Parameters<typeof saveMatchToFirestore>[1],
-    );
-
-    window.location.href = `/partida/${matchId}/pos-jogo`;
+    try {
+      await saveMatchToFirestoreOrThrow(
+        matchId,
+        postMatchData as Parameters<typeof saveMatchToFirestoreOrThrow>[1],
+      );
+      resetMatchFlowSession(matchId);
+      window.location.href = `/partida/${matchId}/pos-jogo`;
+    } catch (err) {
+      console.warn("[AoVivo] terminarPelada:", err);
+      setIsRunning(false);
+      toast({
+        title: "Não foi possível terminar a pelada.",
+        description: "Verifica a tua ligação e tenta novamente.",
+        variant: "destructive",
+      });
+    }
   }
 
 

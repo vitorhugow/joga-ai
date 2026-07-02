@@ -1735,8 +1735,17 @@ export default function PreJogo() {
               playerTeams,
               assignments,
             });
-            await startMatchLive(matchId, userId);
-            setLocation(`/partida/${matchId}/ao-vivo`);
+            try {
+              await startMatchLive(matchId, userId);
+              setLocation(`/partida/${matchId}/ao-vivo`);
+            } catch (err) {
+              console.warn("[PreJogo] startMatchLive:", err);
+              toast({
+                title: "Não foi possível iniciar a partida.",
+                description: "Verifica a tua ligação e tenta novamente.",
+                variant: "destructive",
+              });
+            }
           }}
         >
           <Play className="w-6 h-6 fill-white" />

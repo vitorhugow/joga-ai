@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import {
   getMatchRoutePath,
   loadMatchFromFirestore,
+  subscribeMatchStatus,
   type MatchStatus,
 } from "@/lib/matchRepository";
 
@@ -29,27 +30,27 @@ export function useMatchPhaseGuard(matchId: string, phase: MatchPhase) {
   useEffect(() => {
     if (!matchId || matchId === "default") return;
 
-    let cancelled = false;
+    const from = new URLSearchParams(window.location.search).get("from");
+    const suffix = from ? `?from=${encodeURIComponent(from)}` : "";
 
-    void loadMatchFromFirestore(matchId).then((match) => {
-      if (cancelled) return;
-
-      const current = (match?.status ?? "configurando") as MatchStatus;
+    const applyStatus = (current: MatchStatus) => {
       setStatus(current);
 
       if (!ALLOWED_BY_PHASE[phase].includes(current)) {
-        const from = new URLSearchParams(window.location.search).get("from");
-        const suffix = from ? `?from=${encodeURIComponent(from)}` : "";
+        setReady(false);
         setLocation(`${getMatchRoutePath(matchId, current)}${suffix}`);
         return;
       }
 
       setReady(true);
+    };
+
+    void loadMatchFromFirestore(matchId).then((match) => {
+      applyStatus((match?.status ?? "configurando") as MatchStatus);
     });
 
-    return () => {
-      cancelled = true;
-    };
+    const unsub = subscribeMatchStatus(matchId, applyStatus);
+    return unsub;
   }, [matchId, phase, setLocation]);
 
   return { ready, status };

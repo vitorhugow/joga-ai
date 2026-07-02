@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { ChevronLeft, Pause, Play, RotateCcw, StopCircle, X } from "lucide-react";
 import { loadPreMatch, type SavedPreMatch } from "@/lib/preMatchStorage";
-import { loadMatchFromFirestore, saveMatchToFirestore } from "@/lib/matchRepository";
+import { loadMatchFromFirestore, saveMatchToFirestore, getMatchReturnPath } from "@/lib/matchRepository";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { getCurrentUserId } from "@/lib/auth";
 import {
@@ -77,8 +77,10 @@ function formatTime(seconds: number) {
 
 export default function AoVivo() {
   const { confirm, ConfirmDialog } = useJogaConfirm();
+  const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/ao-vivo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
+  const returnTo = getMatchReturnPath();
   const { ready: phaseReady } = useMatchPhaseGuard(matchId, "ao-vivo");
   const [preMatch, setPreMatch] = useState<SavedPreMatch | null>(null);
 
@@ -441,8 +443,8 @@ export default function AoVivo() {
         <JogaCard variant="arena" padding="lg" className="text-center">
           <h1 className="font-display font-black text-white text-2xl">Nenhuma partida preparada</h1>
           <p className="text-white/45 text-sm mt-2">Configura equipas e jogadores no Pré-Jogo antes de iniciar o Ao Vivo.</p>
-          <Link href={`/partida/${matchId}/pre-jogo`} className="block mt-4">
-            <JogaButton variant="primary" size="md">Ir para Pré-Jogo</JogaButton>
+          <Link href={returnTo} className="block mt-4">
+            <JogaButton variant="primary" size="md">Voltar ao início</JogaButton>
           </Link>
         </JogaCard>
       </JogaPage>
@@ -497,11 +499,15 @@ export default function AoVivo() {
   return (
     <JogaPage theme="arena" padded={false} bottomSpace={false} className="pb-8">
       <div className="flex items-center justify-between px-4 pt-5 pb-3">
-        <Link href={`/partida/${matchId}/pre-jogo`}>
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center joga-live-button" style={{ background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.34)" }}>
-            <ChevronLeft className="w-6 h-6 text-red-100" />
-          </div>
-        </Link>
+        <button
+          type="button"
+          className="w-12 h-12 rounded-2xl flex items-center justify-center joga-live-button"
+          style={{ background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.34)" }}
+          onClick={() => setLocation(returnTo)}
+          aria-label="Voltar"
+        >
+          <ChevronLeft className="w-6 h-6 text-red-100" />
+        </button>
 
         <div className="text-center">
           <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.22em]">Ao Vivo</p>

@@ -16,6 +16,7 @@ import {
   deleteDoc,
   getDocs,
   collection,
+  onSnapshot,
   serverTimestamp,
   type DocumentData,
   type PartialWithFieldValue,
@@ -361,6 +362,55 @@ export function getMatchStatusLabel(status?: string): string {
     default:
       return "Pré-jogo";
   }
+}
+
+/** Destino do botão voltar: `from` na query ou home. */
+export function getMatchReturnPath(search?: string): string {
+  const from = new URLSearchParams(search ?? window.location.search).get("from");
+  return from || "/";
+}
+
+/** Escuta alterações de status da partida em tempo real (Firestore + cache local). */
+export function subscribeMatchStatus(
+  matchId: string,
+  callback: (status: MatchStatus) => void,
+): () => void {
+  if (!matchId || matchId === "default") return () => {};
+
+  const emitLocal = () => {
+    const local = loadPostMatch(matchId);
+    callback((local?.status ?? "configurando") as MatchStatus);
+  };
+
+  if (!isFirebaseConfigured()) {
+    emitLocal();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key?.includes(matchId)) emitLocal();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }
+
+  const ref = doc(db, "matches", matchId);
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        emitLocal();
+        return;
+      }
+      const remoteStatus = snap.data().status as MatchStatus | undefined;
+      const local = loadPostMatch(matchId);
+      if (local && remoteStatus) {
+        savePostMatch({ ...local, status: remoteStatus });
+      }
+      callback(remoteStatus ?? (local?.status as MatchStatus) ?? "configurando");
+    },
+    (err) => {
+      console.warn("[matchRepository] subscribeMatchStatus:", err);
+      emitLocal();
+    },
+  );
 }
 
 /** Cancela partida (organizador) — só em configurando ou ao_vivo */

@@ -575,12 +575,22 @@ function isOpenPublicMatch(m: MatchListing): boolean {
   return !m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number]);
 }
 
-/** Partidas públicas (Firestore + cache local) — exclui peladas de comunidade */
-export async function loadAvailableMatches(limitCount = 10): Promise<MatchListing[]> {
-  const localCreated = readLocalMatchListings().filter(isOpenPublicMatch);
+/**
+ * Nota importante: quando o Firebase está configurado, a query remota é
+ * SEMPRE a única fonte de verdade sobre quais partidas continuam "activas"
+ * (o filtro `where("status","in",...)` já exclui concluídas/expiradas/
+ * canceladas no servidor). NÃO fazer merge com `joga-ai-match-listings-v1`
+ * (cache local por dispositivo) para decidir o que está activo: essa cópia
+ * só é actualizada no aparelho de quem executa a acção, por isso noutros
+ * dispositivos fica presa num status antigo (ex: "ao_vivo"/"auditada"). Ao
+ * "salvar" partidas que o servidor já excluiu, a partida "ressuscitava" como
+ * aberta mesmo depois de terminada/votada por todos.
+ */
 
+/** Partidas públicas (Firestore) — exclui peladas de comunidade */
+export async function loadAvailableMatches(limitCount = 10): Promise<MatchListing[]> {
   if (!isFirebaseConfigured()) {
-    return localCreated.slice(0, limitCount);
+    return readLocalMatchListings().filter(isOpenPublicMatch).slice(0, limitCount);
   }
 
   try {
@@ -596,14 +606,10 @@ export async function loadAvailableMatches(limitCount = 10): Promise<MatchListin
       .map((d) => mapMatchDoc(d.id, d.data()))
       .filter(isOpenPublicMatch);
 
-    const merged = [
-      ...localCreated,
-      ...remote.filter((m) => !localCreated.some((l) => l.id === m.id)),
-    ];
-    return merged.slice(0, limitCount);
+    return remote.slice(0, limitCount);
   } catch (err) {
     console.warn("[communityRepository] loadAvailableMatches:", err);
-    return localCreated.slice(0, limitCount);
+    return readLocalMatchListings().filter(isOpenPublicMatch).slice(0, limitCount);
   }
 }
 
@@ -612,17 +618,17 @@ export async function loadCommunityMatches(
   communityId: string,
   limitCount = 20,
 ): Promise<MatchListing[]> {
-  const localCreated = readLocalMatchListings().filter(
-    (m) =>
-      m.communityId === communityId &&
-      (!m.status ||
-        COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
-          m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
-        )),
-  );
-
   if (!isFirebaseConfigured()) {
-    return localCreated.slice(0, limitCount);
+    return readLocalMatchListings()
+      .filter(
+        (m) =>
+          m.communityId === communityId &&
+          (!m.status ||
+            COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
+              m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
+            )),
+      )
+      .slice(0, limitCount);
   }
 
   try {
@@ -635,17 +641,19 @@ export async function loadCommunityMatches(
     );
     const snap = await getDocs(q);
 
-    const remote = snap.docs.map((d) => mapMatchDoc(d.id, d.data()));
-
-    const remoteById = new Map(remote.map((m) => [m.id, m]));
-    const merged = [
-      ...localCreated.map((local) => remoteById.get(local.id) ?? local),
-      ...remote.filter((m) => !localCreated.some((l) => l.id === m.id)),
-    ];
-    return merged.slice(0, limitCount);
+    return snap.docs.map((d) => mapMatchDoc(d.id, d.data())).slice(0, limitCount);
   } catch (err) {
     console.warn("[communityRepository] loadCommunityMatches:", err);
-    return localCreated.slice(0, limitCount);
+    return readLocalMatchListings()
+      .filter(
+        (m) =>
+          m.communityId === communityId &&
+          (!m.status ||
+            COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
+              m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
+            )),
+      )
+      .slice(0, limitCount);
   }
 }
 
@@ -672,19 +680,7 @@ export function subscribeCommunityMatches(
     q,
     (snap) => {
       const remote = snap.docs.map((d) => mapMatchDoc(d.id, d.data()));
-      const localCreated = readLocalMatchListings().filter(
-        (m) =>
-          m.communityId === communityId &&
-          COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
-            m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
-          ),
-      );
-      const remoteById = new Map(remote.map((m) => [m.id, m]));
-      const merged = [
-        ...localCreated.map((local) => remoteById.get(local.id) ?? local),
-        ...remote.filter((m) => !localCreated.some((l) => l.id === m.id)),
-      ];
-      callback(merged.slice(0, limitCount));
+      callback(remote.slice(0, limitCount));
     },
     (err) => {
       console.warn("[communityRepository] subscribeCommunityMatches:", err);

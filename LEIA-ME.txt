@@ -1,0 +1,43 @@
+JOGA AI — CORREÇÕES APLICADAS (Fases 1, 2, 3, 4 parcial e 6)
+=============================================================
+
+COMO APLICAR (escolhe UMA das opções):
+
+OPÇÃO A — Copiar ficheiros (mais simples):
+  Extrai este zip na RAIZ do repositório (a pasta que contém
+  package.json e artifacts/). Os ficheiros substituem os antigos
+  nos caminhos corretos. Confirma a substituição quando perguntado.
+
+OPÇÃO B — Aplicar o patch git (só ficheiros de texto):
+  git apply joga-ai-fixes.patch
+  (as imagens novas/otimizadas vêm no zip de qualquer forma)
+
+DEPOIS DE APLICAR:
+  1. cd artifacts/joga-ai && pnpm install && pnpm run build  (deve passar)
+  2. Revê o diff das firestore.rules com calma
+  3. Deploy das regras: firebase deploy --only firestore:rules
+  4. Testa manualmente: entrar numa comunidade pública, aprovar
+     joinRequest numa privada, registar golos numa partida ao vivo
+     (como organizador) e apagar uma partida finalizada (revert).
+  5. git commit + push → Cloudflare Pages faz o deploy do site.
+
+O QUE FOI ALTERADO:
+  firestore.rules  — 5 correções de segurança (ver conversa)
+  index.html       — lang=pt, viewport sem maximum-scale, OG absoluto
+                     (opengraph.jpg), og:url, theme-color, favicons novos
+  src/App.tsx      — lazy loading de todas as páginas + Suspense
+  vite.config.ts   — manualChunks (react / firebase / framer-motion)
+  public/_headers  — nosniff, referrer-policy, permissions-policy,
+                     cache imutável para /assets
+  imagens          — apple-touch-icon.png (23 KB) e favicon-48.png novos;
+                     logo-icon.png 680→185 KB; logo-badge.png 767→214 KB
+
+RESULTADO DO BUILD (verificado):
+  Antes:  1 chunk único de 1.384 kB (416 kB gzip)
+  Depois: chunk da app 440 kB + vendors em cache separado
+          + cada página num chunk próprio carregado sob demanda
+          (PreJogo 38 kB, Perfil 29 kB, Login 23 kB, ...)
+
+AINDA POR FAZER (usa o AUDIT-TASKS.md no Cursor):
+  Fase 5 (PWA), Fase 7 (refactor PreJogo), Fase 8 (UX),
+  e os testes das rules com @firebase/rules-unit-testing.

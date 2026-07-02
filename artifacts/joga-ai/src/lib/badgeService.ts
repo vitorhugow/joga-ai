@@ -50,7 +50,7 @@ function computeEligibleBadges(profile: UserProfile, lastRating?: number): strin
 
 export async function checkAndUnlockBadges(
   userId: string,
-  context?: { lastRating?: number; matchMvp?: boolean },
+  context?: { lastRating?: number; matchMvp?: boolean; applyForMatchId?: string },
 ): Promise<string[]> {
   if (!userId) return [];
 
@@ -68,10 +68,17 @@ export async function checkAndUnlockBadges(
 
   if (isFirebaseConfigured() && !profile.isAnonymous) {
     try {
-      await updateDoc(doc(db, "users", userId), {
+      const patch: Record<string, unknown> = {
         badges: merged,
         updatedAt: serverTimestamp(),
-      });
+      };
+      // Ver nota em userRepository.applyDelayedRatingToProfile — permite a
+      // quem finaliza a votação (não necessariamente o organizador ou o
+      // próprio dono) desbloquear distintivos de todos os jogadores.
+      if (context?.applyForMatchId) {
+        patch._applyForMatchId = context.applyForMatchId;
+      }
+      await updateDoc(doc(db, "users", userId), patch);
     } catch (err) {
       console.warn("[badgeService] persist:", err);
     }

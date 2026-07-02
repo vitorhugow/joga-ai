@@ -185,7 +185,10 @@ export async function releaseMatchRatings(
 
   for (const player of result.players) {
     if (!player.userId) continue;
-    await checkAndUnlockBadges(player.userId, { lastRating: player.rating });
+    await checkAndUnlockBadges(player.userId, {
+      lastRating: player.rating,
+      applyForMatchId: matchId,
+    });
   }
 
   return true;

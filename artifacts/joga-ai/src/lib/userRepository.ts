@@ -826,6 +826,9 @@ export async function applyParticipationToProfile(
         lastAttributeDeltas: participationDeltas,
         lastEvolutionMatchId: input.matchId,
         updatedAt: serverTimestamp(),
+        // Ver nota em applyDelayedRatingToProfile — quem termina a pelada
+        // aplica o ganho de participação a TODO o plantel, não só a si.
+        _applyForMatchId: input.matchId,
       });
     } catch (err) {
       console.warn("[userRepository] applyParticipationToProfile:", err);
@@ -992,6 +995,12 @@ export async function applyDelayedRatingToProfile(
       };
       if (mergeDisplayDeltas) {
         patch.lastAttributeDeltas = lastAttributeDeltas;
+      }
+      // Marcador que permite às regras do Firestore aceitar esta escrita
+      // mesmo quando quem finaliza a votação (e por isso publica as notas de
+      // TODOS os jogadores) não é o próprio dono do perfil nem o organizador.
+      if (matchId) {
+        patch._applyForMatchId = matchId;
       }
       await updateDoc(doc(db, "users", userId), patch);
     } catch (err) {

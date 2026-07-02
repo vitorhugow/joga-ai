@@ -89,6 +89,33 @@ service cloud.firestore {
           ]);
     }
 
+    // Finalizar a votação (todos votaram, ou o prazo de 24h expirou) precisa
+    // de funcionar mesmo quando quem dispara a transição não é o organizador
+    // — normalmente é o último jogador a votar. Só permite mudar para
+    // "concluida" a partir da fase de votação, sem tocar em mais nada.
+    function isMatchVotingFinalizeUpdate(matchId) {
+      let data = matchDoc(matchId);
+      return isSignedIn()
+        && (data.status == 'aguardando_auditoria' || data.status == 'auditada')
+        && request.resource.data.status == 'concluida'
+        && request.resource.data.organizerId == resource.data.organizerId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'savedAt', 'votedUserIds']);
+    }
+
+    // Cada jogador marca-se a si próprio como tendo votado (arrayUnion do
+    // seu próprio uid); não altera status/organizador nem remove ninguém
+    // já presente na lista.
+    function isMatchVoteMarkUpdate() {
+      return isSignedIn()
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.organizerId == resource.data.organizerId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['votedUserIds', 'savedAt'])
+        && request.resource.data.votedUserIds.hasAll(resource.data.get('votedUserIds', []))
+        && request.resource.data.votedUserIds.hasAny([request.auth.uid]);
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isSignedIn();
       allow create: if isOwner(userId);
@@ -96,6 +123,14 @@ service cloud.firestore {
         isSignedIn()
         && request.resource.data.keys().hasAll(['_revertForMatchId'])
         && isMatchOrganizer(request.resource.data._revertForMatchId)
+      ) || (
+        // Publicar notas/distintivos de TODOS os jogadores quando a votação
+        // termina — quem despoleta isto é normalmente o último a votar, não
+        // necessariamente o organizador nem o dono deste perfil.
+        isSignedIn()
+        && request.resource.data.keys().hasAll(['_applyForMatchId'])
+        && matchDoc(request.resource.data._applyForMatchId).status
+          in ['ao_vivo', 'aguardando_auditoria', 'auditada', 'concluida']
       );
       allow delete: if false;
 
@@ -113,7 +148,10 @@ service cloud.firestore {
       }
 
       match /notifications/{notifId} {
-        allow read, write: if isOwner(userId);
+        allow read, update, delete: if isOwner(userId);
+        // Notificações (ex: "a tua nota saiu", convites, lembretes) são
+        // criadas por outros participantes/organizador em nome do dono.
+        allow create: if isSignedIn();
       }
     }
 
@@ -131,6 +169,8 @@ service cloud.firestore {
         || isMatchRsvpUpdate()
         || isCommunityMatchRsvpUpdate(matchId)
         || isMatchLiveEndUpdate(matchId)
+        || isMatchVotingFinalizeUpdate(matchId)
+        || isMatchVoteMarkUpdate()
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;
@@ -166,7 +206,13 @@ service cloud.firestore {
 
       match /summary/{docId} {
         allow read: if isSignedIn();
-        allow write: if isSignedIn() && isMatchOrganizer(matchId);
+        // O resumo/resultado é gravado quando a votação termina — o que
+        // normalmente acontece no dispositivo do último jogador a votar,
+        // não necessariamente o organizador.
+        allow write: if isSignedIn() && (
+          isMatchOrganizer(matchId)
+          || matchDoc(matchId).status in ['aguardando_auditoria', 'auditada', 'concluida']
+        );
       }
     }
 

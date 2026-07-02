@@ -1,0 +1,247 @@
+diff --git a/artifacts/joga-ai/firestore.rules b/artifacts/joga-ai/firestore.rules
+index a878081..155cc82 100644
+--- a/artifacts/joga-ai/firestore.rules
++++ b/artifacts/joga-ai/firestore.rules
+@@ -33,14 +33,12 @@ service cloud.firestore {
+     }
+ 
+     // Collection-group queries (loadMyCommunities, pedidos pendentes)
++    // Apenas leitura: este wildcard existe para as collection-group queries.
++    // Criação/remoção de membros acontece SÓ no bloco communities/{id}/members.
+     match /{path=**}/members/{memberId} {
+       allow read: if isSignedIn()
+         && (memberId == request.auth.uid
+           || resource.data.userId == request.auth.uid);
+-      allow create: if isSignedIn() && memberId == request.auth.uid;
+-      allow delete: if isSignedIn()
+-        && (memberId == request.auth.uid
+-          || resource.data.userId == request.auth.uid);
+     }
+ 
+     match /{path=**}/joinRequests/{requestUserId} {
+@@ -75,10 +73,16 @@ service cloud.firestore {
+     match /users/{userId} {
+       allow read: if isOwner(userId) || isSignedIn();
+       allow create: if isOwner(userId);
++      // Revert de evolução: só o organizador da partida, só os campos do revert,
++      // e apenas se o user realmente participou dessa partida (tem matchHistory dela).
+       allow update: if isOwner(userId) || (
+         isSignedIn()
+         && request.resource.data.keys().hasAll(['_revertForMatchId'])
+         && isMatchOrganizer(request.resource.data._revertForMatchId)
++        && exists(/databases/$(database)/documents/users/$(userId)/matchHistory/$(request.resource.data._revertForMatchId))
++        && request.resource.data.diff(resource.data).affectedKeys()
++          .hasOnly(['attributes', 'seasonStats', '_revertForMatchId', 'updatedAt',
++                    'lastAttributeDeltas', 'lastEvolutionMatchId', 'lastMatchRating'])
+       );
+       allow delete: if false;
+ 
+@@ -119,7 +123,8 @@ service cloud.firestore {
+ 
+       match /auditors/{docId} {
+         allow read: if isSignedIn();
+-        allow create: if isSignedIn();
++        allow create: if isSignedIn()
++          && request.resource.data.userId == request.auth.uid;
+         allow update, delete: if isSignedIn() && (
+           isMatchOrganizer(matchId)
+           || resource.data.userId == request.auth.uid
+@@ -134,16 +139,15 @@ service cloud.firestore {
+ 
+       match /events/{eventId} {
+         allow read: if isSignedIn();
+-        allow write: if isSignedIn() && (
+-          isMatchOrganizer(matchId) || isMatchLive(matchId)
+-        );
++        // Modelo "mesário único": só o organizador regista eventos.
++        // Se um dia houver marcação multi-dispositivo, adicionar um campo
++        // participantIds: string[] na partida e permitir esses uids aqui.
++        allow write: if isMatchOrganizer(matchId);
+       }
+ 
+       match /miniGames/{gameId} {
+         allow read: if isSignedIn();
+-        allow write: if isSignedIn() && (
+-          isMatchOrganizer(matchId) || isMatchLive(matchId)
+-        );
++        allow write: if isMatchOrganizer(matchId);
+       }
+ 
+       match /summary/{docId} {
+@@ -168,9 +172,14 @@ service cloud.firestore {
+ 
+       match /members/{memberId} {
+         allow read: if isSignedIn();
++        // Self-join só em comunidades públicas; em privadas, só o admin
++        // (via aprovação de joinRequest) pode criar o membro.
+         allow create: if isSignedIn() && (
+-          memberId == request.auth.uid
+-          || isCommunityAdmin(communityId)
++          isCommunityAdmin(communityId)
++          || (
++            memberId == request.auth.uid
++            && get(/databases/$(database)/documents/communities/$(communityId)).data.isPrivate != true
++          )
+         );
+         allow update: if isCommunityAdmin(communityId);
+         allow delete: if isCommunityAdmin(communityId)
+@@ -192,7 +201,8 @@ service cloud.firestore {
+ 
+       match /rivalries/{pairId} {
+         allow read: if isSignedIn();
+-        allow write: if isSignedIn();
++        allow write: if isCommunityMatchMember(communityId)
++          || isCommunityAdmin(communityId);
+       }
+     }
+   }
+diff --git a/artifacts/joga-ai/index.html b/artifacts/joga-ai/index.html
+index c9b6717..b2850cb 100644
+--- a/artifacts/joga-ai/index.html
++++ b/artifacts/joga-ai/index.html
+@@ -1,21 +1,24 @@
+ <!DOCTYPE html>
+-<html lang="en">
++<html lang="pt">
+   <head>
+     <meta charset="UTF-8" />
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <title>Joga AI</title>
+     <meta name="description" content="Joga AI — A tua pelada. A tua carta. A tua evolução." />
+     <meta name="robots" content="index, follow" />
+     <meta property="og:title" content="Joga AI" />
+     <meta property="og:description" content="Joga AI — A tua pelada. A tua carta. A tua evolução." />
+     <meta property="og:type" content="website" />
+-    <meta property="og:image" content="/brand/logo-icon.png" />
++    <meta property="og:image" content="https://joga-ai.pages.dev/opengraph.jpg" />
++    <meta property="og:url" content="https://joga-ai.pages.dev/" />
+     <meta name="twitter:card" content="summary_large_image" />
+     <meta name="twitter:title" content="Joga AI" />
+     <meta name="twitter:description" content="Joga AI — A tua pelada. A tua carta. A tua evolução." />
+-    <meta name="twitter:image" content="/brand/logo-icon.png" />
+-    <link rel="icon" type="image/png" href="/brand/logo-icon.png" />
+-    <link rel="apple-touch-icon" href="/brand/logo-icon.png" />
++    <meta name="twitter:image" content="https://joga-ai.pages.dev/opengraph.jpg" />
++    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
++    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
++    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
++    <meta name="theme-color" content="#0a0f1a" />
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+diff --git a/artifacts/joga-ai/public/_headers b/artifacts/joga-ai/public/_headers
+index 3d375ad..e968488 100644
+--- a/artifacts/joga-ai/public/_headers
++++ b/artifacts/joga-ai/public/_headers
+@@ -1,2 +1,8 @@
+ /*
+   Cross-Origin-Opener-Policy: same-origin-allow-popups
++  X-Content-Type-Options: nosniff
++  Referrer-Policy: strict-origin-when-cross-origin
++  Permissions-Policy: camera=(), microphone=(), geolocation=(self)
++
++/assets/*
++  Cache-Control: public, max-age=31536000, immutable
+diff --git a/artifacts/joga-ai/src/App.tsx b/artifacts/joga-ai/src/App.tsx
+index d1c26f5..575238e 100644
+--- a/artifacts/joga-ai/src/App.tsx
++++ b/artifacts/joga-ai/src/App.tsx
+@@ -9,26 +9,37 @@ import { AuthProvider } from "@/contexts/AuthContext";
+ import { AuthGateProvider } from "@/contexts/AuthGateContext";
+ import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
+ import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
++import { lazy, Suspense } from "react";
+ import NotFound from "@/pages/not-found";
+ import Home from "@/pages/Home";
+-import Perfil from "@/pages/Perfil";
+-import Comunidades from "@/pages/Comunidades";
+-import ComunidadePage from "@/pages/ComunidadePage";
+-import CriarPartida from "@/pages/CriarPartida";
+-import PreJogo from "@/pages/PreJogo";
+-import AoVivo from "@/pages/AoVivo";
+-import PosJogo from "@/pages/PosJogo";
+-import Jogos from "@/pages/Jogos";
+-import Premium from "@/pages/Premium";
+-import Campos from "@/pages/Campos";
+-import Evolucao from "@/pages/Evolucao";
+-import Ranking from "@/pages/Ranking";
+-import Login from "@/pages/Login";
+-import ComunidadeConfiguracoes from "@/pages/ComunidadeConfiguracoes";
+-import CriarComunidade from "@/pages/CriarComunidade";
+-import Privacidade from "@/pages/Privacidade";
+-import Termos from "@/pages/Termos";
+-import DemoCarta from "@/pages/DemoCarta";
++
++// Code splitting: cada página vira um chunk próprio, carregado sob demanda.
++const Perfil = lazy(() => import("@/pages/Perfil"));
++const Comunidades = lazy(() => import("@/pages/Comunidades"));
++const ComunidadePage = lazy(() => import("@/pages/ComunidadePage"));
++const CriarPartida = lazy(() => import("@/pages/CriarPartida"));
++const PreJogo = lazy(() => import("@/pages/PreJogo"));
++const AoVivo = lazy(() => import("@/pages/AoVivo"));
++const PosJogo = lazy(() => import("@/pages/PosJogo"));
++const Jogos = lazy(() => import("@/pages/Jogos"));
++const Premium = lazy(() => import("@/pages/Premium"));
++const Campos = lazy(() => import("@/pages/Campos"));
++const Evolucao = lazy(() => import("@/pages/Evolucao"));
++const Ranking = lazy(() => import("@/pages/Ranking"));
++const Login = lazy(() => import("@/pages/Login"));
++const ComunidadeConfiguracoes = lazy(() => import("@/pages/ComunidadeConfiguracoes"));
++const CriarComunidade = lazy(() => import("@/pages/CriarComunidade"));
++const Privacidade = lazy(() => import("@/pages/Privacidade"));
++const Termos = lazy(() => import("@/pages/Termos"));
++const DemoCarta = lazy(() => import("@/pages/DemoCarta"));
++
++function PageFallback() {
++  return (
++    <div className="flex min-h-[60vh] items-center justify-center">
++      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
++    </div>
++  );
++}
+ 
+ const queryClient = new QueryClient();
+ 
+@@ -42,7 +53,8 @@ function AnimatedRoutes() {
+     <>
+       <AnimatePresence mode="wait">
+         <motion.div key={location} {...pageTransition}>
+-          <Switch location={location}>
++          <Suspense fallback={<PageFallback />}>
++            <Switch location={location}>
+             <Route path="/" component={Home} />
+             <Route path="/perfil/evolucao" component={Evolucao} />
+             <Route path="/perfil/:viewId" component={Perfil} />
+@@ -64,8 +76,9 @@ function AnimatedRoutes() {
+             <Route path="/premium" component={Premium} />
+             <Route path="/campos" component={Campos} />
+             <Route path="/ranking" component={Ranking} />
+-            <Route component={NotFound} />
+-          </Switch>
++              <Route component={NotFound} />
++            </Switch>
++          </Suspense>
+         </motion.div>
+       </AnimatePresence>
+       {!hideNav && <BottomNavigation />}
+diff --git a/artifacts/joga-ai/vite.config.ts b/artifacts/joga-ai/vite.config.ts
+index 569e61a..db76c0a 100644
+--- a/artifacts/joga-ai/vite.config.ts
++++ b/artifacts/joga-ai/vite.config.ts
+@@ -43,6 +43,15 @@ export default defineConfig({
+   build: {
+     outDir: path.resolve(import.meta.dirname, "dist/public"),
+     emptyOutDir: true,
++    rollupOptions: {
++      output: {
++        manualChunks: {
++          "vendor-react": ["react", "react-dom", "wouter"],
++          "vendor-firebase": ["firebase/app", "firebase/auth", "firebase/firestore"],
++          "vendor-motion": ["framer-motion"],
++        },
++      },
++    },
+   },
+   server: {
+     port,

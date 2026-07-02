@@ -129,7 +129,6 @@ export async function ensureAnonymousAuth(): Promise<string> {
 export async function signInWithGoogle(): Promise<UserCredential> {
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
-  const previousUid = auth.currentUser?.uid;
   const wasAnonymous = Boolean(auth.currentUser?.isAnonymous);
 
   let cred: UserCredential;
@@ -145,10 +144,6 @@ export async function signInWithGoogle(): Promise<UserCredential> {
     }
   } else {
     cred = await googleWithPopupOrRedirect();
-  }
-
-  if (wasAnonymous && previousUid && cred.user.uid !== previousUid) {
-    throw new AuthAccountSwitchError();
   }
 
   return cred;

@@ -401,6 +401,20 @@ export default function PreJogo() {
     };
   }, [matchId, userId]);
 
+  useEffect(() => {
+    if (!rosterHydrated) return;
+    const fromQuery = new URLSearchParams(window.location.search).get("from");
+    const fromSuffix = fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : "";
+
+    if (matchStatus === "ao_vivo") {
+      setLocation(`/partida/${matchId}/ao-vivo${fromSuffix}`);
+      return;
+    }
+    if (matchStatus === "aguardando_auditoria" || matchStatus === "auditada") {
+      setLocation(`/partida/${matchId}/pos-jogo${fromSuffix}`);
+    }
+  }, [rosterHydrated, matchStatus, matchId, setLocation]);
+
   const [communityMembers, setCommunityMembers] = useState<
     Awaited<ReturnType<typeof loadCommunityMembers>>
   >([]);

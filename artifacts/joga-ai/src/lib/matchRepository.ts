@@ -36,6 +36,7 @@ import { applyParticipationForMatchRoster, revertMatchStatsForPlayers } from "./
 import { deleteMatchResult, loadMatchResult } from "./matchHistoryRepository";
 import { getVotes } from "./auditRepository";
 import { collectAllEvents, computeTopScorers, collectLinkedPlayerUserIds } from "./evolutionUtils";
+import { notifyMatchPlayersToVote } from "./notificationsRepository";
 import type { WaitlistEntry } from "./matchRsvpRepository";
 import { checkAndUnlockBadges } from "./badgeService";
 
@@ -276,6 +277,13 @@ export type MatchStatus =
 
 export const OPEN_MATCH_STATUSES: MatchStatus[] = ["configurando", "ao_vivo"];
 
+export const COMMUNITY_ACTIVE_MATCH_STATUSES: MatchStatus[] = [
+  "configurando",
+  "ao_vivo",
+  "aguardando_auditoria",
+  "auditada",
+];
+
 export const CLOSED_MATCH_STATUSES: MatchStatus[] = [
   "aguardando_auditoria",
   "auditada",
@@ -284,8 +292,48 @@ export const CLOSED_MATCH_STATUSES: MatchStatus[] = [
   "cancelada",
 ];
 
-function isClosedMatchStatus(status?: string): boolean {
-  return CLOSED_MATCH_STATUSES.includes(status as MatchStatus);
+/** Statuses that remove a match from public/community listings */
+export const LISTING_REMOVED_STATUSES: MatchStatus[] = [
+  "concluida",
+  "expirada",
+  "cancelada",
+];
+
+function isListingRemovedStatus(status?: string): boolean {
+  return LISTING_REMOVED_STATUSES.includes(status as MatchStatus);
+}
+
+export function getMatchRoutePath(matchId: string, status?: string): string {
+  switch (status) {
+    case "ao_vivo":
+      return `/partida/${matchId}/ao-vivo`;
+    case "aguardando_auditoria":
+    case "auditada":
+    case "concluida":
+      return `/partida/${matchId}/pos-jogo`;
+    default:
+      return `/partida/${matchId}/pre-jogo`;
+  }
+}
+
+export function getMatchStatusLabel(status?: string): string {
+  switch (status) {
+    case "configurando":
+      return "Pré-jogo";
+    case "ao_vivo":
+      return "Ao vivo";
+    case "aguardando_auditoria":
+    case "auditada":
+      return "Votação";
+    case "concluida":
+      return "Concluída";
+    case "expirada":
+      return "Expirada";
+    case "cancelada":
+      return "Cancelada";
+    default:
+      return "Pré-jogo";
+  }
 }
 
 /** Cancela partida (organizador) — só em configurando ou ao_vivo */
@@ -461,7 +509,10 @@ export async function saveMatchToFirestore(
     })
       .then(() => {
         const userIds = collectLinkedPlayerUserIds(data.players ?? [], data.organizerId);
-        return Promise.all(userIds.map((uid) => checkAndUnlockBadges(uid)));
+        return Promise.all([
+          notifyMatchPlayersToVote(matchId, data.players ?? [], data.title ?? "Pelada", data.organizerId),
+          ...userIds.map((uid) => checkAndUnlockBadges(uid)),
+        ]);
       })
       .catch((err) => console.warn("[matchRepository] participation:", err));
   }
@@ -491,7 +542,7 @@ export async function saveMatchToFirestore(
       savedAt: serverTimestamp(),
     };
     await setDoc(ref, payload, { merge: true });
-    if (isClosedMatchStatus(data.status)) {
+    if (isListingRemovedStatus(data.status)) {
       removeMatchFromListings(matchId);
     }
   } catch (err) {
@@ -511,7 +562,7 @@ export async function updateMatchStatus(
   }
 
   if (!isFirebaseConfigured()) {
-    if (isClosedMatchStatus(status)) {
+    if (isListingRemovedStatus(status)) {
       removeMatchFromListings(matchId);
     }
     return;
@@ -520,7 +571,7 @@ export async function updateMatchStatus(
   try {
     const ref = doc(db, "matches", matchId);
     await updateDoc(ref, { status, savedAt: serverTimestamp() });
-    if (isClosedMatchStatus(status)) {
+    if (isListingRemovedStatus(status)) {
       removeMatchFromListings(matchId);
     }
   } catch (err) {

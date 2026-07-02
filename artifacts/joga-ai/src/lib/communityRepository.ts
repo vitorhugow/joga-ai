@@ -20,7 +20,7 @@ import {
   increment,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
-import { OPEN_MATCH_STATUSES } from "./matchRepository";
+import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES } from "./matchRepository";
 import { MAX_PROFILE_PHOTO_BYTES } from "./userRepository";
 
 export class CommunityCoverTooLargeError extends Error {
@@ -614,7 +614,10 @@ export async function loadCommunityMatches(
   const localCreated = readLocalMatchListings().filter(
     (m) =>
       m.communityId === communityId &&
-      (!m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number])),
+      (!m.status ||
+        COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
+          m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
+        )),
   );
 
   if (!isFirebaseConfigured()) {
@@ -625,7 +628,7 @@ export async function loadCommunityMatches(
     const q = query(
       collection(db, "matches"),
       where("communityId", "==", communityId),
-      where("status", "in", [...OPEN_MATCH_STATUSES]),
+      where("status", "in", [...COMMUNITY_ACTIVE_MATCH_STATUSES]),
       orderBy("savedAt", "desc"),
       limit(limitCount),
     );

@@ -313,6 +313,15 @@ export default function PosJogo() {
   );
   const hasVoted = hasUserVotedInSession(userId, matchId);
 
+  useEffect(() => {
+    if (!data) return;
+    const isVoting =
+      data.status === "aguardando_auditoria" || data.status === "auditada";
+    if (isVoting && !gainsMode && !hasUserVotedInSession(userId, matchId)) {
+      setVoteMode(true);
+    }
+  }, [data, gainsMode, userId, matchId]);
+
   const currentPlayer = useMemo(() => {
     return (
       players.find((player: any) => player.id === data?.currentPlayerId) ||

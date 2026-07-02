@@ -310,12 +310,12 @@
 }
 
 .joga-new-card-stat--up > strong::before {
-  content: "+";
+  content: "↗";
   position: absolute;
-  top: -0.55em;
-  right: -0.2em;
-  font-size: 0.34em;
-  font-weight: 800;
+  top: -0.5em;
+  right: -0.35em;
+  font-size: 0.32em;
+  font-weight: 900;
   color: #4ade80;
   line-height: 1;
   pointer-events: none;

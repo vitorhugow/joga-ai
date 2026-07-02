@@ -3,6 +3,8 @@ import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Shield, Trophy } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
+import { EvolutionGainsSummary } from "@/components/EvolutionGainsSummary";
+import { summarizeGainsForDisplay } from "@/lib/evolutionDisplay";
 import { loadEvolutionHistory, type EvolutionRecord } from "@/lib/evolutionStorage";
 import { loadEvolutionFromFirestore } from "@/lib/evolutionRepository";
 import { isPostMatchExpired, loadPostMatch } from "@/lib/postMatchStorage";
@@ -58,7 +60,7 @@ export default function Evolucao() {
   }, [authUserId]);
 
   return (
-    <JogaPage theme="dark" className="py-5">
+    <JogaPage theme="dark" className="py-5 pb-28">
       <div className="flex items-center gap-3 mb-4">
         <Link href="/perfil" className="joga-tap">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center border border-white/12 bg-white/6">
@@ -96,27 +98,8 @@ export default function Evolucao() {
             <p className="text-white/50 text-sm mt-2">{formatDate(latest.savedAt)} · {latest.playerName}</p>
           </JogaHero>
 
-          <div className="space-y-3">
-            {latest.gains.map((gain) => (
-              <JogaCard
-                key={`${latest.id}-${gain.title}`}
-                variant="arena"
-                className={gain.type === "pending" ? "border-amber-400/20 bg-amber-400/8" : ""}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-display font-black text-white text-xl">{gain.title}</p>
-                    <p className="text-white/40 text-xs mt-1">{gain.reason}</p>
-                  </div>
-                  <p
-                    className="font-display font-black text-2xl"
-                    style={{ color: gain.type === "pending" ? "#fbbf24" : "#4ade80" }}
-                  >
-                    {gain.value}
-                  </p>
-                </div>
-              </JogaCard>
-            ))}
+          <div className="mt-4">
+            <EvolutionGainsSummary items={summarizeGainsForDisplay(latest.gains)} />
           </div>
 
           <JogaCard variant="arena">

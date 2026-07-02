@@ -55,7 +55,12 @@ import {
 import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
 import { PlayerCard } from "@/components/PlayerCard";
+import { EvolutionGainsSummary } from "@/components/EvolutionGainsSummary";
 import { profileToPlayerCard, getLastMatchAttributeDeltas } from "@/lib/userRepository";
+import {
+  formatEvolutionDisplayFromProfile,
+  summarizeGainsForDisplay,
+} from "@/lib/evolutionDisplay";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { generateMatchNarrative } from "@/lib/matchNarrative";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
@@ -272,7 +277,7 @@ export default function PosJogo() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [, setLocation] = useLocation();
   const [participationApplied, setParticipationApplied] = useState(false);
-  const { profile } = useUserProfile();
+  const { profile, refresh } = useUserProfile();
   const evolutionCardRef = useRef<HTMLDivElement>(null);
   const [shareEvolutionBusy, setShareEvolutionBusy] = useState(false);
 
@@ -416,6 +421,18 @@ export default function PosJogo() {
     participationApplied,
     receivedRating,
   ]);
+
+  const evolutionItems = useMemo(() => {
+    const fromProfile = formatEvolutionDisplayFromProfile(profile, data?.matchId);
+    if (fromProfile.length > 0) return fromProfile;
+    const source = displayGains ?? gains;
+    return summarizeGainsForDisplay(source);
+  }, [profile, data?.matchId, displayGains, gains]);
+
+  const matchAttributeDeltas = useMemo(
+    () => getLastMatchAttributeDeltas(profile, data?.matchId),
+    [profile, data?.matchId],
+  );
 
   async function shareEvolutionCard() {
     const node = evolutionCardRef.current;
@@ -696,6 +713,8 @@ export default function PosJogo() {
         });
       }
 
+      await refresh();
+
       if (!nextAllVoted) return;
 
       await persistMatchResultAndMaybeReleaseRatings("all_voted");
@@ -730,45 +749,24 @@ export default function PosJogo() {
           <h1 className="font-display font-black text-white text-3xl mt-2">Atributos ganhos</h1>
           <p className="text-white/55 text-sm mt-2">
             {currentPlayer?.name || "Jogador"}, estes ganhos já entram no perfil.
-            A nota dos colegas sai quando todos votarem, o organizador finalizar, ou 24h após o fim — recebes notificação.
+            A nota dos colegas sai quando todos votarem, o organizador finalizar, ou 24h após o fim.
           </p>
         </JogaHero>
 
-        <div className="mt-4 space-y-3">
-          {gains.map((gain) => (
-            <JogaCard
-              key={gain.title}
-              variant="arena"
-              className={gain.type === "pending" ? "border-amber-400/20 bg-amber-400/8" : ""}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-display font-black text-white text-xl">{gain.title}</p>
-                  <p className="text-white/40 text-xs mt-1">{gain.reason}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-display font-black text-2xl" style={{ color: gain.type === "pending" ? "#fbbf24" : "#4ade80" }}>
-                    {gain.value}
-                  </p>
-                  {gain.type !== "pending" && <p className="text-emerald-300 text-xs font-black">↗ UP</p>}
-                </div>
-              </div>
-            </JogaCard>
-          ))}
-        </div>
+        {profile.profileComplete && (
+          <div className="mt-5 flex justify-center">
+            <div ref={evolutionCardRef} className="w-[min(92vw,340px)]">
+              <PlayerCard
+                {...profileToPlayerCard(profile)}
+                size="profile"
+                attributeDeltas={matchAttributeDeltas}
+              />
+            </div>
+          </div>
+        )}
 
-        <div
-          ref={evolutionCardRef}
-          className="absolute -left-[9999px] top-0 w-[340px] pointer-events-none"
-          aria-hidden
-        >
-          {profile.profileComplete && (
-            <PlayerCard
-              {...profileToPlayerCard(profile)}
-              size="profile"
-              attributeDeltas={getLastMatchAttributeDeltas(profile, data?.matchId)}
-            />
-          )}
+        <div className="mt-4">
+          <EvolutionGainsSummary items={evolutionItems} />
         </div>
 
         <JogaButton

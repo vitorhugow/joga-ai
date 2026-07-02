@@ -15,7 +15,7 @@ import {
   Link as LinkIcon,
   UserPlus,
 } from "lucide-react";
-import { loadMatchFromFirestore, saveMatchRoster, cancelMatch } from "@/lib/matchRepository";
+import { loadMatchFromFirestore, saveMatchRoster, cancelMatch, startMatchLive } from "@/lib/matchRepository";
 import { loadPreMatch } from "@/lib/preMatchStorage";
 import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
@@ -34,6 +34,7 @@ import {
 import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
 import { calculateOverall } from "@/lib/cardUtils";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -319,6 +320,7 @@ export default function PreJogo() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/pre-jogo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
+  useMatchPhaseGuard(matchId, "pre-jogo");
   const returnTo = new URLSearchParams(window.location.search).get("from") || "/jogos";
   const [matchDetails, setMatchDetails] = useState<MatchDetails | null>(null);
   const [rosterHydrated, setRosterHydrated] = useState(false);
@@ -400,20 +402,6 @@ export default function PreJogo() {
       cancelled = true;
     };
   }, [matchId, userId]);
-
-  useEffect(() => {
-    if (!rosterHydrated) return;
-    const fromQuery = new URLSearchParams(window.location.search).get("from");
-    const fromSuffix = fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : "";
-
-    if (matchStatus === "ao_vivo") {
-      setLocation(`/partida/${matchId}/ao-vivo${fromSuffix}`);
-      return;
-    }
-    if (matchStatus === "aguardando_auditoria" || matchStatus === "auditada") {
-      setLocation(`/partida/${matchId}/pos-jogo${fromSuffix}`);
-    }
-  }, [rosterHydrated, matchStatus, matchId, setLocation]);
 
   const [communityMembers, setCommunityMembers] = useState<
     Awaited<ReturnType<typeof loadCommunityMembers>>
@@ -1724,8 +1712,8 @@ export default function PreJogo() {
           size="lg"
           className="gap-3"
           disabled={!isOrganizer}
-          onClick={() => {
-            if (!isOrganizer) return;
+          onClick={async () => {
+            if (!isOrganizer || !userId) return;
             clearPostMatch(matchId);
             resetMatchFlowSession(matchId);
             savePreMatch({
@@ -1739,7 +1727,7 @@ export default function PreJogo() {
               assignments,
               savedAt: new Date().toISOString(),
             }, matchId);
-            void saveMatchRoster(matchId, {
+            await saveMatchRoster(matchId, {
               gameMode,
               teamCount,
               teamNames,
@@ -1747,6 +1735,7 @@ export default function PreJogo() {
               playerTeams,
               assignments,
             });
+            await startMatchLive(matchId, userId);
             setLocation(`/partida/${matchId}/ao-vivo`);
           }}
         >

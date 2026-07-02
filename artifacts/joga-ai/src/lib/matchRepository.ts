@@ -123,6 +123,33 @@ function writeLocalListings(list: MatchListing[]) {
   localStorage.setItem(LISTINGS_KEY, JSON.stringify(list));
 }
 
+/** Mantém o status da listagem local alinhado com o documento da partida. */
+function syncLocalMatchListingStatus(matchId: string, status: MatchStatus) {
+  const listings = readLocalListings();
+  const idx = listings.findIndex((m) => m.id === matchId);
+  if (idx === -1) return;
+  listings[idx] = { ...listings[idx], status };
+  writeLocalListings(listings);
+}
+
+/** Transição explícita para ao vivo (só a partir de pré-jogo). */
+export async function startMatchLive(
+  matchId: string,
+  organizerId: string,
+): Promise<void> {
+  const existing =
+    loadPostMatch(matchId) ?? (await loadMatchFromFirestore(matchId));
+  if (!existing) return;
+
+  const now = new Date().toISOString();
+  await saveMatchToFirestore(matchId, {
+    ...existing,
+    status: "ao_vivo",
+    organizerId: organizerId || existing.organizerId,
+    savedAt: now,
+  });
+}
+
 function mapGameMode(gameType: string): "fut5" | "fut7" {
   return gameType === "fut5" || gameType === "futsal" ? "fut5" : "fut7";
 }
@@ -498,6 +525,7 @@ export async function saveMatchToFirestore(
 
   // Escreve em localStorage sempre (cache optimista)
   savePostMatch(data);
+  syncLocalMatchListingStatus(matchId, data.status as MatchStatus);
 
   if (enteringPostMatch && data.players?.length) {
     void applyParticipationForMatchRoster({
@@ -560,6 +588,7 @@ export async function updateMatchStatus(
   if (local && local.matchId === matchId) {
     savePostMatch({ ...local, status: status as SavedPostMatch["status"] });
   }
+  syncLocalMatchListingStatus(matchId, status);
 
   if (!isFirebaseConfigured()) {
     if (isListingRemovedStatus(status)) {

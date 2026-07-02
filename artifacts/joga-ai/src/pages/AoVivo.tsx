@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { ChevronLeft, Pause, Play, RotateCcw, StopCircle, X } from "lucide-react";
 import { loadPreMatch, type SavedPreMatch } from "@/lib/preMatchStorage";
-import { saveMatchToFirestore } from "@/lib/matchRepository";
+import { loadMatchFromFirestore, saveMatchToFirestore } from "@/lib/matchRepository";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { getCurrentUserId } from "@/lib/auth";
 import {
   addLiveEvent,
   finalizeMiniGame,
   saveMiniGame,
-  setMatchLive,
 } from "@/lib/liveMatchRepository";
+import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { toast } from "@/hooks/use-toast";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
@@ -79,6 +79,7 @@ export default function AoVivo() {
   const { confirm, ConfirmDialog } = useJogaConfirm();
   const [, params] = useRoute("/partida/:id/ao-vivo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
+  const { ready: phaseReady } = useMatchPhaseGuard(matchId, "ao-vivo");
   const [preMatch, setPreMatch] = useState<SavedPreMatch | null>(null);
 
   const [seconds, setSeconds] = useState(0);
@@ -105,6 +106,8 @@ export default function AoVivo() {
   const [subIn, setSubIn] = useState("");
 
   useEffect(() => {
+    if (!phaseReady) return;
+
     const data = loadPreMatch(matchId);
     setPreMatch(data);
 
@@ -119,12 +122,9 @@ export default function AoVivo() {
       setSelectedPlayerId(first?.id || null);
     }
 
-    // Marca partida como ao vivo no Firestore (organizer = current user)
-    setMatchLive(matchId, getCurrentUserId()).catch(console.warn);
-
     document.body.classList.add("joga-ai-ao-vivo-page");
     return () => document.body.classList.remove("joga-ai-ao-vivo-page");
-  }, [matchId]);
+  }, [matchId, phaseReady]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -369,14 +369,16 @@ export default function AoVivo() {
 
     resetMatchFlowSession(matchId);
 
+    const existing = await loadMatchFromFirestore(matchId);
+
     const postMatchData = {
       version: 1 as const,
       matchId,
       status: "aguardando_auditoria" as const,
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      gameMode: preMatch?.gameMode || "fut5",
-      teamCount: preMatch?.teamCount || 2,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      expiresAt: existing?.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      gameMode: preMatch?.gameMode || existing?.gameMode || "fut5",
+      teamCount: preMatch?.teamCount || existing?.teamCount || 2,
       teamNames: {
         A: teamNames.A,
         B: teamNames.B,
@@ -385,13 +387,19 @@ export default function AoVivo() {
       },
       players,
       playerTeams,
-      currentPlayerId: mePlayer?.id || "",
+      currentPlayerId: mePlayer?.id || existing?.currentPlayerId || "",
       miniGames: finalMiniGames,
       savedAt: new Date().toISOString(),
+      title: existing?.title,
+      communityId: existing?.communityId,
+      organizerId: existing?.organizerId ?? getCurrentUserId(),
+      votedUserIds: existing?.votedUserIds,
+      waitlist: existing?.waitlist,
     } as const;
 
-    saveMatchToFirestore(matchId, postMatchData as Parameters<typeof saveMatchToFirestore>[1]).catch(
-      console.warn
+    await saveMatchToFirestore(
+      matchId,
+      postMatchData as Parameters<typeof saveMatchToFirestore>[1],
     );
 
     window.location.href = `/partida/${matchId}/pos-jogo`;
@@ -415,6 +423,16 @@ export default function AoVivo() {
     setSelectedPlayerId(subIn);
     setSubOut("");
     setSubIn("");
+  }
+
+  if (!phaseReady) {
+    return (
+      <JogaPage theme="arena" padded className="py-6" bottomSpace={false}>
+        <JogaCard variant="arena" padding="lg" className="text-center">
+          <p className="text-white/45 text-sm">A carregar partida…</p>
+        </JogaCard>
+      </JogaPage>
+    );
   }
 
   if (!preMatch) {

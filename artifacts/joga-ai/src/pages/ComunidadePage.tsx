@@ -7,6 +7,7 @@ import { PlayerMiniCard } from "@/components/PlayerMiniCard";
 import {
   loadCommunity,
   loadCommunityMatches,
+  subscribeCommunityMatches,
   loadCommunityMembers,
   syncCommunityMemberCount,
   requestToJoin,
@@ -94,12 +95,15 @@ export default function ComunidadePage() {
   useEffect(() => {
     if (!id) return;
     void refreshCommunity();
-    loadCommunityMatches(id).then(setMatches);
-    loadCommunityMatchResults(id).then(setResults);
+    const unsubMatches = subscribeCommunityMatches(id, (next) => {
+      setMatches(next);
+      void loadCommunityMatchResults(id).then(setResults);
+    });
     loadCommunityPlayerStats(id).then(setPlayerStats);
     if (userId) {
       loadCommunityRivalries(id, userId).then(setRivalries);
     }
+    return () => unsubMatches();
   }, [id, userId]);
 
   useEffect(() => {

@@ -66,6 +66,7 @@ import { generateMatchNarrative } from "@/lib/matchNarrative";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { toast } from "@/hooks/use-toast";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
+import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 
 const eventLabels: Record<string, string> = {
   golo: "Golo",
@@ -210,6 +211,7 @@ export default function PosJogo() {
   const { userId: authUserId } = useAuth();
   const userId = authUserId || currentMatchUserId();
   const matchId = resolveMatchId({ routeMatchId: params?.id });
+  useMatchPhaseGuard(matchId, "pos-jogo");
   const [data, setData] = useState<SavedPostMatch | null>(() => {
     const local = loadPostMatch(matchId);
     if (!local || !authUserId) return local;

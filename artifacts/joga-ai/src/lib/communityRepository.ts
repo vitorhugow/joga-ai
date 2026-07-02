@@ -14,6 +14,7 @@ import {
   where,
   orderBy,
   limit,
+  onSnapshot,
   serverTimestamp,
   collectionGroup,
   writeBatch,
@@ -636,8 +637,9 @@ export async function loadCommunityMatches(
 
     const remote = snap.docs.map((d) => mapMatchDoc(d.id, d.data()));
 
+    const remoteById = new Map(remote.map((m) => [m.id, m]));
     const merged = [
-      ...localCreated,
+      ...localCreated.map((local) => remoteById.get(local.id) ?? local),
       ...remote.filter((m) => !localCreated.some((l) => l.id === m.id)),
     ];
     return merged.slice(0, limitCount);
@@ -645,6 +647,50 @@ export async function loadCommunityMatches(
     console.warn("[communityRepository] loadCommunityMatches:", err);
     return localCreated.slice(0, limitCount);
   }
+}
+
+/** Listener em tempo real das partidas activas de uma comunidade. */
+export function subscribeCommunityMatches(
+  communityId: string,
+  callback: (matches: MatchListing[]) => void,
+  limitCount = 20,
+): () => void {
+  if (!isFirebaseConfigured()) {
+    void loadCommunityMatches(communityId, limitCount).then(callback);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, "matches"),
+    where("communityId", "==", communityId),
+    where("status", "in", [...COMMUNITY_ACTIVE_MATCH_STATUSES]),
+    orderBy("savedAt", "desc"),
+    limit(limitCount),
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const remote = snap.docs.map((d) => mapMatchDoc(d.id, d.data()));
+      const localCreated = readLocalMatchListings().filter(
+        (m) =>
+          m.communityId === communityId &&
+          COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
+            m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
+          ),
+      );
+      const remoteById = new Map(remote.map((m) => [m.id, m]));
+      const merged = [
+        ...localCreated.map((local) => remoteById.get(local.id) ?? local),
+        ...remote.filter((m) => !localCreated.some((l) => l.id === m.id)),
+      ];
+      callback(merged.slice(0, limitCount));
+    },
+    (err) => {
+      console.warn("[communityRepository] subscribeCommunityMatches:", err);
+      void loadCommunityMatches(communityId, limitCount).then(callback);
+    },
+  );
 }
 
 function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {

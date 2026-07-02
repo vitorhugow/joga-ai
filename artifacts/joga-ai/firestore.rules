@@ -84,7 +84,8 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
             'status', 'miniGames', 'players', 'playerTeams',
-            'currentPlayerId', 'assignments', 'savedAt'
+            'currentPlayerId', 'assignments', 'savedAt',
+            'votedUserIds', 'waitlist', 'title', 'communityId', 'organizerId'
           ]);
     }
 

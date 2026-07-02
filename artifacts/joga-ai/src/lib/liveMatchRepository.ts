@@ -14,6 +14,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
@@ -102,10 +103,50 @@ export async function finalizeMiniGame(
   }
 }
 
-/** Actualiza o status de uma partida para "ao_vivo" */
-export async function setMatchLive(
+export type LiveEventSnapshot = {
+  id: string;
+  type: string;
+  playerId: string;
+  playerName: string;
+  team: string;
+  time: string;
+};
+
+export type LiveMiniGameSnapshot = {
+  id: string;
+  title: string;
+  scoreA: number;
+  scoreB: number;
+  homeTeam: string;
+  awayTeam: string;
+  winner: string;
+};
+
+/**
+ * Estado ao vivo (placar, cronómetro, equipas em jogo) espelhado no documento
+ * principal da partida. Só o organizador escreve; qualquer membro que abra a
+ * partida lê em tempo real via `subscribeLiveMatchState`.
+ */
+export type LiveMatchState = {
+  scoreA: number;
+  scoreB: number;
+  activeHomeTeam: string;
+  activeAwayTeam: string;
+  showNextGamePicker: boolean;
+  nextHomeTeam: string;
+  nextAwayTeam: string;
+  isRunning: boolean;
+  seconds: number;
+  syncedAtMs: number;
+  playerTeams: Record<string, string>;
+  events: LiveEventSnapshot[];
+  miniGames: LiveMiniGameSnapshot[];
+};
+
+/** Escreve o estado ao vivo actual (organizador). */
+export async function saveLiveMatchState(
   matchId: string,
-  organizerId: string,
+  state: LiveMatchState,
 ): Promise<void> {
   if (!isFirebaseConfigured()) return;
 
@@ -113,15 +154,32 @@ export async function setMatchLive(
     const ref = doc(db, "matches", matchId);
     await setDoc(
       ref,
-      {
-        matchId,
-        organizerId,
-        status: "ao_vivo",
-        startedAt: serverTimestamp(),
-      },
+      { live: { ...state, updatedAt: serverTimestamp() } },
       { merge: true },
     );
   } catch (err) {
-    console.warn("[liveMatchRepository] setMatchLive:", err);
+    console.warn("[liveMatchRepository] saveLiveMatchState:", err);
   }
+}
+
+/** Escuta o estado ao vivo em tempo real (qualquer membro). */
+export function subscribeLiveMatchState(
+  matchId: string,
+  callback: (state: LiveMatchState | null) => void,
+): () => void {
+  if (!isFirebaseConfigured() || !matchId || matchId === "default") {
+    return () => {};
+  }
+
+  const ref = doc(db, "matches", matchId);
+  return onSnapshot(
+    ref,
+    (snap) => {
+      const data = snap.data();
+      callback((data?.live as LiveMatchState | undefined) ?? null);
+    },
+    (err) => {
+      console.warn("[liveMatchRepository] subscribeLiveMatchState:", err);
+    },
+  );
 }

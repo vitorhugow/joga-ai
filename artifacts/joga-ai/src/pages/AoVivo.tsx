@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { ChevronLeft, Pause, Play, RotateCcw, StopCircle, X } from "lucide-react";
 import { loadPreMatch, type SavedPreMatch } from "@/lib/preMatchStorage";
+import type { SavedPostMatch } from "@/lib/postMatchStorage";
 import {
   loadMatchFromFirestore,
   saveMatchToFirestoreOrThrow,
@@ -13,8 +14,12 @@ import {
   addLiveEvent,
   finalizeMiniGame,
   saveMiniGame,
+  saveLiveMatchState,
+  subscribeLiveMatchState,
+  type LiveMatchState,
 } from "@/lib/liveMatchRepository";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
+import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { toast } from "@/hooks/use-toast";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
@@ -81,12 +86,18 @@ function formatTime(seconds: number) {
 
 export default function AoVivo() {
   const { confirm, ConfirmDialog } = useJogaConfirm();
+  const { userId } = useAuth();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/ao-vivo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
   const returnTo = getMatchReturnPath();
   const { ready: phaseReady } = useMatchPhaseGuard(matchId, "ao-vivo");
   const [preMatch, setPreMatch] = useState<SavedPreMatch | null>(null);
+  const [organizerId, setOrganizerId] = useState<string | null | undefined>(undefined);
+  const isOrganizer = Boolean(userId && organizerId && userId === organizerId);
+  const [remoteMatch, setRemoteMatch] = useState<SavedPostMatch | null>(null);
+  const [remoteLive, setRemoteLive] = useState<LiveMatchState | null>(null);
+  const [viewerTick, setViewerTick] = useState(0);
 
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -128,19 +139,106 @@ export default function AoVivo() {
       setSelectedPlayerId(first?.id || null);
     }
 
+    void loadMatchFromFirestore(matchId).then((match) => {
+      setOrganizerId(match?.organizerId ?? null);
+      setRemoteMatch(match ?? null);
+    });
+
     document.body.classList.add("joga-ai-ao-vivo-page");
     return () => document.body.classList.remove("joga-ai-ao-vivo-page");
   }, [matchId, phaseReady]);
 
+  // Qualquer pessoa que abra a partida (não só o organizador) recebe o
+  // estado ao vivo em tempo real — placar, cronómetro, equipas e eventos.
   useEffect(() => {
-    if (!isRunning) return;
+    if (!phaseReady) return;
+    return subscribeLiveMatchState(matchId, setRemoteLive);
+  }, [matchId, phaseReady]);
+
+  useEffect(() => {
+    if (!isOrganizer || !isRunning) return;
 
     const interval = window.setInterval(() => {
       setSeconds((value) => value + 1);
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [isRunning]);
+  }, [isOrganizer, isRunning]);
+
+  // Cronómetro do espectador: extrapolado localmente a partir do último
+  // snapshot recebido, para não depender de escritas a cada segundo.
+  useEffect(() => {
+    if (isOrganizer || !remoteLive?.isRunning) return;
+
+    const interval = window.setInterval(() => {
+      setViewerTick((value) => value + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [isOrganizer, remoteLive?.isRunning]);
+
+  const viewerSeconds = useMemo(() => {
+    if (!remoteLive) return 0;
+    if (!remoteLive.isRunning) return remoteLive.seconds ?? 0;
+    const elapsed = Math.max(0, Math.floor((Date.now() - remoteLive.syncedAtMs) / 1000));
+    return (remoteLive.seconds ?? 0) + elapsed;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteLive, viewerTick]);
+
+  // Espelha o estado ao vivo local no Firestore (só o organizador escreve).
+  const broadcastLiveRef = useRef<() => void>(() => {});
+  broadcastLiveRef.current = () => {
+    if (!isOrganizer || !phaseReady) return;
+    saveLiveMatchState(matchId, {
+      scoreA,
+      scoreB,
+      activeHomeTeam,
+      activeAwayTeam,
+      showNextGamePicker,
+      nextHomeTeam,
+      nextAwayTeam,
+      isRunning,
+      seconds,
+      syncedAtMs: Date.now(),
+      playerTeams,
+      events,
+      miniGames: miniGames.map((game) => ({
+        id: game.id,
+        title: game.title,
+        scoreA: game.scoreA,
+        scoreB: game.scoreB,
+        homeTeam: game.homeTeam,
+        awayTeam: game.awayTeam,
+        winner: game.winner,
+      })),
+    }).catch(console.warn);
+  };
+
+  useEffect(() => {
+    broadcastLiveRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isOrganizer,
+    phaseReady,
+    matchId,
+    scoreA,
+    scoreB,
+    activeHomeTeam,
+    activeAwayTeam,
+    showNextGamePicker,
+    nextHomeTeam,
+    nextAwayTeam,
+    isRunning,
+    playerTeams,
+    events,
+    miniGames,
+  ]);
+
+  useEffect(() => {
+    if (!isOrganizer || !isRunning) return;
+    const interval = window.setInterval(() => broadcastLiveRef.current(), 8000);
+    return () => window.clearInterval(interval);
+  }, [isOrganizer, isRunning]);
 
   const players = preMatch?.players || [];
   const activeTeamCount = preMatch?.teamCount || 2;
@@ -422,8 +520,6 @@ export default function AoVivo() {
 
 
 
-
-
   function confirmarSubstituicao() {
     if (!subOut || !subIn || subOut === subIn) return;
 
@@ -446,6 +542,186 @@ export default function AoVivo() {
         <JogaCard variant="arena" padding="lg" className="text-center">
           <p className="text-white/45 text-sm">A carregar partida…</p>
         </JogaCard>
+      </JogaPage>
+    );
+  }
+
+  if (organizerId === undefined) {
+    return (
+      <JogaPage theme="arena" padded className="py-6" bottomSpace={false}>
+        <JogaCard variant="arena" padding="lg" className="text-center">
+          <p className="text-white/45 text-sm">A carregar partida…</p>
+        </JogaCard>
+      </JogaPage>
+    );
+  }
+
+  // Só o organizador controla a partida. Qualquer outro membro vê tudo em
+  // tempo real (placar, cronómetro, eventos), sem poder alterar nada.
+  if (!isOrganizer) {
+    const viewPlayers = remoteMatch?.players ?? preMatch?.players ?? [];
+    const viewTeamNames: Record<TeamKey, string> = {
+      ...defaultTeamNames,
+      ...((remoteMatch?.teamNames || preMatch?.teamNames || {}) as Partial<Record<TeamKey, string>>),
+    };
+    const liveHomeTeam = ((remoteLive?.activeHomeTeam as TeamKey) || "A") as TeamKey;
+    const liveAwayTeam = ((remoteLive?.activeAwayTeam as TeamKey) || "B") as TeamKey;
+    const liveScoreA = remoteLive?.scoreA ?? 0;
+    const liveScoreB = remoteLive?.scoreB ?? 0;
+    const liveEvents = remoteLive?.events ?? [];
+    const liveMiniGames = remoteLive?.miniGames ?? [];
+    const liveHomeWinning = liveScoreA > liveScoreB;
+    const liveAwayWinning = liveScoreB > liveScoreA;
+    const liveTeamsByKey = viewPlayers.reduce<Record<TeamKey, LivePlayer[]>>(
+      (map, player) => {
+        const team = ((remoteLive?.playerTeams?.[player.id] as TeamKey) || "BENCH") as TeamKey;
+        map[team] = map[team] || [];
+        map[team].push(player);
+        return map;
+      },
+      { A: [], B: [], C: [], D: [], BENCH: [] },
+    );
+
+    return (
+      <JogaPage theme="arena" padded={false} bottomSpace={false} className="pb-8">
+        <div className="flex items-center justify-between px-4 pt-5 pb-3">
+          <button
+            type="button"
+            className="w-12 h-12 rounded-2xl flex items-center justify-center joga-live-button"
+            style={{ background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.34)" }}
+            onClick={() => setLocation(returnTo)}
+            aria-label="Voltar"
+          >
+            <ChevronLeft className="w-6 h-6 text-red-100" />
+          </button>
+
+          <div className="text-center">
+            <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.22em]">Ao Vivo · A acompanhar</p>
+            <p className="text-white font-display font-black text-base">
+              {viewTeamNames[liveHomeTeam]} x {viewTeamNames[liveAwayTeam]}
+            </p>
+          </div>
+
+          <div className="w-12" />
+        </div>
+
+        <div className="px-4 space-y-4">
+          {!remoteLive && (
+            <JogaCard variant="arena" padding="lg" className="text-center">
+              <p className="text-white/45 text-sm">A aguardar o organizador iniciar o jogo…</p>
+            </JogaCard>
+          )}
+
+          <section
+            className="relative overflow-hidden rounded-[30px] p-5 text-center"
+            style={{
+              background:
+                "radial-gradient(circle at 50% 0%, rgba(74,222,128,0.18), transparent 45%), linear-gradient(160deg, rgba(255,255,255,0.09), rgba(255,255,255,0.035))",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 18px 45px rgba(0,0,0,0.28)",
+            }}
+          >
+            <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${teamColors[liveHomeTeam]}, rgba(255,255,255,0.16), ${teamColors[liveAwayTeam]})` }} />
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1 rounded-3xl py-4" style={{ background: `${teamColors[liveHomeTeam]}14`, border: `1px solid ${teamColors[liveHomeTeam]}33` }}>
+                <p className="font-black text-[11px] uppercase tracking-wide" style={{ color: teamColors[liveHomeTeam] }}>{viewTeamNames[liveHomeTeam]}</p>
+                <p
+                  className="font-display font-black text-6xl leading-none mt-1"
+                  style={{ color: liveHomeWinning ? teamColors[liveHomeTeam] : "white" }}
+                >
+                  {liveScoreA}
+                </p>
+              </div>
+
+              <div className="px-2">
+                <p className="font-display font-black text-white text-4xl leading-none">{formatTime(viewerSeconds)}</p>
+                <p className="text-white/35 text-[11px] font-black uppercase mt-2">{remoteLive?.isRunning ? "Rodando" : "Parado"}</p>
+              </div>
+
+              <div className="flex-1 rounded-3xl py-4" style={{ background: `${teamColors[liveAwayTeam]}14`, border: `1px solid ${teamColors[liveAwayTeam]}33` }}>
+                <p className="font-black text-[11px] uppercase tracking-wide" style={{ color: teamColors[liveAwayTeam] }}>{viewTeamNames[liveAwayTeam]}</p>
+                <p
+                  className="font-display font-black text-6xl leading-none mt-1"
+                  style={{ color: liveAwayWinning ? teamColors[liveAwayTeam] : "white" }}
+                >
+                  {liveScoreB}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {(remoteLive?.showNextGamePicker ?? false) && (
+            <JogaCard variant="arena" padding="md" className="text-center">
+              <p className="text-white/55 text-sm">O organizador está a escolher o próximo mini jogo…</p>
+            </JogaCard>
+          )}
+
+          {[liveHomeTeam, liveAwayTeam].some((team) => (liveTeamsByKey[team] || []).length > 0) && (
+            <section className="rounded-3xl overflow-hidden" style={{ background: "#0d1117", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="grid grid-cols-2">
+                {[liveHomeTeam, liveAwayTeam].map((team) => (
+                  <div key={team} style={{ borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div className="px-3 py-2.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: teamColors[team] }}>
+                        {viewTeamNames[team]}
+                      </p>
+                    </div>
+
+                    {(liveTeamsByKey[team] || []).map((player) => (
+                      <div key={player.id} className="w-full flex items-center gap-2.5 px-3 py-2.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                        <span className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-white text-[10px]" style={{ background: `${teamColors[team]}22` }}>
+                          {player.position}
+                        </span>
+                        <span className="text-xs font-semibold truncate text-white/70">{player.name.split(" ")[0]}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="rounded-3xl p-4" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-[10px] font-black text-white/25 uppercase tracking-[0.22em] mb-3">Eventos do jogo actual</p>
+
+            {liveEvents.length === 0 ? (
+              <p className="text-white/35 text-sm">Nenhum evento ainda.</p>
+            ) : (
+              <div className="space-y-2">
+                {liveEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="flex items-center gap-2 text-sm rounded-xl px-2 py-2"
+                    style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.05)" }}
+                  >
+                    <span className="text-white/75 flex-1">{event.time} · {event.playerName}</span>
+                    <span style={{ color: teamColors[(event.team as TeamKey) || "BENCH"] }}>
+                      {eventTypes.find((item) => item.key === event.type)?.emoji}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {liveMiniGames.length > 0 && (
+            <section className="rounded-3xl p-4" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <p className="text-[10px] font-black text-white/25 uppercase tracking-[0.22em] mb-3">Mini jogos anteriores</p>
+
+              <div className="space-y-2">
+                {liveMiniGames.map((game, index) => (
+                  <div key={game.id} className="rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.045)" }}>
+                    <p className="text-white font-black">Jogo {index + 1}: {game.title}</p>
+                    <p className="text-white/45 text-xs mt-1">Vencedor: {game.winner}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <p className="text-white/30 text-xs text-center">Só o organizador pode controlar esta partida.</p>
+        </div>
       </JogaPage>
     );
   }

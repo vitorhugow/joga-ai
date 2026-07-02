@@ -18,6 +18,7 @@ import {
   collection,
   onSnapshot,
   serverTimestamp,
+  arrayUnion,
   type DocumentData,
   type PartialWithFieldValue,
 } from "firebase/firestore";
@@ -563,6 +564,15 @@ export async function saveMatchRoster(
   await saveMatchToFirestore(matchId, updated);
 }
 
+/**
+ * O SDK do Firestore usado aqui (getFirestore, sem ignoreUndefinedProperties)
+ * rejeita QUALQUER campo com valor `undefined` — o setDoc lança logo no
+ * cliente, antes de sequer contactar o servidor. Como vários matches não têm
+ * `title`/`communityId` definidos, isto podia bloquear silenciosamente
+ * transições críticas (ex: terminar a pelada), fazendo parecer que a partida
+ * "fica presa" no Ao Vivo. Por isso todos os campos opcionais têm fallback
+ * explícito para `null` em vez de deixar passar `undefined`.
+ */
 function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
   return {
     matchId: data.matchId,
@@ -573,15 +583,15 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     players: data.players,
     playerTeams: data.playerTeams,
     assignments: data.assignments ?? {},
-    currentPlayerId: data.currentPlayerId,
-    miniGames: data.miniGames,
+    currentPlayerId: data.currentPlayerId ?? "",
+    miniGames: data.miniGames ?? [],
     createdAt: data.createdAt,
     expiresAt: data.expiresAt,
     votedUserIds: data.votedUserIds ?? [],
     waitlist: data.waitlist ?? [],
-    title: data.title,
-    communityId: data.communityId,
-    organizerId: data.organizerId,
+    title: data.title ?? null,
+    communityId: data.communityId ?? null,
+    organizerId: data.organizerId ?? null,
     savedAt: serverTimestamp(),
   };
 }
@@ -652,6 +662,31 @@ export async function saveMatchToFirestoreOrThrow(
   await setDoc(ref, buildMatchDocPayload(data), { merge: true });
   if (isListingRemovedStatus(data.status)) {
     removeMatchFromListings(matchId);
+  }
+}
+
+/**
+ * Marca um utilizador como tendo votado, de forma atómica (arrayUnion).
+ * Evita a corrida em que dois votos em simultâneo se sobrepõem e "perdem"
+ * um dos votantes no array `votedUserIds` do documento principal.
+ */
+export async function markUserVoted(matchId: string, userId: string): Promise<void> {
+  const local = loadPostMatch(matchId);
+  if (local && local.matchId === matchId) {
+    const nextIds = [...new Set([...(local.votedUserIds ?? []), userId])];
+    savePostMatch({ ...local, votedUserIds: nextIds });
+  }
+
+  if (!isFirebaseConfigured()) return;
+
+  try {
+    const ref = doc(db, "matches", matchId);
+    await updateDoc(ref, {
+      votedUserIds: arrayUnion(userId),
+      savedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("[matchRepository] markUserVoted:", err);
   }
 }
 

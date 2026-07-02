@@ -6,6 +6,7 @@ import {
   updateMatchStatus,
   loadMatchFromFirestore,
   deleteMatch,
+  markUserVoted,
 } from "@/lib/matchRepository";
 import {
   registerAuditor,
@@ -319,7 +320,10 @@ export default function PosJogo() {
     if (!data) return;
     const isVoting =
       data.status === "aguardando_auditoria" || data.status === "auditada";
-    if (isVoting && !gainsMode && !hasUserVotedInSession(userId, matchId)) {
+    // O organizador fica no resumo (com o painel de administração da
+    // votação); só os restantes participantes vão direto para a votação.
+    const isMatchOrganizerNow = Boolean(data.organizerId && userId === data.organizerId);
+    if (isVoting && !gainsMode && !isMatchOrganizerNow && !hasUserVotedInSession(userId, matchId)) {
       setVoteMode(true);
     }
   }, [data, gainsMode, userId, matchId]);
@@ -481,7 +485,7 @@ export default function PosJogo() {
   async function persistMatchResultAndMaybeReleaseRatings(
     reason: "all_voted" | "organizer",
   ) {
-    if (!data) return;
+    if (!data || ratingsReleased) return;
 
     const votes = await getVotes(matchId);
     const completedAt = new Date().toISOString();
@@ -652,18 +656,19 @@ export default function PosJogo() {
     const voteRecord = { userId, ratings, createdAt: new Date().toISOString() };
     flow.upsertVote(voteRecord);
     submitVote(matchId, voteRecord).catch(console.warn);
+    markUserVoted(matchId, userId).catch(console.warn);
 
-    const nextVotedUserIds = [...new Set([...(data.votedUserIds ?? []), userId])];
+    // `votedUserIds` (memoizado) já incorpora os votos em tempo real de outros
+    // jogadores via `voteRecords` — usar isto (em vez de `data.votedUserIds`
+    // isolado) evita perder votantes quando dois votos chegam quase ao mesmo
+    // tempo (cada cliente só via o seu próprio snapshot desatualizado).
+    const nextVotedUserIds = [...new Set([...votedUserIds, userId])];
     const nextAllVoted =
       requiredVoters.length === 0 ||
       requiredVoters.every((uid) => nextVotedUserIds.includes(uid));
     const nextStatus = nextAllVoted ? "concluida" : data.status ?? "auditada";
 
     updateData({ ...data, votedUserIds: nextVotedUserIds, status: nextStatus });
-
-    if (nextAllVoted) {
-      updateMatchStatus(data.matchId, "concluida").catch(console.warn);
-    }
 
     setVoteMode(false);
     setGainsMode(true);
@@ -726,9 +731,27 @@ export default function PosJogo() {
 
       await refresh();
 
-      if (!nextAllVoted) return;
+      // Confirmação final a partir da fonte autoritativa (subcoleção `votes`,
+      // onde cada jogador escreve o seu próprio documento sem risco de
+      // sobrescrita) — evita não finalizar quando o listener local ainda não
+      // tinha recebido o voto de outro jogador no momento do clique.
+      try {
+        const freshVotes = await getVotes(data.matchId);
+        const freshVotedIds = new Set(freshVotes.map((v) => v.userId));
+        freshVotedIds.add(userId);
+        const allRequiredVoted =
+          requiredVoters.length === 0 ||
+          requiredVoters.every((uid) => freshVotedIds.has(uid));
 
-      await persistMatchResultAndMaybeReleaseRatings("all_voted");
+        if (allRequiredVoted) {
+          await persistMatchResultAndMaybeReleaseRatings("all_voted");
+        }
+      } catch (err) {
+        console.warn("[PosJogo] verificação final de votos:", err);
+        if (nextAllVoted) {
+          await persistMatchResultAndMaybeReleaseRatings("all_voted");
+        }
+      }
     })();
   }
 

@@ -26,19 +26,11 @@ service cloud.firestore {
         && matchDoc(matchId).organizerId == request.auth.uid;
     }
 
-    function isMatchLive(matchId) {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/matches/$(matchId))
-        && matchDoc(matchId).status == 'ao_vivo';
-    }
-
     // Collection-group queries (loadMyCommunities, pedidos pendentes)
+    // Apenas leitura: este wildcard existe para as collection-group queries.
+    // Criação/remoção de membros acontece SÓ no bloco communities/{id}/members.
     match /{path=**}/members/{memberId} {
       allow read: if isSignedIn()
-        && (memberId == request.auth.uid
-          || resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && memberId == request.auth.uid;
-      allow delete: if isSignedIn()
         && (memberId == request.auth.uid
           || resource.data.userId == request.auth.uid);
     }
@@ -119,10 +111,16 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId) || isSignedIn();
       allow create: if isOwner(userId);
+      // Revert de evolução: só o organizador da partida, só os campos do revert,
+      // e apenas se o user realmente participou dessa partida (tem matchHistory dela).
       allow update: if isOwner(userId) || (
         isSignedIn()
         && request.resource.data.keys().hasAll(['_revertForMatchId'])
         && isMatchOrganizer(request.resource.data._revertForMatchId)
+        && exists(/databases/$(database)/documents/users/$(userId)/matchHistory/$(request.resource.data._revertForMatchId))
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['attributes', 'seasonStats', '_revertForMatchId', 'updatedAt',
+                    'lastAttributeDeltas', 'lastEvolutionMatchId', 'lastMatchRating'])
       ) || (
         // Publicar notas/distintivos de TODOS os jogadores quando a votação
         // termina — quem despoleta isto é normalmente o último a votar, não
@@ -177,7 +175,8 @@ service cloud.firestore {
 
       match /auditors/{docId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.resource.data.userId == request.auth.uid;
         allow update, delete: if isSignedIn() && (
           isMatchOrganizer(matchId)
           || resource.data.userId == request.auth.uid
@@ -192,16 +191,15 @@ service cloud.firestore {
 
       match /events/{eventId} {
         allow read: if isSignedIn();
-        allow write: if isSignedIn() && (
-          isMatchOrganizer(matchId) || isMatchLive(matchId)
-        );
+        // Modelo "mesário único": só o organizador regista eventos.
+        // Se um dia houver marcação multi-dispositivo, adicionar um campo
+        // participantIds: string[] na partida e permitir esses uids aqui.
+        allow write: if isMatchOrganizer(matchId);
       }
 
       match /miniGames/{gameId} {
         allow read: if isSignedIn();
-        allow write: if isSignedIn() && (
-          isMatchOrganizer(matchId) || isMatchLive(matchId)
-        );
+        allow write: if isMatchOrganizer(matchId);
       }
 
       match /summary/{docId} {
@@ -232,9 +230,14 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if isSignedIn();
+        // Self-join só em comunidades públicas; em privadas, só o admin
+        // (via aprovação de joinRequest) pode criar o membro.
         allow create: if isSignedIn() && (
-          memberId == request.auth.uid
-          || isCommunityAdmin(communityId)
+          isCommunityAdmin(communityId)
+          || (
+            memberId == request.auth.uid
+            && get(/databases/$(database)/documents/communities/$(communityId)).data.isPrivate != true
+          )
         );
         allow update: if isCommunityAdmin(communityId);
         allow delete: if isCommunityAdmin(communityId)
@@ -256,7 +259,8 @@ service cloud.firestore {
 
       match /rivalries/{pairId} {
         allow read: if isSignedIn();
-        allow write: if isSignedIn();
+        allow write: if isCommunityMatchMember(communityId)
+          || isCommunityAdmin(communityId);
       }
     }
   }

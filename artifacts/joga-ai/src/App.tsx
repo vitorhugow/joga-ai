@@ -9,26 +9,37 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGateProvider } from "@/contexts/AuthGateContext";
 import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
+import { lazy, Suspense } from "react";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
-import Perfil from "@/pages/Perfil";
-import Comunidades from "@/pages/Comunidades";
-import ComunidadePage from "@/pages/ComunidadePage";
-import CriarPartida from "@/pages/CriarPartida";
-import PreJogo from "@/pages/PreJogo";
-import AoVivo from "@/pages/AoVivo";
-import PosJogo from "@/pages/PosJogo";
-import Jogos from "@/pages/Jogos";
-import Premium from "@/pages/Premium";
-import Campos from "@/pages/Campos";
-import Evolucao from "@/pages/Evolucao";
-import Ranking from "@/pages/Ranking";
-import Login from "@/pages/Login";
-import ComunidadeConfiguracoes from "@/pages/ComunidadeConfiguracoes";
-import CriarComunidade from "@/pages/CriarComunidade";
-import Privacidade from "@/pages/Privacidade";
-import Termos from "@/pages/Termos";
-import DemoCarta from "@/pages/DemoCarta";
+
+// Code splitting: cada página vira um chunk próprio, carregado sob demanda.
+const Perfil = lazy(() => import("@/pages/Perfil"));
+const Comunidades = lazy(() => import("@/pages/Comunidades"));
+const ComunidadePage = lazy(() => import("@/pages/ComunidadePage"));
+const CriarPartida = lazy(() => import("@/pages/CriarPartida"));
+const PreJogo = lazy(() => import("@/pages/PreJogo"));
+const AoVivo = lazy(() => import("@/pages/AoVivo"));
+const PosJogo = lazy(() => import("@/pages/PosJogo"));
+const Jogos = lazy(() => import("@/pages/Jogos"));
+const Premium = lazy(() => import("@/pages/Premium"));
+const Campos = lazy(() => import("@/pages/Campos"));
+const Evolucao = lazy(() => import("@/pages/Evolucao"));
+const Ranking = lazy(() => import("@/pages/Ranking"));
+const Login = lazy(() => import("@/pages/Login"));
+const ComunidadeConfiguracoes = lazy(() => import("@/pages/ComunidadeConfiguracoes"));
+const CriarComunidade = lazy(() => import("@/pages/CriarComunidade"));
+const Privacidade = lazy(() => import("@/pages/Privacidade"));
+const Termos = lazy(() => import("@/pages/Termos"));
+const DemoCarta = lazy(() => import("@/pages/DemoCarta"));
+
+function PageFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient();
 
@@ -42,7 +53,8 @@ function AnimatedRoutes() {
     <>
       <AnimatePresence mode="wait">
         <motion.div key={location} {...pageTransition}>
-          <Switch location={location}>
+          <Suspense fallback={<PageFallback />}>
+            <Switch location={location}>
             <Route path="/" component={Home} />
             <Route path="/perfil/evolucao" component={Evolucao} />
             <Route path="/perfil/:viewId" component={Perfil} />
@@ -64,8 +76,9 @@ function AnimatedRoutes() {
             <Route path="/premium" component={Premium} />
             <Route path="/campos" component={Campos} />
             <Route path="/ranking" component={Ranking} />
-            <Route component={NotFound} />
-          </Switch>
+              <Route component={NotFound} />
+            </Switch>
+          </Suspense>
         </motion.div>
       </AnimatePresence>
       {!hideNav && <BottomNavigation />}

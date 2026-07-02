@@ -327,6 +327,24 @@ function profileForFirestore(profile: UserProfile) {
   return rest;
 }
 
+function socialLinksFirestorePatch(
+  patch: SocialLinksInput,
+  social: Pick<UserProfile, "instagram" | "whatsapp" | "showInstagramPublic" | "showWhatsappPublic">,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+
+  if (patch.instagram !== undefined) {
+    out.instagram = social.instagram ?? deleteField();
+    out.showInstagramPublic = social.showInstagramPublic ?? false;
+  }
+  if (patch.whatsapp !== undefined) {
+    out.whatsapp = social.whatsapp ?? deleteField();
+    out.showWhatsappPublic = social.showWhatsappPublic ?? false;
+  }
+
+  return out;
+}
+
 async function persistProfile(
   userRef: DocumentReference,
   profile: UserProfile,
@@ -599,18 +617,57 @@ export async function completeUserProfile(
   return updated;
 }
 
+export type ProfileSettingsInput = SocialLinksInput & {
+  displayName?: string;
+};
+
+/** Atualiza nome e redes sociais sem reenviar a foto (evita falhas de sync). */
+export async function updateProfileSettings(
+  userId: string,
+  patch: ProfileSettingsInput,
+  isAnonymous = true,
+): Promise<UserProfile> {
+  const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
+  if (!current.profileComplete) {
+    throw new Error("profile-incomplete");
+  }
+
+  const socialPatch = applySocialLinksPatch(current, patch);
+  const updated: UserProfile = {
+    ...current,
+    displayName: patch.displayName?.trim() ?? current.displayName,
+    isAnonymous,
+    ...socialPatch,
+    updatedAt: new Date().toISOString(),
+  };
+
+  writeLocalProfile(updated);
+
+  if (isFirebaseConfigured() && !isAnonymous) {
+    const firestorePatch: Record<string, unknown> = {
+      ...socialLinksFirestorePatch(patch, socialPatch),
+      updatedAt: serverTimestamp(),
+    };
+    if (patch.displayName !== undefined) {
+      firestorePatch.displayName = patch.displayName.trim();
+    }
+    await updateDoc(doc(db, "users", userId), firestorePatch);
+  }
+
+  return updated;
+}
+
 export async function updateUserProfile(
   userId: string,
-  patch: Partial<ProfileSetupInput & { title: string } & SocialLinksInput>,
+  patch: Partial<ProfileSetupInput & { title: string }>,
   isAnonymous = true,
 ): Promise<UserProfile> {
   const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
 
-  const photoUrl = validatePhotoUrlForFirestore(
-    patch.photoUrl !== undefined ? patch.photoUrl : current.photoUrl,
-  );
-
-  const socialPatch = applySocialLinksPatch(current, patch);
+  const photoUrl =
+    patch.photoUrl !== undefined
+      ? validatePhotoUrlForFirestore(patch.photoUrl)
+      : current.photoUrl;
 
   const updated: UserProfile = {
     ...current,
@@ -622,7 +679,6 @@ export async function updateUserProfile(
     attributes: current.attributes,
     profileComplete: true,
     isAnonymous,
-    ...socialPatch,
     updatedAt: new Date().toISOString(),
   };
 

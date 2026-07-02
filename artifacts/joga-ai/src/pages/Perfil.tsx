@@ -12,6 +12,7 @@ import { useUserId, useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
+import { ProfileEditDialog } from "@/components/profile/ProfileEditDialog";
 import { ProfileSocialLinks } from "@/components/profile/ProfileSocialLinks";
 import { toast } from "@/hooks/use-toast";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
@@ -171,6 +172,7 @@ export default function Perfil() {
   const activeProfile = (isViewingOther ? viewedProfile : profile) ?? profile;
   const profileLoading = isViewingOther ? viewLoading : ownProfileLoading;
   const [showSetup, setShowSetup] = useState(false);
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");
   const [isCardExpanded, setIsCardExpanded] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
@@ -271,6 +273,14 @@ export default function Perfil() {
           setShowSetup(false);
           void refresh();
         }}
+      />
+      )}
+
+      {!isViewingOther && activeProfile.profileComplete && (
+      <ProfileEditDialog
+        open={showProfileEdit}
+        onOpenChange={setShowProfileEdit}
+        profile={activeProfile}
       />
       )}
 
@@ -380,7 +390,26 @@ export default function Perfil() {
               {isViewingOther ? `Perfil de ${player.name.split(" ")[0]}` : "O Meu Perfil"}
             </h1>
             {!isViewingOther && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <JogaButton
+                variant="ghost"
+                size="sm"
+                className="rounded-full px-3"
+                onClick={() => {
+                  if (!isLinked) {
+                    openAuth({
+                      mode: "register",
+                      title: "Cria conta para editar o perfil",
+                      description: "Regista-te para guardar nome, redes sociais e conta.",
+                    });
+                    return;
+                  }
+                  setShowProfileEdit(true);
+                }}
+                data-testid="button-edit-profile"
+              >
+                Editar perfil
+              </JogaButton>
               <JogaButton
                 variant="ghost"
                 size="sm"
@@ -405,7 +434,17 @@ export default function Perfil() {
                 size="sm"
                 className="rounded-full px-4"
                 data-testid="button-share-card"
-                onClick={() => void shareCard()}
+                onClick={() => {
+                  if (!isLinked) {
+                    openAuth({
+                      mode: "register",
+                      title: "Cria conta para partilhar a carta",
+                      description: "Regista-te para exportar e partilhar a tua carta.",
+                    });
+                    return;
+                  }
+                  void shareCard();
+                }}
               >
                 <Share2 className="w-3.5 h-3.5" />
                 Partilhar

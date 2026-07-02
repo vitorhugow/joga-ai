@@ -43,15 +43,33 @@ const gameTypeLabel: Record<string, string> = {
   futebol11: "Fut 11",
 };
 
+const COMMUNITY_TABS = ["partidas", "membros", "resultados", "liga", "duelos"] as const;
+type CommunityTab = (typeof COMMUNITY_TABS)[number];
+
+function parseCommunityTab(): CommunityTab {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return COMMUNITY_TABS.includes(tab as CommunityTab) ? (tab as CommunityTab) : "partidas";
+}
+
 export default function ComunidadePage() {
   const { requireLinked } = useAuthGate();
   const { userId, isLinked } = useAuth();
   const { profile } = useUserProfile();
   const [, params] = useRoute("/comunidades/:id");
-  const [activeTab, setActiveTab] = useState<
-    "partidas" | "membros" | "resultados" | "liga" | "duelos"
-  >("partidas");
+  const [activeTab, setActiveTab] = useState<CommunityTab>(parseCommunityTab);
   const id = params?.id || "";
+
+  function selectTab(tab: CommunityTab) {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "partidas") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }
+
+  useEffect(() => {
+    setActiveTab(parseCommunityTab());
+  }, [id]);
 
   const [community, setCommunity] = useState<Community | null>(null);
   const [matches, setMatches] = useState<MatchListing[]>([]);
@@ -344,7 +362,7 @@ export default function ComunidadePage() {
               key={tab.key}
               label={tab.label}
               active={activeTab === tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => selectTab(tab.key as CommunityTab)}
               testId={`tab-${tab.key}`}
             />
           ))}
@@ -488,7 +506,7 @@ export default function ComunidadePage() {
                 const profile = memberProfiles.get(m.userId);
                 const photoSrc = imageDisplaySrc(profile?.photoUrl);
                 return (
-                  <Link key={m.userId} href={`/perfil/${m.userId}?from=${encodeURIComponent(`/comunidades/${id}`)}`}>
+                  <Link key={m.userId} href={`/perfil/${m.userId}?from=${encodeURIComponent(`/comunidades/${id}?tab=membros`)}`}>
                     <JogaCard variant="arena" className="joga-tap">
                       <PlayerMiniCard
                         name={profile?.displayName || m.displayName}

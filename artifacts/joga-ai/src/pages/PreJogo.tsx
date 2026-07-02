@@ -33,9 +33,9 @@ import {
 } from "@/lib/matchRsvpRepository";
 import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
 import { calculateOverall } from "@/lib/cardUtils";
-import { ensureAnonymousAuth } from "@/lib/auth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -314,6 +314,7 @@ function PlayerPicker({
 
 export default function PreJogo() {
   const { userId, isLinked } = useAuth();
+  const { requireLinked } = useAuthGate();
   const { profile } = useUserProfile();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/pre-jogo");
@@ -668,16 +669,25 @@ export default function PreJogo() {
   }
 
   async function handleConfirmPresence(nameOverride?: string) {
+    if (!requireLinked({
+      mode: "register",
+      title: "Cria conta para confirmar presença",
+      description: "Precisas de entrar para participar nesta pelada.",
+    })) {
+      return;
+    }
+    if (!userId) return;
+
     const displayName = (nameOverride || profile.displayName || "").trim();
     if (!displayName) {
       setShowRsvpNameForm(true);
-      toast({ title: "Indica o teu nome", variant: "destructive" });
+      toast({ title: "Indica o teu nome no perfil", description: "Edita o perfil com o teu nome completo." });
       return;
     }
 
     setRsvpBusy(true);
     try {
-      const uid = userId ?? (await ensureAnonymousAuth());
+      const uid = userId;
       const overall = profile.profileComplete
         ? calculateOverall(profile.attributes)
         : 50;
@@ -724,6 +734,13 @@ export default function PreJogo() {
   }
 
   async function handleLeaveMatch() {
+    if (!requireLinked({
+      mode: "register",
+      title: "Cria conta para gerir a presença",
+      description: "Precisas de entrar para sair da pelada.",
+    })) {
+      return;
+    }
     if (!userId) return;
     setRsvpBusy(true);
     try {
@@ -1141,10 +1158,17 @@ export default function PreJogo() {
   const showRsvpBanner = Boolean(
     !isOrganizer && rosterHydrated && canConfirmPresence(matchStatus),
   );
-  const needsRsvpName = !isLinked || !profile.displayName?.trim();
+  const needsProfileName = isLinked && !profile.displayName?.trim();
 
   function handleRsvpClick() {
-    if (needsRsvpName && !showRsvpNameForm) {
+    if (!requireLinked({
+      mode: "register",
+      title: "Cria conta para confirmar presença",
+      description: "Precisas de entrar para participar nesta pelada.",
+    })) {
+      return;
+    }
+    if (needsProfileName && !showRsvpNameForm) {
       setShowRsvpNameForm(true);
       return;
     }
@@ -1286,7 +1310,7 @@ export default function PreJogo() {
             ) : (
               <>
                 <p className="text-white/80 text-sm font-bold">Queres jogar nesta pelada?</p>
-                {showRsvpNameForm && (
+                {showRsvpNameForm && isLinked && (
                   <input
                     type="text"
                     value={rsvpGuestName}

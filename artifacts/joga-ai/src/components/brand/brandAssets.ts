@@ -1,5 +1,5 @@
 export const BRAND_ASSETS = {
-  full: "/brand/JOGAAI_transparente.webp",
+  full: "/brand/JOGAAI_espacado.webp",
   badge: "/brand/logo-badge.png",
   icon: "/brand/logo-icon.png",
 } as const;

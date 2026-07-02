@@ -296,29 +296,42 @@
 }
 
 .joga-new-card-stat strong {
-  display: block;
+  position: relative;
+  display: inline-block;
   font-size: clamp(28px, 10.5cqw, 50px);
   font-weight: 900;
   line-height: .88;
   letter-spacing: -.05em;
 }
 
-/* + verde em cima — só nos que subiram; não altera fonte do número */
-.joga-new-card-stat--up > strong {
-  position: relative;
-  display: inline-block;
+/* Chevrons de evolução (CardStatChevrons) */
+.joga-card-stat-chevrons {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  width: clamp(22px, 8cqw, 36px);
+  pointer-events: none;
+  line-height: 0;
 }
 
-.joga-new-card-stat--up > strong::before {
-  content: "↗";
-  position: absolute;
-  top: -0.5em;
-  right: -0.35em;
-  font-size: 0.32em;
-  font-weight: 900;
-  color: #4ade80;
-  line-height: 1;
-  pointer-events: none;
+.joga-card-stat-chevrons--up {
+  bottom: calc(100% + 2px);
+  flex-direction: column-reverse;
+}
+
+.joga-card-stat-chevrons--down {
+  top: calc(100% + 2px);
+}
+
+.joga-card-stat-chevron {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: -1px 0;
 }
 
 .joga-new-card-stat span {

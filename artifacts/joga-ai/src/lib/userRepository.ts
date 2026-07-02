@@ -758,7 +758,7 @@ function computeAttributeDeltas(
   const deltas: Partial<PlayerAttributes> = {};
   (Object.keys(before) as (keyof PlayerAttributes)[]).forEach((key) => {
     const diff = after[key] - before[key];
-    if (diff > 0) deltas[key] = diff;
+    if (diff !== 0) deltas[key] = diff;
   });
   return deltas;
 }

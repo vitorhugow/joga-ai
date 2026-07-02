@@ -1,6 +1,7 @@
 import "./PlayerCard.css";
 import { PlayerAttributes, calculateOverall } from "@/lib/cardUtils";
 import { BRAND_ASSETS } from "@/components/brand";
+import { CardStatChevrons } from "@/components/CardStatChevrons";
 
 export type CardVariant = "default" | "premium" | "gold" | "platinum" | "diamond" | "elite";
 export type CardSize = "small" | "profile" | "large";
@@ -126,13 +127,13 @@ export function PlayerCard({
           <div className="joga-new-card-stats">
             {stats.map(([label, value]) => {
               const attrKey = STAT_ATTR_KEYS[label];
-              const wentUp = (attributeDeltas?.[attrKey!] ?? 0) > 0;
+              const delta = attributeDeltas?.[attrKey!] ?? 0;
               return (
-                <div
-                  className={`joga-new-card-stat${wentUp ? " joga-new-card-stat--up" : ""}`}
-                  key={label}
-                >
-                  <strong>{value}</strong>
+                <div className="joga-new-card-stat" key={label}>
+                  <strong>
+                    {delta !== 0 && <CardStatChevrons delta={delta} />}
+                    {value}
+                  </strong>
                   <span>{label}</span>
                 </div>
               );

@@ -295,43 +295,42 @@
   color: #f8d66b;
 }
 
-.joga-new-card-stat strong {
+.joga-new-card-stat strong,
+.joga-new-card-stat-value {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.14em;
   font-size: clamp(28px, 10.5cqw, 50px);
   font-weight: 900;
   line-height: .88;
   letter-spacing: -.05em;
 }
 
-/* Chevrons de evolução (CardStatChevrons) */
+/* Chevrons de evolução — à direita do valor, tamanho do + anterior */
 .joga-card-stat-chevrons {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0;
-  width: clamp(22px, 8cqw, 36px);
+  width: clamp(9px, 3.2cqw, 13px);
+  flex-shrink: 0;
   pointer-events: none;
   line-height: 0;
+  margin-top: -0.12em;
 }
 
 .joga-card-stat-chevrons--up {
-  bottom: calc(100% + 2px);
   flex-direction: column-reverse;
-}
-
-.joga-card-stat-chevrons--down {
-  top: calc(100% + 2px);
 }
 
 .joga-card-stat-chevron {
   display: block;
   width: 100%;
   height: auto;
-  margin: -1px 0;
+  margin: -2px 0;
 }
 
 .joga-new-card-stat span {

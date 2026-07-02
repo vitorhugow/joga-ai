@@ -164,7 +164,15 @@ export default function ComunidadePage() {
     if (!requireLinked({ mode: "register", title: "Cria conta para entrar na comunidade" })) {
       return;
     }
-    if (!community || isMember || joinPending || isAdmin) return;
+    if (!community || isMember || isAdmin) return;
+
+    if (joinPending) {
+      toast({
+        title: "Pedido pendente",
+        description: "O administrador ainda não aprovou o teu pedido.",
+      });
+      return;
+    }
 
     setJoining(true);
     try {
@@ -174,7 +182,7 @@ export default function ComunidadePage() {
         await refreshCommunity();
         toast({
           title: "Pedido enviado",
-          description: "O administrador vai rever o teu pedido.",
+          description: "Aguarda aprovação do administrador para entrar na comunidade.",
         });
       } else {
         await joinCommunityPublic(id, userId, profile.displayName || "Jogador");

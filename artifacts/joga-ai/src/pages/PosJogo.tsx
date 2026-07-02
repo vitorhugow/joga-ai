@@ -753,20 +753,22 @@ export default function PosJogo() {
           </p>
         </JogaHero>
 
-        {profile.profileComplete && (
-          <div className="mt-5 flex justify-center">
-            <div ref={evolutionCardRef} className="w-[min(92vw,340px)]">
-              <PlayerCard
-                {...profileToPlayerCard(profile)}
-                size="profile"
-                attributeDeltas={matchAttributeDeltas}
-              />
-            </div>
-          </div>
-        )}
-
         <div className="mt-4">
           <EvolutionGainsSummary items={evolutionItems} />
+        </div>
+
+        <div
+          ref={evolutionCardRef}
+          className="fixed left-0 top-0 -z-50 opacity-0 pointer-events-none w-[340px]"
+          aria-hidden
+        >
+          {profile.profileComplete && (
+            <PlayerCard
+              {...profileToPlayerCard(profile)}
+              size="profile"
+              attributeDeltas={matchAttributeDeltas}
+            />
+          )}
         </div>
 
         <JogaButton

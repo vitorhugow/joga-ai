@@ -2,7 +2,6 @@ import type { PlayerAttributes } from "./cardUtils";
 import type { EvolutionGain } from "./evolutionUtils";
 import {
   getLastMatchAttributeDeltas,
-  getOverallDeltaFromDeltas,
   type UserProfile,
 } from "./userRepository";
 
@@ -43,29 +42,17 @@ export function summarizeGainsForDisplay(gains: EvolutionGain[]): EvolutionDispl
 
   if (applied.length === 0) return [];
 
-  if (applied.length === 1) {
-    const gain = applied[0];
+  return applied.map((gain) => {
     const numeric = parseGainValue(gain.value);
-    return [
-      {
-        label: gain.title,
-        value: gain.value,
-        variant: numeric != null && numeric < 0 ? "down" : "up",
-      },
-    ];
-  }
-
-  const total = applied.reduce((sum, gain) => sum + (parseGainValue(gain.value) ?? 0), 0);
-  return [
-    {
-      label: "Overall",
-      value: total > 0 ? `+${total}` : `${total}`,
-      variant: total >= 0 ? "up" : "down",
-    },
-  ];
+    return {
+      label: gain.title,
+      value: gain.value,
+      variant: numeric != null && numeric < 0 ? "down" : "up",
+    };
+  });
 }
 
-/** Resumo a partir dos deltas reais do perfil (pós-jogo). */
+/** Lista cada atributo alterado (sem motivos; só aplicados). */
 export function formatEvolutionDisplayFromProfile(
   profile: UserProfile,
   matchId?: string,
@@ -73,29 +60,14 @@ export function formatEvolutionDisplayFromProfile(
   const deltas = getLastMatchAttributeDeltas(profile, matchId);
   if (!deltas) return [];
 
-  const keys = (Object.keys(deltas) as (keyof PlayerAttributes)[]).filter(
-    (key) => (deltas[key] ?? 0) !== 0,
-  );
-  if (keys.length === 0) return [];
-
-  if (keys.length === 1) {
-    const key = keys[0];
-    const delta = deltas[key] ?? 0;
-    return [
-      {
+  return (Object.keys(deltas) as (keyof PlayerAttributes)[])
+    .filter((key) => (deltas[key] ?? 0) !== 0)
+    .map((key) => {
+      const delta = deltas[key] ?? 0;
+      return {
         label: ATTR_LABELS[key],
         value: delta > 0 ? `+${delta}` : `${delta}`,
         variant: delta > 0 ? "up" : "down",
-      },
-    ];
-  }
-
-  const overallDelta = getOverallDeltaFromDeltas(profile.attributes, deltas);
-  return [
-    {
-      label: "Overall",
-      value: overallDelta > 0 ? `+${overallDelta}` : `${overallDelta}`,
-      variant: overallDelta >= 0 ? "up" : "down",
-    },
-  ];
+      };
+    });
 }

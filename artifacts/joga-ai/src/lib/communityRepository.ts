@@ -187,18 +187,35 @@ export async function loadMyCommunities(userId: string): Promise<Community[]> {
 }
 
 async function loadMemberCommunityIds(userId: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  if (!isFirebaseConfigured() || !userId) return ids;
+
   try {
     const snap = await getDocs(
       query(collectionGroup(db, "members"), where("userId", "==", userId)),
     );
-    const ids = new Set<string>();
     for (const d of snap.docs) {
       const ref = d.ref.parent.parent;
       if (ref) ids.add(ref.id);
     }
-    return ids;
+  } catch (err) {
+    console.warn("[communityRepository] loadMemberCommunityIds collectionGroup:", err);
+  }
+
+  return ids;
+}
+
+/** Verifica membro via documento directo (mais fiável que só collection group). */
+export async function isCommunityMember(
+  communityId: string,
+  userId: string,
+): Promise<boolean> {
+  if (!isFirebaseConfigured() || !userId || !communityId) return false;
+  try {
+    const snap = await getDoc(doc(db, "communities", communityId, "members", userId));
+    return snap.exists();
   } catch {
-    return new Set();
+    return false;
   }
 }
 
@@ -235,6 +252,7 @@ export async function loadCommunity(
     const data = snap.data();
     const memberIds = userId ? await loadMemberCommunityIds(userId) : new Set<string>();
     const pendingIds = userId ? await loadPendingRequestCommunityIds(userId) : new Set<string>();
+    const isMemberDirect = userId ? await isCommunityMember(snap.id, userId) : false;
 
     return {
       id: snap.id,
@@ -245,7 +263,10 @@ export async function loadCommunity(
       memberCount: Number(data.memberCount ?? 1),
       coverImage: data.coverImage,
       adminId: data.adminId,
-      isMember: memberIds.has(snap.id) || (userId ? data.adminId === userId : false),
+      isMember:
+        isMemberDirect ||
+        memberIds.has(snap.id) ||
+        (userId ? data.adminId === userId : false),
       joinPending: pendingIds.has(snap.id),
     };
   } catch (err) {

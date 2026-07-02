@@ -130,9 +130,9 @@ export function PlayerCard({
               const delta = attributeDeltas?.[attrKey!] ?? 0;
               return (
                 <div className="joga-new-card-stat" key={label}>
-                  <strong>
+                  <strong className="joga-new-card-stat-value">
+                    <span>{value}</span>
                     {delta !== 0 && <CardStatChevrons delta={delta} />}
-                    {value}
                   </strong>
                   <span>{label}</span>
                 </div>

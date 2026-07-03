@@ -14,6 +14,7 @@ import { addNotification } from "./notificationsRepository";
 import { applyDelayedRatingToProfile } from "./userRepository";
 import { checkAndUnlockBadges } from "./badgeService";
 import { trackRivalriesFromMatchResult } from "./communityStatsRepository";
+import { getCurrentUserId } from "./auth";
 import {
   averageRatingsForPlayer,
   collectAllEvents,
@@ -87,6 +88,21 @@ export async function buildMatchResultPayload(input: {
   };
 }
 
+function ratingReleasedNotification(title: string, rating: number) {
+  return {
+    title: "A tua nota saiu!",
+    body: `Recebeste ${rating.toFixed(1)} na pelada «${title}». Vê a tua evolução.`,
+    type: "match" as const,
+    link: "/perfil/evolucao",
+  };
+}
+
+/**
+ * Escreve a nota/badges/histórico no PRÓPRIO perfil do utilizador. Só pode
+ * ser chamado para o utilizador actualmente autenticado — escrever no doc
+ * de outro user (users/{outroId}, matchHistory/{outroId}) é negado pelas
+ * firestore.rules (allow write: if isOwner(userId)).
+ */
 async function releaseRatingForUser(
   userId: string,
   playerId: string,
@@ -102,12 +118,7 @@ async function releaseRatingForUser(
   if (rating > 0) {
     await applyDelayedRatingToProfile(userId, rating, matchId);
     await checkAndUnlockBadges(userId, { lastRating: rating });
-    await addNotification(userId, {
-      title: "A tua nota saiu!",
-      body: `Recebeste ${rating.toFixed(1)} na pelada «${title}». Vê a tua evolução.`,
-      type: "match",
-      link: "/perfil/evolucao",
-    });
+    await addNotification(userId, ratingReleasedNotification(title, rating));
   }
 
   if (entry) {
@@ -158,17 +169,11 @@ export async function releaseMatchRatings(
     };
   }
 
-  for (const player of result.players) {
-    if (!player.userId) continue;
-    await releaseRatingForUser(
-      player.userId,
-      player.playerId,
-      matchId,
-      result.title,
-      player.rating,
-    );
-  }
-
+  // Grava o summary com ratingsReleased:true PRIMEIRO — é a fonte de verdade
+  // partilhada (matches/{id}/summary/result, leitura/escrita permitida a
+  // qualquer signed-in user) que permite a CADA jogador aplicar a própria
+  // nota via "pull" (processPendingRatings) quando abrir a app. Tem de ficar
+  // gravado mesmo que o resto abaixo falhe parcialmente.
   await saveMatchResult({
     ...result,
     ratingsReleased: true,
@@ -176,19 +181,58 @@ export async function releaseMatchRatings(
     ratingsReleaseReason: reason,
   });
 
-  if (result.communityId) {
-    await trackRivalriesFromMatchResult(result.communityId, {
-      ...result,
-      ratingsReleased: true,
-    });
-  }
-
+  // Fan-out best-effort: só quem está a correr este código pode escrever no
+  // PRÓPRIO perfil (users/{uid}, matchHistory/{uid} — allow write: if
+  // isOwner). Para os restantes jogadores, o registo/notificação diz-lhes
+  // que a nota saiu, mas quem aplica de facto atributos/badges/histórico é
+  // cada um no seu dispositivo (via processPendingRatings, lendo o summary
+  // acima). Uma falha num jogador nunca deve travar os restantes.
+  const currentUid = getCurrentUserId();
   for (const player of result.players) {
     if (!player.userId) continue;
-    await checkAndUnlockBadges(player.userId, {
-      lastRating: player.rating,
-      applyForMatchId: matchId,
-    });
+    try {
+      if (player.userId === currentUid) {
+        await releaseRatingForUser(
+          player.userId,
+          player.playerId,
+          matchId,
+          result.title,
+          player.rating,
+        );
+      } else if (player.rating > 0) {
+        await addNotification(player.userId, ratingReleasedNotification(result.title, player.rating));
+      }
+    } catch (err) {
+      console.warn(`[ratingsRelease] falha ao processar jogador ${player.userId}:`, err);
+    }
+  }
+
+  if (result.communityId) {
+    try {
+      await trackRivalriesFromMatchResult(result.communityId, {
+        ...result,
+        ratingsReleased: true,
+      });
+    } catch (err) {
+      console.warn("[ratingsRelease] trackRivalriesFromMatchResult:", err);
+    }
+  }
+
+  // Badges também só podem ser desbloqueados no próprio perfil — os
+  // restantes jogadores desbloqueiam os seus ao chamar checkAndUnlockBadges
+  // a partir de releaseRatingForUser no seu próprio pull.
+  if (currentUid) {
+    const currentPlayer = result.players.find((player) => player.userId === currentUid);
+    if (currentPlayer) {
+      try {
+        await checkAndUnlockBadges(currentUid, {
+          lastRating: currentPlayer.rating,
+          applyForMatchId: matchId,
+        });
+      } catch (err) {
+        console.warn("[ratingsRelease] checkAndUnlockBadges:", err);
+      }
+    }
   }
 
   // Garante que a partida sai da fase de votação assim que as notas saem —

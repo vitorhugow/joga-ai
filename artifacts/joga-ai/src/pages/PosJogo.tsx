@@ -527,11 +527,21 @@ export default function PosJogo() {
       votes,
     });
 
+    // Status primeiro: esta escrita (só campos status/savedAt/votedUserIds)
+    // nunca é negada pelas rules, seja quem for a finalizar. Isto garante
+    // que a pelada sai da votação mesmo que o fan-out de notas abaixo falhe
+    // parcialmente — o efeito de reparação (status "concluida" sem
+    // ratingsReleased) trata do resto depois.
     await saveMatchResult(payload);
-    await releaseMatchRatings(data.matchId, reason);
     await updateMatchStatus(data.matchId, "concluida");
-    setRatingsReleased(true);
     updateData({ ...data, status: "concluida", votedUserIds });
+
+    try {
+      await releaseMatchRatings(data.matchId, reason);
+    } catch (err) {
+      console.warn("[PosJogo] releaseMatchRatings:", err);
+    }
+    setRatingsReleased(true);
   }
 
   async function handleOrganizerFinalizeVoting() {

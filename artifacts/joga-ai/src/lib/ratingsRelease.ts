@@ -9,7 +9,7 @@ import {
   type MatchResult,
   type UserMatchHistoryEntry,
 } from "./matchHistoryRepository";
-import { loadMatchFromFirestore } from "./matchRepository";
+import { loadMatchFromFirestore, updateMatchStatus } from "./matchRepository";
 import { addNotification } from "./notificationsRepository";
 import { applyDelayedRatingToProfile } from "./userRepository";
 import { checkAndUnlockBadges } from "./badgeService";
@@ -189,6 +189,23 @@ export async function releaseMatchRatings(
       lastRating: player.rating,
       applyForMatchId: matchId,
     });
+  }
+
+  // Garante que a partida sai da fase de votação assim que as notas saem —
+  // independentemente do motivo (organizador, todos votaram, ou expiração
+  // de 24h). Sem isto, a libertação automática ao fim de 24h publicava as
+  // notas mas deixava a partida presa em "auditada"/"aguardando_auditoria"
+  // para sempre, continuando a aparecer como activa na comunidade.
+  try {
+    const currentMatch = await loadMatchFromFirestore(matchId);
+    if (
+      currentMatch &&
+      (currentMatch.status === "aguardando_auditoria" || currentMatch.status === "auditada")
+    ) {
+      await updateMatchStatus(matchId, "concluida");
+    }
+  } catch (err) {
+    console.warn("[ratingsRelease] updateMatchStatus:", err);
   }
 
   return true;

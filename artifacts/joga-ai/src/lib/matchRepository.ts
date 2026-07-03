@@ -690,12 +690,22 @@ export async function markUserVoted(matchId: string, userId: string): Promise<vo
   }
 }
 
-/** Actualiza apenas o campo `status` de um match */
+/**
+ * Actualiza apenas o campo `status` de um match.
+ *
+ * IMPORTANTE: propaga erros do Firestore (ex: permissão negada) em vez de os
+ * engolir — quem chama isto (ex: finalização da votação) precisa de saber
+ * quando a escrita remota falhou, para não marcar localmente a pelada como
+ * "concluida"/finalizada quando na verdade o Firestore ainda tem o status
+ * antigo (o que a deixava presa em "aguardando_auditoria"/"auditada" para
+ * todos os outros jogadores e na comunidade).
+ */
 export async function updateMatchStatus(
   matchId: string,
   status: MatchStatus,
 ): Promise<void> {
-  // Actualiza cache local
+  // Actualiza cache local optimisticamente (não crítico se a escrita remota
+  // falhar depois — o próximo hidratar a partir do Firestore corrige isto).
   const local = loadPostMatch(matchId);
   if (local && local.matchId === matchId) {
     savePostMatch({ ...local, status: status as SavedPostMatch["status"] });
@@ -709,14 +719,10 @@ export async function updateMatchStatus(
     return;
   }
 
-  try {
-    const ref = doc(db, "matches", matchId);
-    await updateDoc(ref, { status, savedAt: serverTimestamp() });
-    if (isListingRemovedStatus(status)) {
-      removeMatchFromListings(matchId);
-    }
-  } catch (err) {
-    console.warn("[matchRepository] updateMatchStatus:", err);
+  const ref = doc(db, "matches", matchId);
+  await updateDoc(ref, { status, savedAt: serverTimestamp() });
+  if (isListingRemovedStatus(status)) {
+    removeMatchFromListings(matchId);
   }
 }
 

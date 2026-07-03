@@ -54,6 +54,7 @@ import {
   type EvolutionGain,
 } from "@/lib/evolutionUtils";
 import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
+import { loadCommunity } from "@/lib/communityRepository";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
 import { PlayerCard } from "@/components/PlayerCard";
 import { EvolutionGainsSummary } from "@/components/EvolutionGainsSummary";
@@ -285,6 +286,25 @@ export default function PosJogo() {
   const { profile, refresh } = useUserProfile();
   const evolutionCardRef = useRef<HTMLDivElement>(null);
   const [shareEvolutionBusy, setShareEvolutionBusy] = useState(false);
+  const [isCommunityAdmin, setIsCommunityAdmin] = useState(false);
+
+  // O admin da comunidade também deve poder finalizar/administrar a
+  // votação, não só o organizador — útil quando o organizador não está
+  // disponível para fechar a pelada.
+  useEffect(() => {
+    const communityId = data?.communityId;
+    if (!communityId || !userId) {
+      setIsCommunityAdmin(false);
+      return;
+    }
+    let cancelled = false;
+    void loadCommunity(communityId, userId).then((community) => {
+      if (!cancelled) setIsCommunityAdmin(Boolean(community?.adminId === userId));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.communityId, userId]);
 
   const expiresAt = data?.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + 24 * 60 * 60 * 1000;
   const isExpired = isPostMatchExpired(data) || Date.now() > expiresAt;
@@ -322,13 +342,14 @@ export default function PosJogo() {
     if (!data) return;
     const isVoting =
       data.status === "aguardando_auditoria" || data.status === "auditada";
-    // O organizador fica no resumo (com o painel de administração da
-    // votação); só os restantes participantes vão direto para a votação.
+    // O organizador e o admin da comunidade ficam no resumo (com o painel
+    // de administração da votação); só os restantes participantes vão
+    // direto para a votação.
     const isMatchOrganizerNow = Boolean(data.organizerId && userId === data.organizerId);
-    if (isVoting && !gainsMode && !isMatchOrganizerNow && !hasUserVotedInSession(userId, matchId)) {
+    if (isVoting && !gainsMode && !isMatchOrganizerNow && !isCommunityAdmin && !hasUserVotedInSession(userId, matchId)) {
       setVoteMode(true);
     }
-  }, [data, gainsMode, userId, matchId]);
+  }, [data, gainsMode, userId, matchId, isCommunityAdmin]);
 
   const currentPlayer = useMemo(() => {
     return (
@@ -471,6 +492,9 @@ export default function PosJogo() {
   const auditClosed = isExpired || confirmed.length >= 3;
   const mustAuditBeforeVote = isAuditor && !hasConfirmed && !auditClosed;
   const isOrganizer = Boolean(data?.organizerId && userId === data.organizerId);
+  // Admin da comunidade pode finalizar/administrar a votação, mas não
+  // apagar a pelada — isso continua exclusivo do organizador.
+  const canFinalize = isOrganizer || isCommunityAdmin;
   const requiredVoters = useMemo(
     () => collectLinkedPlayerUserIds(players, data?.organizerId),
     [players, data?.organizerId],
@@ -511,8 +535,14 @@ export default function PosJogo() {
   }
 
   async function handleOrganizerFinalizeVoting() {
-    if (!data || !isOrganizer || ratingsReleased || finalizeBusy) return;
-    const ok = await confirm("Finalizar a votação agora e publicar as notas com os votos actuais?");
+    if (!data || !canFinalize || ratingsReleased || finalizeBusy) return;
+    const ok = await confirm({
+      description:
+        votedUserIds.length === 0
+          ? "Finalizar a pelada e a votação agora, mesmo sem nenhum voto? As notas ficam pendentes para quem não votou."
+          : "Finalizar a pelada e a votação agora e publicar as notas com os votos actuais?",
+      confirmLabel: "Finalizar",
+    });
     if (!ok) return;
 
     setFinalizeBusy(true);
@@ -520,10 +550,90 @@ export default function PosJogo() {
       await persistMatchResultAndMaybeReleaseRatings("organizer");
     } catch (err) {
       console.warn("[PosJogo] finalize voting:", err);
+      toast({
+        title: "Não foi possível finalizar a pelada.",
+        description: "Verifica a tua ligação e tenta novamente.",
+        variant: "destructive",
+      });
     } finally {
       setFinalizeBusy(false);
     }
   }
+
+  // Auto-finalização: assim que todos os votos obrigatórios estiverem
+  // reunidos, fecha a pelada (status -> "concluida" + notas publicadas) para
+  // QUALQUER pessoa que tenha esta página aberta nesse momento — organizador,
+  // último votante ou apenas alguém a rever o resumo. Isto evita partidas
+  // presas em "auditada" quando o dispositivo de quem votou por último fechou
+  // a app antes da finalização terminar.
+  const autoFinalizeInFlightRef = useRef(false);
+  useEffect(() => {
+    if (!data || isExpired || ratingsReleased || finalizeBusy) return;
+    if (data.status === "concluida") return;
+    if (!allVoted) return;
+    if (autoFinalizeInFlightRef.current) return;
+
+    autoFinalizeInFlightRef.current = true;
+    void (async () => {
+      try {
+        // Confirma com a fonte autoritativa (subcoleção votes) antes de
+        // finalizar — evita disparar cedo demais com um snapshot desatualizado.
+        const freshVotes = await getVotes(matchId);
+        const freshVotedIds = new Set(freshVotes.map((v) => v.userId));
+        const allRequiredVoted =
+          requiredVoters.length === 0 ||
+          requiredVoters.every((uid) => freshVotedIds.has(uid));
+        if (allRequiredVoted) {
+          await persistMatchResultAndMaybeReleaseRatings("all_voted");
+        }
+      } catch (err) {
+        console.warn("[PosJogo] auto-finalização da votação:", err);
+      } finally {
+        autoFinalizeInFlightRef.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.matchId, data?.status, isExpired, ratingsReleased, finalizeBusy, allVoted, matchId]);
+
+  // Rede de segurança: se as notas já foram publicadas (summary com
+  // ratingsReleased=true) mas o campo status do match ficou por atualizar
+  // (ex: a escrita anterior falhou a meio), corrige só o status — sem
+  // reprocessar votos/atributos/badges outra vez.
+  const statusFixInFlightRef = useRef(false);
+  useEffect(() => {
+    if (!data || data.status === "concluida") return;
+    if (!ratingsReleased) return;
+    if (statusFixInFlightRef.current) return;
+
+    statusFixInFlightRef.current = true;
+    updateMatchStatus(matchId, "concluida")
+      .then(() => updateData({ ...data, status: "concluida" }))
+      .catch((err) => console.warn("[PosJogo] correção de status pós-votação:", err))
+      .finally(() => {
+        statusFixInFlightRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.matchId, data?.status, ratingsReleased, matchId]);
+
+  // Rede de segurança inversa (repara peladas já afectadas pelo bug antigo):
+  // se o status já está "concluida" mas as notas nunca chegaram a ser
+  // publicadas (ex: quem votou por último fechou a app antes do resumo/
+  // ratings serem gravados), repõe o pipeline completo em vez de deixar a
+  // pelada "fechada" para sempre sem estatísticas.
+  const missingRatingsFixInFlightRef = useRef(false);
+  useEffect(() => {
+    if (!data || isExpired || finalizeBusy) return;
+    if (data.status !== "concluida" || ratingsReleased) return;
+    if (missingRatingsFixInFlightRef.current) return;
+
+    missingRatingsFixInFlightRef.current = true;
+    void persistMatchResultAndMaybeReleaseRatings("all_voted")
+      .catch((err) => console.warn("[PosJogo] reparação de notas em falta:", err))
+      .finally(() => {
+        missingRatingsFixInFlightRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.matchId, data?.status, ratingsReleased, matchId]);
 
   async function handleDeleteMatch() {
     if (!data || !isOrganizer || deleteBusy || !userId) return;
@@ -668,9 +778,16 @@ export default function PosJogo() {
     const nextAllVoted =
       requiredVoters.length === 0 ||
       requiredVoters.every((uid) => nextVotedUserIds.includes(uid));
-    const nextStatus = nextAllVoted ? "concluida" : data.status ?? "auditada";
 
-    updateData({ ...data, votedUserIds: nextVotedUserIds, status: nextStatus });
+    // NUNCA marcar "concluida" aqui directamente: isso saltava por completo
+    // a publicação de notas/badges/resumo (persistMatchResultAndMaybeReleaseRatings),
+    // porque o efeito de auto-finalização vê `status === "concluida"` e desiste
+    // logo — a pelada ficava com o status certo mas sem notas/estatísticas
+    // publicadas para ninguém. Deixa o status como está; o efeito de
+    // auto-finalização (abaixo) observa `allVoted`/`votedUserIds`, confirma
+    // com a fonte autoritativa de votos e só então publica tudo e muda o
+    // status para "concluida".
+    updateData({ ...data, votedUserIds: nextVotedUserIds, status: data.status ?? "auditada" });
 
     setVoteMode(false);
     setGainsMode(true);
@@ -974,13 +1091,15 @@ export default function PosJogo() {
         </section>
       )}
 
-      {isOrganizer && (
+      {canFinalize && (
         <section
           className="mt-4 rounded-3xl p-4"
           style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.22)" }}
           data-testid="organizer-voting-panel"
         >
-          <p className="text-blue-200/70 text-[10px] font-black uppercase tracking-[0.2em]">Admin da pelada</p>
+          <p className="text-blue-200/70 text-[10px] font-black uppercase tracking-[0.2em]">
+            {isOrganizer ? "Admin da pelada" : "Admin da comunidade"}
+          </p>
           <h2 className="font-display font-black text-white text-xl mt-1">Estado da votação</h2>
           <p className="text-white/45 text-xs mt-1">
             {votedUserIds.length}/{requiredVoters.length || players.length} jogadores com conta já votaram
@@ -1022,33 +1141,36 @@ export default function PosJogo() {
               variant="primary"
               size="md"
               className="w-full mt-4"
-              disabled={finalizeBusy || votedUserIds.length === 0}
+              disabled={finalizeBusy}
               onClick={() => void handleOrganizerFinalizeVoting()}
+              data-testid="organizer-finalize-match"
             >
-              {finalizeBusy ? "A finalizar…" : "Finalizar votação e publicar notas"}
+              {finalizeBusy ? "A finalizar…" : "Finalizar pelada e votação"}
             </JogaButton>
           )}
           {!ratingsReleased && votedUserIds.length === 0 && (
             <p className="text-white/35 text-xs mt-2 text-center">
-              Precisa de pelo menos 1 voto para finalizar manualmente.
+              Como {isOrganizer ? "organizador" : "admin da comunidade"}, podes finalizar a qualquer momento — mesmo sem votos.
             </p>
           )}
           {allVoted && !ratingsReleased && (
             <p className="text-emerald-300 text-xs mt-2 text-center font-semibold">
-              Todos votaram — as notas serão publicadas automaticamente.
+              Todos votaram — a pelada está a ser finalizada automaticamente.
             </p>
           )}
 
-          <JogaButton
-            variant="danger"
-            size="md"
-            className="w-full mt-4"
-            disabled={deleteBusy}
-            onClick={() => void handleDeleteMatch()}
-            data-testid="organizer-delete-match"
-          >
-            {deleteBusy ? "A excluir…" : "Excluir pelada e reverter estatísticas"}
-          </JogaButton>
+          {isOrganizer && (
+            <JogaButton
+              variant="danger"
+              size="md"
+              className="w-full mt-4"
+              disabled={deleteBusy}
+              onClick={() => void handleDeleteMatch()}
+              data-testid="organizer-delete-match"
+            >
+              {deleteBusy ? "A excluir…" : "Excluir pelada e reverter estatísticas"}
+            </JogaButton>
+          )}
         </section>
       )}
 

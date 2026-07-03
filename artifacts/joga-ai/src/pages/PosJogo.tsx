@@ -276,7 +276,11 @@ export default function PosJogo() {
     setData((current) => (current ? applyAuthToMatchData(current, authUserId) : current));
   }, [authUserId]);
 
-  const flow = useMemo(() => createMatchFlowStore(matchId), [matchId]);
+  // O rascunho de voto (estrelas ainda por submeter) é isolado por
+  // matchId + userId — várias pessoas costumam votar no mesmo telemóvel,
+  // uma a seguir à outra, e sem isto a próxima pessoa via as estrelas que a
+  // anterior tinha marcado (ou já submetido).
+  const flow = useMemo(() => createMatchFlowStore(matchId, userId), [matchId, userId]);
 
   const [auditors, setAuditors] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState<string[]>([]);
@@ -289,8 +293,16 @@ export default function PosJogo() {
   const [displayGains, setDisplayGains] = useState<EvolutionGain[] | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>(() => {
     const id = resolveMatchId({ routeMatchId: params?.id });
-    return createMatchFlowStore(id).readVoteDraft();
+    return createMatchFlowStore(id, userId).readVoteDraft();
   });
+
+  // Se o userId só ficar disponível depois do primeiro render (ex: auth
+  // ainda a resolver), recarrega o rascunho já com o dono certo, para nunca
+  // ficar preso às estrelas do UUID local genérico.
+  useEffect(() => {
+    setRatings(flow.readVoteDraft());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow]);
   const [selectedGameId, setSelectedGameId] = useState("");
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [selectedEventType, setSelectedEventType] = useState("golo");
@@ -822,6 +834,10 @@ export default function PosJogo() {
     flow.upsertVote(voteRecord);
     submitVote(matchId, voteRecord).catch(console.warn);
     markUserVoted(matchId, userId).catch(console.warn);
+    // O voto já está submetido (local + servidor) — limpa o rascunho para
+    // não sobrar nada que possa reaparecer para a próxima pessoa a votar
+    // neste dispositivo.
+    flow.clearVoteDraft();
     // Já votou: o lembrete de "falta votar" deixa de fazer sentido.
     void markNotificationRead(userId, `vote-${matchId}`);
 

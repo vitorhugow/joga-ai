@@ -43,12 +43,17 @@ export function resolveMatchId(options?: {
   );
 }
 
-export function matchFlowKeys(matchId?: string | null): MatchFlowKeys {
+export function matchFlowKeys(matchId?: string | null, userId?: string | null): MatchFlowKeys {
   const id = normalizeMatchId(matchId);
+  // O rascunho do voto (estrelas ainda por submeter) tem de ser isolado por
+  // utilizador: várias pessoas usam muitas vezes o MESMO telemóvel para
+  // votar, uma a seguir à outra, e sem o userId na chave a próxima pessoa
+  // via logo as estrelas que a anterior tinha marcado.
+  const draftSuffix = userId ? `-${userId}` : "";
   return {
     auditors: `joga-ai-match-${id}-auditors`,
     confirmed: `joga-ai-match-${id}-confirmed`,
-    voteDraft: `joga-ai-match-${id}-vote-draft`,
+    voteDraft: `joga-ai-match-${id}-vote-draft${draftSuffix}`,
     votes: `joga-ai-match-${id}-votes`,
   };
 }
@@ -101,9 +106,9 @@ function saveScopedJson<T>(scopedKey: string, value: T) {
   localStorage.setItem(scopedKey, JSON.stringify(value));
 }
 
-export function createMatchFlowStore(matchId?: string | null) {
+export function createMatchFlowStore(matchId?: string | null, userId?: string | null) {
   const id = normalizeMatchId(matchId);
-  const keys = matchFlowKeys(id);
+  const keys = matchFlowKeys(id, userId);
 
   return {
     matchId: id,
@@ -112,9 +117,14 @@ export function createMatchFlowStore(matchId?: string | null) {
     saveAuditors: (list: string[]) => saveScopedList(keys.auditors, list),
     readConfirmed: () => readScopedList(keys.confirmed, LEGACY_KEYS.confirmed),
     saveConfirmed: (list: string[]) => saveScopedList(keys.confirmed, list),
-    readVoteDraft: () =>
-      readScopedJson<Record<string, number>>(keys.voteDraft, LEGACY_KEYS.voteDraft, {}),
+    // Sem fallback para a chave legada aqui de propósito: essa chave era
+    // global (sem userId nem, nas versões mais antigas, sem matchId), por
+    // isso cair nela contaminava o ecrã de voto com estrelas de outra
+    // pessoa/partida. O rascunho é só um "guardar automático" local — se não
+    // existir para este user+match, começa sempre zerado.
+    readVoteDraft: () => readMatchJson<Record<string, number>>(keys.voteDraft, {}),
     saveVoteDraft: (draft: Record<string, number>) => saveScopedJson(keys.voteDraft, draft),
+    clearVoteDraft: () => localStorage.removeItem(keys.voteDraft),
     readVotes: () => readScopedJson<MatchVoteRecord[]>(keys.votes, LEGACY_KEYS.votes, []),
     saveVotes: (votes: MatchVoteRecord[]) => saveScopedJson(keys.votes, votes),
     upsertVote: (vote: MatchVoteRecord) => {

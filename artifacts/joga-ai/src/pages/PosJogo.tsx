@@ -342,14 +342,15 @@ export default function PosJogo() {
     if (!data) return;
     const isVoting =
       data.status === "aguardando_auditoria" || data.status === "auditada";
-    // O organizador e o admin da comunidade ficam no resumo (com o painel
-    // de administração da votação); só os restantes participantes vão
-    // direto para a votação.
-    const isMatchOrganizerNow = Boolean(data.organizerId && userId === data.organizerId);
-    if (isVoting && !gainsMode && !isMatchOrganizerNow && !isCommunityAdmin && !hasUserVotedInSession(userId, matchId)) {
+    // Organizador e admin da comunidade também têm de votar primeiro, como
+    // qualquer outro jogador — só depois de votarem (gainsMode) é que veem
+    // o painel de administração da votação no resumo. Antes disto, o
+    // organizador via logo o painel "Finalizar pelada e votação" ao abrir a
+    // partida, sem nunca ser convidado a votar.
+    if (isVoting && !gainsMode && !hasUserVotedInSession(userId, matchId)) {
       setVoteMode(true);
     }
-  }, [data, gainsMode, userId, matchId, isCommunityAdmin]);
+  }, [data, gainsMode, userId, matchId]);
 
   const currentPlayer = useMemo(() => {
     return (
@@ -933,6 +934,18 @@ export default function PosJogo() {
             />
           )}
         </div>
+
+        {canFinalize && data.status !== "concluida" && (
+          <JogaButton
+            variant="outline"
+            size="lg"
+            className="mt-4"
+            onClick={() => setGainsMode(false)}
+            data-testid="gains-manage-voting"
+          >
+            Gerir votação da pelada
+          </JogaButton>
+        )}
 
         <JogaButton
           variant="primary"

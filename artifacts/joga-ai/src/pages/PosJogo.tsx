@@ -7,6 +7,7 @@ import {
   loadMatchFromFirestore,
   deleteMatch,
   markUserVoted,
+  subscribeMatchStatus,
 } from "@/lib/matchRepository";
 import {
   registerAuditor,
@@ -242,6 +243,21 @@ export default function PosJogo() {
     });
   }, [matchId, authUserId]);
 
+  // Escuta o status em tempo real: se a pelada for finalizada por outra
+  // pessoa (ou noutro dispositivo) enquanto esta página está aberta, o
+  // ecrã de votação/resumo tem de reagir na hora — ninguém pode continuar
+  // a votar ou a mexer numa pelada que acabou de ser concluída.
+  useEffect(() => {
+    if (!matchId || matchId === "default") return;
+    const unsub = subscribeMatchStatus(matchId, (status) => {
+      setData((current) => {
+        if (!current || current.status === status) return current;
+        return { ...current, status: status as SavedPostMatch["status"] };
+      });
+    });
+    return unsub;
+  }, [matchId]);
+
   useEffect(() => {
     if (!matchId) return;
     loadMatchResult(matchId).then((result) => {
@@ -351,6 +367,20 @@ export default function PosJogo() {
       setVoteMode(true);
     }
   }, [data, gainsMode, userId, matchId]);
+
+  // Se a pelada for finalizada (por outra pessoa, noutro dispositivo, ou
+  // por expiração de 24h) enquanto este utilizador está no ecrã de
+  // votação, tira-o de lá imediatamente — depois de "concluida" já não se
+  // pode votar em mais nada.
+  useEffect(() => {
+    if (voteMode && data?.status === "concluida") {
+      setVoteMode(false);
+      toast({
+        title: "Esta pelada já foi finalizada",
+        description: "Já não é possível votar — as estatísticas ficam disponíveis na comunidade e no teu perfil.",
+      });
+    }
+  }, [voteMode, data?.status]);
 
   const currentPlayer = useMemo(() => {
     return (
@@ -756,6 +786,17 @@ export default function PosJogo() {
 
   function saveVote() {
     if (!data || !currentPlayer) return;
+
+    // Última barreira: uma pelada já finalizada nunca aceita novos votos,
+    // mesmo que a UI tenha ficado momentaneamente desatualizada.
+    if (data.status === "concluida") {
+      setVoteMode(false);
+      toast({
+        title: "Esta pelada já foi finalizada",
+        description: "Já não é possível votar — as estatísticas ficam disponíveis na comunidade e no teu perfil.",
+      });
+      return;
+    }
 
     if (hasUserVotedInSession(userId, matchId)) {
       setVoteMode(false);
@@ -1311,6 +1352,18 @@ export default function PosJogo() {
           <JogaButton variant="gold" size="lg" onClick={() => setGainsMode(true)}>
             Ver evolução desta pelada
           </JogaButton>
+        ) : data.status === "concluida" ? (
+          <div
+            className="rounded-2xl py-4 px-4 text-center"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            <p className="text-white/60 text-sm font-semibold">
+              Esta pelada já foi finalizada — já não é possível votar.
+            </p>
+            <p className="text-white/35 text-xs mt-1">
+              As estatísticas ficam disponíveis na comunidade e no teu perfil.
+            </p>
+          </div>
         ) : (
           <JogaButton variant="gold" size="lg" onClick={() => setVoteMode(true)}>
             Ir para votação

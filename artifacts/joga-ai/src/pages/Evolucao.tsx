@@ -9,6 +9,7 @@ import { loadEvolutionHistory, type EvolutionRecord } from "@/lib/evolutionStora
 import { loadEvolutionFromFirestore } from "@/lib/evolutionRepository";
 import { isPostMatchExpired, loadPostMatch } from "@/lib/postMatchStorage";
 import { hasUserVotedInSession, currentMatchUserId, resolveMatchId } from "@/lib/matchFlowStorage";
+import { loadMatchFromFirestore } from "@/lib/matchRepository";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 function formatDate(iso: string) {
@@ -60,6 +61,28 @@ export default function Evolucao() {
       if (remote.length > 0) setHistory(remote);
     });
   }, [authUserId]);
+
+  // O cache local pode ficar desatualizado (ex.: a pelada foi finalizada
+  // noutro dispositivo, ou pelo organizador, entretanto). Antes de convidar
+  // o utilizador a "votar", confirma o status real no Firestore — depois
+  // de concluída, ninguém deve ver este convite nem conseguir votar.
+  useEffect(() => {
+    if (!pendingMatch || pendingMatch.status === "concluida" || pendingMatch.status === "expirada") return;
+    let cancelled = false;
+    // loadMatchFromFirestore já mescla e regrava o cache local com o
+    // status mais recente — só precisamos de refletir isso no estado.
+    loadMatchFromFirestore(pendingMatch.matchId).then((remote) => {
+      if (cancelled || !remote) return;
+      setPendingMatch((current) =>
+        current && current.matchId === remote.matchId && current.status !== remote.status
+          ? { ...current, status: remote.status }
+          : current,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingMatch?.matchId, pendingMatch?.status]);
 
   return (
     <JogaPage theme="dark" className="py-5 pb-28">

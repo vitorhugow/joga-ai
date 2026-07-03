@@ -97,9 +97,11 @@ service cloud.firestore {
 
     // Cada jogador marca-se a si próprio como tendo votado (arrayUnion do
     // seu próprio uid); não altera status/organizador nem remove ninguém
-    // já presente na lista.
+    // já presente na lista. Só é possível enquanto a pelada ainda está em
+    // votação — uma vez "concluida", ninguém mais pode registar voto.
     function isMatchVoteMarkUpdate() {
       return isSignedIn()
+        && (resource.data.status == 'aguardando_auditoria' || resource.data.status == 'auditada')
         && request.resource.data.status == resource.data.status
         && request.resource.data.organizerId == resource.data.organizerId
         && request.resource.data.diff(resource.data).affectedKeys()

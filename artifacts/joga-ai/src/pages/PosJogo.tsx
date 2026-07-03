@@ -55,6 +55,7 @@ import {
   type EvolutionGain,
 } from "@/lib/evolutionUtils";
 import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
+import { markNotificationRead } from "@/lib/notificationsRepository";
 import { loadCommunity } from "@/lib/communityRepository";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
 import { PlayerCard } from "@/components/PlayerCard";
@@ -821,6 +822,8 @@ export default function PosJogo() {
     flow.upsertVote(voteRecord);
     submitVote(matchId, voteRecord).catch(console.warn);
     markUserVoted(matchId, userId).catch(console.warn);
+    // Já votou: o lembrete de "falta votar" deixa de fazer sentido.
+    void markNotificationRead(userId, `vote-${matchId}`);
 
     // `votedUserIds` (memoizado) já incorpora os votos em tempo real de outros
     // jogadores via `voteRecords` — usar isto (em vez de `data.votedUserIds`

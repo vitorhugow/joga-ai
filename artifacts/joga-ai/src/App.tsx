@@ -8,6 +8,7 @@ import { pageTransition } from "@/components/joga/motion";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGateProvider } from "@/contexts/AuthGateContext";
 import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
+import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
 import { lazy, Suspense } from "react";
 import NotFound from "@/pages/not-found";
@@ -100,6 +101,7 @@ function App() {
         <AuthProvider>
           <AuthGateProvider>
             <ProfileSetupGate />
+            <MatchVoteReminderModal />
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Router />
             </WouterRouter>

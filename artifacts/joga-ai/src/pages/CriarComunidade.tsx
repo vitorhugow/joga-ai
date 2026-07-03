@@ -6,6 +6,7 @@ import { createCommunity } from "@/lib/communityRepository";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { toast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const GAME_TYPES = [
   { value: "fut7", label: "Fut 7" },
@@ -15,6 +16,7 @@ const GAME_TYPES = [
 ] as const;
 
 export default function CriarComunidade() {
+  useDocumentTitle("Criar Comunidade");
   const { userId } = useAuth();
   const { profile } = useUserProfile();
   const [, setLocation] = useLocation();

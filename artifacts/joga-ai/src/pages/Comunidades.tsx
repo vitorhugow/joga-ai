@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaChip, JogaPage } from "@/components/joga";
 import { imageDisplaySrc } from "@/lib/imageUtils";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const gameTypeLabel: Record<string, string> = {
   futsal: "Futsal",
@@ -125,6 +126,7 @@ function CommunityCard({
 }
 
 export default function Comunidades() {
+  useDocumentTitle("Comunidades");
   const { userId } = useAuth();
   const { requireLinked } = useAuthGate();
   const [, setLocation] = useLocation();

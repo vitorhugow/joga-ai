@@ -36,6 +36,7 @@ import { CommunityDuel, RivalryCard } from "@/components/CommunityDuel";
 import { imageDisplaySrc } from "@/lib/imageUtils";
 import { loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const gameTypeLabel: Record<string, string> = {
   futsal: "Futsal",
@@ -73,6 +74,7 @@ export default function ComunidadePage() {
   }, [id]);
 
   const [community, setCommunity] = useState<Community | null>(null);
+  useDocumentTitle(community?.name ?? "Comunidade");
   const [matches, setMatches] = useState<MatchListing[]>([]);
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [joinStatus, setJoinStatus] = useState<JoinRequestStatus | null>(null);

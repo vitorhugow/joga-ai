@@ -2,6 +2,7 @@ import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-
 import { Link } from "wouter";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const benefits = [
   { icon: Star,     label: "Cartas Premium",       desc: "Skins exclusivas ouro, prata, diamante e élite" },
@@ -42,6 +43,7 @@ const planFeatures = {
 };
 
 export default function Premium() {
+  useDocumentTitle("Premium");
   return (
     <JogaPage theme="dark" padded={false}>
 

@@ -9,6 +9,7 @@ import { createMatch } from "@/lib/matchRepository";
 import { calculateOverall } from "@/lib/cardUtils";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
 import { toast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
@@ -81,6 +82,7 @@ function StyledTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>
 }
 
 export default function CriarPartida() {
+  useDocumentTitle("Criar Partida");
   const [, setLocation] = useLocation();
   const search = useSearch();
   const communityId = new URLSearchParams(search).get("communityId") ?? undefined;

@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import {
+  initializeFirestore,
+  getFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 /**
@@ -26,7 +31,25 @@ const firebaseConfig = {
 /** Evita re-inicialização em HMR */
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export const db = getFirestore(app);
+/**
+ * Cache local persistente (IndexedDB) com suporte multi-aba: permite ler/
+ * escrever com a rede em baixo (fila de escritas offline) — essencial para
+ * o placar do Ao Vivo continuar a funcionar sem ligação e sincronizar
+ * quando a rede voltar. Em HMR (o módulo corre outra vez para a mesma app)
+ * ou em browsers sem IndexedDB disponível, cai para o Firestore por defeito.
+ */
+function createFirestore() {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch (err) {
+    console.warn("[firebase] cache persistente indisponível, a usar cache em memória:", err);
+    return getFirestore(app);
+  }
+}
+
+export const db = createFirestore();
 export const auth = getAuth(app);
 export default app;
 

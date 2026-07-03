@@ -11,6 +11,7 @@ import { calculateOverall } from "@/lib/cardUtils";
 import { useUserId, useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
 import { ProfileEditDialog } from "@/components/profile/ProfileEditDialog";
 import { ProfileSocialLinks } from "@/components/profile/ProfileSocialLinks";
@@ -171,6 +172,7 @@ export default function Perfil() {
 
   const activeProfile = (isViewingOther ? viewedProfile : profile) ?? profile;
   const profileLoading = isViewingOther ? viewLoading : ownProfileLoading;
+  useDocumentTitle(isViewingOther ? activeProfile?.displayName || "Jogador" : "Perfil");
   const [showSetup, setShowSetup] = useState(false);
   const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");

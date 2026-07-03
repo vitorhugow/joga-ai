@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { ChevronLeft, Pause, Play, RotateCcw, StopCircle, X } from "lucide-react";
+import { ChevronLeft, MoreVertical, Pause, Play, RotateCcw, StopCircle, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { loadPreMatch, type SavedPreMatch } from "@/lib/preMatchStorage";
 import type { SavedPostMatch } from "@/lib/postMatchStorage";
 import {
@@ -23,6 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { toast } from "@/hooks/use-toast";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 type TeamKey = "A" | "B" | "C" | "D" | "BENCH";
 type EventType = "golo" | "assistencia" | "defesa" | "cartao_amarelo" | "falta";
@@ -85,6 +92,7 @@ function formatTime(seconds: number) {
 }
 
 export default function AoVivo() {
+  useDocumentTitle("Ao Vivo");
   const { confirm, ConfirmDialog } = useJogaConfirm();
   const { userId } = useAuth();
   const [, setLocation] = useLocation();
@@ -356,6 +364,15 @@ export default function AoVivo() {
   function resetTimer() {
     setSeconds(0);
     setIsRunning(false);
+  }
+
+  async function reiniciarCronometro() {
+    const ok = await confirm({
+      description: "Reiniciar o cronómetro deste mini jogo? O tempo volta a 00:00.",
+      confirmLabel: "Reiniciar",
+    });
+    if (!ok) return;
+    resetTimer();
   }
 
   function toggleTimer() {
@@ -901,7 +918,7 @@ export default function AoVivo() {
           </div>
         </section>
 
-        <div className="grid grid-cols-2 gap-2 px-4">
+        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 px-4">
           <JogaButton
             variant={showNextGamePicker ? "ghost" : isRunning ? "gold" : "primary"}
             onClick={toggleTimer}
@@ -912,19 +929,30 @@ export default function AoVivo() {
             {seconds === 0 && !isRunning ? "Iniciar" : isRunning ? "Pausar" : "Retomar"}
           </JogaButton>
 
-          <JogaButton variant="danger" onClick={resetTimer} className="gap-2">
-            <RotateCcw className="w-4 h-4" />
-            Reiniciar
-          </JogaButton>
-
           <JogaButton variant="arena" onClick={finalizarMiniJogo}>
             Finalizar jogo
           </JogaButton>
 
-          <JogaButton variant="danger" onClick={terminarPelada} className="gap-2">
-            <StopCircle className="w-4 h-4" />
-            Terminar pelada
-          </JogaButton>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <JogaButton variant="ghost" size="icon" aria-label="Mais opções da pelada">
+                <MoreVertical className="w-5 h-5" />
+              </JogaButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[200px]">
+              <DropdownMenuItem onClick={reiniciarCronometro} className="gap-2 cursor-pointer">
+                <RotateCcw className="w-4 h-4" />
+                Reiniciar cronómetro
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={terminarPelada}
+                className="gap-2 cursor-pointer text-red-500 focus:text-red-500"
+              >
+                <StopCircle className="w-4 h-4" />
+                Terminar pelada
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {showNextGamePicker && (

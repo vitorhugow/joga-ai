@@ -5,6 +5,9 @@ dist
 tmp
 out-tsc
 *.tsbuildinfo
+
+# arquivos/patches soltos (zips de entrega, backups) — nunca versionar
+*.zip
 .expo
 .expo-shared
 

@@ -35,6 +35,7 @@ import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
 import { calculateOverall } from "@/lib/cardUtils";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -49,6 +50,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 
 const levelLabels: Record<string, string> = {
   recreativo: "Recreativo",
@@ -314,6 +316,7 @@ function PlayerPicker({
 }
 
 export default function PreJogo() {
+  const { confirm, ConfirmDialog } = useJogaConfirm();
   const { userId, isLinked } = useAuth();
   const { requireLinked } = useAuthGate();
   const { profile } = useUserProfile();
@@ -323,6 +326,7 @@ export default function PreJogo() {
   useMatchPhaseGuard(matchId, "pre-jogo");
   const returnTo = new URLSearchParams(window.location.search).get("from") || "/jogos";
   const [matchDetails, setMatchDetails] = useState<MatchDetails | null>(null);
+  useDocumentTitle(matchDetails?.title || "Pré-jogo");
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
   const [organizerId, setOrganizerId] = useState<string | null>(null);
@@ -1084,6 +1088,16 @@ export default function PreJogo() {
     }
   }
 
+  async function handleRemovePlayer(playerId: string, playerName: string) {
+    const ok = await confirm({
+      description: `Remover ${playerName} desta pelada? A vaga é oferecida a quem estiver na lista de espera.`,
+      confirmLabel: "Remover",
+      destructive: true,
+    });
+    if (!ok) return;
+    removePlayer(playerId);
+  }
+
   function togglePaid(playerId: string) {
     setPlayers((current) =>
       current.map((player) =>
@@ -1270,6 +1284,16 @@ export default function PreJogo() {
               </div>
             ))}
           </div>
+
+          {teamsWithPlayers === 0 && players.length > 0 && (
+            <p className="mt-3 text-center text-[11px] font-bold text-white/40">
+              {canManageMatch ? (
+                <>Toca em <span className="text-emerald-300">Aleatório</span> para sortear os times.</>
+              ) : (
+                "Os times ainda não foram sorteados."
+              )}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1617,30 +1641,32 @@ export default function PreJogo() {
                     </select>
                   </div>
 
-                  <div className="flex items-center gap-2 mt-3">
-                    {canManageMatch && (
-                    <button
-                      onClick={() => togglePaid(player.id)}
-                      className="flex-1 rounded-xl py-2 text-[11px] font-black cursor-pointer"
-                      style={player.paid
-                        ? { background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.24)" }
-                        : { background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.24)" }
-                      }
-                    >
-                      {player.paid ? "Pago" : "Pendente"}
-                    </button>
-                    )}
+                  {canManageMatch && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => togglePaid(player.id)}
+                        className="w-full rounded-xl py-2 text-[11px] font-black cursor-pointer"
+                        style={player.paid
+                          ? { background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.24)" }
+                          : { background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.24)" }
+                        }
+                      >
+                        {player.paid ? "Pago" : "Pendente"}
+                      </button>
 
-                    {canManageMatch && (
-                    <button
-                      onClick={() => removePlayer(player.id)}
-                      className="w-11 rounded-xl flex items-center justify-center cursor-pointer"
-                      style={{ background: "rgba(239,68,68,0.1)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    )}
-                  </div>
+                      {/* Botão de remover afastado do toggle de pagamento para evitar toques acidentais */}
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={() => void handleRemovePlayer(player.id, player.name)}
+                          className="rounded-lg px-3 py-1.5 flex items-center gap-1.5 text-[10px] font-bold cursor-pointer"
+                          style={{ background: "transparent", color: "rgba(248,113,113,0.75)", border: "1px solid rgba(239,68,68,0.16)" }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {slot ? (
                     <p className="mt-2 text-[10px] font-bold text-white/28">
@@ -1810,6 +1836,8 @@ export default function PreJogo() {
         }}
         onClose={() => setPickerSlot(null)}
       />
+
+      {ConfirmDialog}
     </JogaPage>
   );
 }

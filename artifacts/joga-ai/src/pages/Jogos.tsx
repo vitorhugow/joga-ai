@@ -6,6 +6,7 @@ import { loadAvailableMatches, type MatchListing } from "@/lib/communityReposito
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaChip, JogaPage } from "@/components/joga";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
@@ -15,6 +16,7 @@ const types = ["todos", "futsal", "fut5", "fut7", "futebol11"];
 const typeLabels: Record<string, string> = { todos: "Todos", futsal: "Futsal", fut5: "Fut 5", fut7: "Fut 7", futebol11: "Fut 11" };
 
 export default function Jogos() {
+  useDocumentTitle("Jogos");
   const { requireLinked } = useAuthGate();
   const { isLinked } = useAuth();
   const [search, setSearch] = useState("");

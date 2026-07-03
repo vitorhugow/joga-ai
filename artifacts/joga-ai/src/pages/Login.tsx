@@ -14,6 +14,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const GENERIC_PLAYER_PHOTO = "/landing/player-generic.png";
 
@@ -687,6 +688,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function Login() {
+  useDocumentTitle("Entrar");
   const { isLinked, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [loginOpen, setLoginOpen] = useState(false);

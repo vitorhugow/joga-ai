@@ -2,6 +2,7 @@ import { MapPin, Lock, Search } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { JogaPage } from "@/components/joga";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const mockFields = [
   { id: "1", name: "Parque das Nações – Campo A", city: "Lisboa", type: "fut7", covered: false, price: "80€/h" },
@@ -11,6 +12,7 @@ const mockFields = [
 ];
 
 export default function Campos() {
+  useDocumentTitle("Campos");
   return (
     <JogaPage theme="dark" padded={false}>
       <AppHeader title="Campos" />

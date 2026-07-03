@@ -67,6 +67,7 @@ import { generateMatchNarrative } from "@/lib/matchNarrative";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { toast } from "@/hooks/use-toast";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 
 const eventLabels: Record<string, string> = {
@@ -218,6 +219,7 @@ export default function PosJogo() {
     if (!local || !authUserId) return local;
     return applyAuthToMatchData(local, authUserId);
   });
+  useDocumentTitle(data?.title || "Pós-jogo");
 
   // Hidrata dados do Firestore em background (não bloqueia render)
   // e verifica se a partida já expirou

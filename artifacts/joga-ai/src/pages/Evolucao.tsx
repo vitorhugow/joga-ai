@@ -9,6 +9,7 @@ import { loadEvolutionHistory, type EvolutionRecord } from "@/lib/evolutionStora
 import { loadEvolutionFromFirestore } from "@/lib/evolutionRepository";
 import { isPostMatchExpired, loadPostMatch } from "@/lib/postMatchStorage";
 import { hasUserVotedInSession, currentMatchUserId, resolveMatchId } from "@/lib/matchFlowStorage";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 function formatDate(iso: string) {
   try {
@@ -24,6 +25,7 @@ function formatDate(iso: string) {
 }
 
 export default function Evolucao() {
+  useDocumentTitle("Evolução");
   const { userId: authUserId } = useAuth();
   const [history, setHistory] = useState<EvolutionRecord[]>(() => loadEvolutionHistory(authUserId));
   const [pendingMatch, setPendingMatch] = useState(() => loadPostMatch());

@@ -27,6 +27,7 @@ import {
 } from "@/lib/communityCover";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const GAME_TYPES = [
   { value: "fut7", label: "Fut 7" },
@@ -41,6 +42,7 @@ export default function ComunidadeConfiguracoes() {
   const id = params?.id || "";
 
   const [community, setCommunity] = useState<Community | null>(null);
+  useDocumentTitle(community ? `Configurações · ${community.name}` : "Configurações");
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [pending, setPending] = useState<JoinRequest[]>([]);
   const [name, setName] = useState("");

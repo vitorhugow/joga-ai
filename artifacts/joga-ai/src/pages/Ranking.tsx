@@ -5,6 +5,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { calculateOverall } from "@/lib/cardUtils";
 import { profileToPlayerCard } from "@/lib/userRepository";
 import { JogaChip, JogaPage } from "@/components/joga";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 type Category = "overall" | "golos" | "assistencias" | "notas";
 
@@ -23,6 +24,7 @@ const posColors: Record<string, string> = {
 };
 
 export default function Ranking() {
+  useDocumentTitle("Ranking");
   const { profile } = useUserProfile();
   const player = profileToPlayerCard(profile);
   const myOverall = calculateOverall(player.attributes);

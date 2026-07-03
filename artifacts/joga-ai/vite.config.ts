@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { VitePWA } from "vite-plugin-pwa";
 
 const port = Number(process.env.PORT ?? "5173");
 
@@ -18,6 +19,34 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    VitePWA({
+      registerType: "autoUpdate",
+      injectRegister: "auto",
+      includeAssets: ["favicon.svg", "favicon-48.png", "apple-touch-icon.png"],
+      manifest: {
+        name: "Joga AI",
+        short_name: "Joga AI",
+        description: "Joga AI — A tua pelada. A tua carta. A tua evolução.",
+        theme_color: "#0a0f1a",
+        background_color: "#0a0f1a",
+        display: "standalone",
+        start_url: basePath,
+        scope: basePath,
+        lang: "pt",
+        icons: [
+          { src: "pwa-192.png", sizes: "192x192", type: "image/png" },
+          { src: "pwa-512.png", sizes: "512x512", type: "image/png" },
+          { src: "pwa-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      workbox: {
+        // Deixa as leituras/escritas do Firestore fluírem pela persistência
+        // nativa do SDK (persistentLocalCache); o service worker só cacheia
+        // os assets estáticos da app (JS/CSS/imagens/fontes).
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        navigateFallbackDenylist: [/^\/api\//],
+      },
+    }),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [

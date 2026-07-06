@@ -126,10 +126,6 @@ export default function AoVivo() {
   const [playerTeams, setPlayerTeams] = useState<Record<string, TeamKey>>({});
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
-  const [subTeam, setSubTeam] = useState<TeamKey>("A");
-  const [subOut, setSubOut] = useState("");
-  const [subIn, setSubIn] = useState("");
-
   useEffect(() => {
     if (!phaseReady) return;
 
@@ -441,9 +437,6 @@ export default function AoVivo() {
 
     setActiveHomeTeam(nextHomeTeam);
     setActiveAwayTeam(nextAwayTeam);
-    setSubTeam(nextHomeTeam);
-    setSubOut("");
-    setSubIn("");
 
     const firstPlayer =
       players.find((player) => playerTeams[player.id] === nextHomeTeam) ||
@@ -535,23 +528,6 @@ export default function AoVivo() {
     }
   }
 
-
-
-  function confirmarSubstituicao() {
-    if (!subOut || !subIn || subOut === subIn) return;
-
-    const teamOfIncomingPlayer = playerTeams[subIn] || "BENCH";
-
-    setPlayerTeams((current) => ({
-      ...current,
-      [subOut]: teamOfIncomingPlayer,
-      [subIn]: subTeam,
-    }));
-
-    setSelectedPlayerId(subIn);
-    setSubOut("");
-    setSubIn("");
-  }
 
   if (!phaseReady) {
     return (
@@ -1094,51 +1070,6 @@ export default function AoVivo() {
               </button>
             ))}
           </div>
-        </section>
-
-        <section className="rounded-3xl p-4" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <p className="text-[10px] font-black text-white/25 uppercase tracking-[0.22em] mb-3">Substituição</p>
-
-          <div className="grid grid-cols-3 gap-2">
-            <select
-              value={subTeam}
-              onChange={(e) => {
-                setSubTeam(e.target.value as TeamKey);
-                setSubOut("");
-                setSubIn("");
-              }}
-              className="rounded-xl p-2 bg-white/5 text-white border border-white/10"
-            >
-              {activeTeamsForGame.map((team) => <option key={team} value={team}>{teamNames[team]}</option>)}
-            </select>
-
-            <select value={subOut} onChange={(e) => setSubOut(e.target.value)} className="rounded-xl p-2 bg-white/5 text-white border border-white/10">
-              <option value="">Sai</option>
-              {(playersByTeam[subTeam] || []).map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
-            </select>
-
-            <select value={subIn} onChange={(e) => setSubIn(e.target.value)} className="rounded-xl p-2 bg-white/5 text-white border border-white/10">
-              <option value="">Entra</option>
-              {players
-                .filter((player) => playerTeams[player.id] !== subTeam)
-                .map((player) => {
-                  const currentTeam = playerTeams[player.id] || "BENCH";
-                  return (
-                    <option key={player.id} value={player.id}>
-                      {player.name} · {teamNames[currentTeam]}
-                    </option>
-                  );
-                })}
-            </select>
-          </div>
-
-          <p className="text-white/35 text-xs mt-2">
-            O jogador que sai vai para a equipa de onde veio o jogador que entrou.
-          </p>
-
-          <JogaButton variant="outline" className="mt-3" onClick={confirmarSubstituicao}>
-            Confirmar substituição
-          </JogaButton>
         </section>
 
         <section className="rounded-3xl p-4" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>

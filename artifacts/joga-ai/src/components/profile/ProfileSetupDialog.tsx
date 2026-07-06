@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera } from "lucide-react";
+import { Camera, Minus, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,17 @@ import {
   ProfilePhotoTooLargeError,
   type UserProfile,
 } from "@/lib/userRepository";
+import {
+  ALLOCATION_MAX_PER_ATTRIBUTE,
+  ALLOCATION_MIN_PER_ATTRIBUTE,
+  ALLOCATION_TOTAL_POINTS,
+  ATTRIBUTE_KEYS,
+  allocationPointsRemaining,
+  calculateOverall,
+  createInitialAllocation,
+  isValidInitialAllocation,
+  type PlayerAttributes,
+} from "@/lib/cardUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 
@@ -24,6 +35,15 @@ const POSITIONS = [
   { value: "DEF", label: "Defesa" },
   { value: "GR", label: "Guarda-redes" },
 ] as const;
+
+const ATTRIBUTE_LABELS: Record<keyof PlayerAttributes, string> = {
+  ritmo: "Ritmo",
+  finalizacao: "Finalização",
+  passe: "Passe",
+  defesa: "Defesa",
+  drible: "Drible",
+  fisico: "Físico",
+};
 
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB — a foto é comprimida ao enquadrar
 
@@ -47,10 +67,12 @@ export function ProfileSetupDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditing = Boolean(profile?.profileComplete);
 
+  const [step, setStep] = useState<"info" | "attributes">("info");
   const [displayName, setDisplayName] = useState("");
   const [position, setPosition] = useState("AVA");
   const [shirtNumber, setShirtNumber] = useState("10");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
+  const [attributes, setAttributes] = useState<PlayerAttributes>(createInitialAllocation);
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -64,12 +86,54 @@ export function ProfileSetupDialog({
     }
     if (syncedOnOpenRef.current) return;
     syncedOnOpenRef.current = true;
+    setStep("info");
     setDisplayName(profile?.displayName ?? "");
     setPosition(profile?.position ?? "AVA");
     setShirtNumber(String(profile?.shirtNumber ?? 10));
     setPhotoUrl(profile?.photoUrl);
+    setAttributes(createInitialAllocation());
     setError("");
   }, [open, profile]);
+
+  const remainingPoints = allocationPointsRemaining(attributes);
+  const previewOverall = calculateOverall(attributes);
+
+  function adjustAttribute(key: keyof PlayerAttributes, delta: number) {
+    setAttributes((prev) => {
+      const current = prev[key];
+      const remaining = allocationPointsRemaining(prev);
+      let next = current + delta;
+      next = Math.max(ALLOCATION_MIN_PER_ATTRIBUTE, Math.min(ALLOCATION_MAX_PER_ATTRIBUTE, next));
+      const actualDelta = next - current;
+      if (actualDelta > 0 && actualDelta > remaining) {
+        next = current + remaining;
+      }
+      return { ...prev, [key]: next };
+    });
+  }
+
+  function handleInfoSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const name = displayName.trim();
+    if (name.length < 2) {
+      setError("Indica o teu nome (mínimo 2 caracteres).");
+      return;
+    }
+    const num = Number(shirtNumber);
+    if (!Number.isFinite(num) || num < 1 || num > 99) {
+      setError("Número da camisola entre 1 e 99.");
+      return;
+    }
+
+    setError("");
+
+    if (isEditing) {
+      void saveProfile();
+      return;
+    }
+
+    setStep("attributes");
+  }
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -97,16 +161,12 @@ export function ProfileSetupDialog({
     event.target.value = "";
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function saveProfile() {
     const name = displayName.trim();
-    if (name.length < 2) {
-      setError("Indica o teu nome (mínimo 2 caracteres).");
-      return;
-    }
     const num = Number(shirtNumber);
-    if (!Number.isFinite(num) || num < 1 || num > 99) {
-      setError("Número da camisola entre 1 e 99.");
+
+    if (!isEditing && !isValidInitialAllocation(attributes)) {
+      setError(`Distribui todos os ${ALLOCATION_TOTAL_POINTS} pontos antes de continuar.`);
       return;
     }
 
@@ -118,6 +178,7 @@ export function ProfileSetupDialog({
         position,
         shirtNumber: num,
         photoUrl,
+        attributes: isEditing ? undefined : attributes,
       };
 
       const saveTask = isEditing
@@ -182,16 +243,115 @@ export function ProfileSetupDialog({
       >
         <DialogHeader>
           <DialogTitle className="font-display text-xl">
-            {isEditing ? "Editar carta" : "Monta a tua carta"}
+            {isEditing
+              ? "Editar carta"
+              : step === "attributes"
+                ? "Distribui os atributos"
+                : "Monta a tua carta"}
           </DialogTitle>
           <DialogDescription className="text-white/50">
             {isEditing
               ? "Atualiza nome, número e foto. A posição e os atributos não mudam aqui."
-              : "Nome, posição e foto — leva 10 segundos. A posição só pode ser escolhida agora."}
+              : step === "attributes"
+                ? `Reparte ${ALLOCATION_TOTAL_POINTS} pontos pelos 6 atributos, no máximo ${ALLOCATION_MAX_PER_ATTRIBUTE} em cada. É a tua carta — decide onde é que és melhor.`
+                : "Nome, posição e foto — leva 10 segundos. A posição só pode ser escolhida agora."}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        {!isEditing && step === "attributes" ? (
+          <div className="space-y-4 mt-2">
+            <div
+              className="flex items-center justify-between rounded-xl px-4 py-3"
+              style={{ background: "rgba(74,222,128,0.1)", border: "1.5px solid rgba(74,222,128,0.25)" }}
+            >
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                  Pontos por distribuir
+                </p>
+                <p
+                  className="font-display font-black text-2xl"
+                  style={{ color: remainingPoints === 0 ? "#4ade80" : "white" }}
+                >
+                  {remainingPoints}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">OVR</p>
+                <p className="font-display font-black text-2xl text-emerald-400">{previewOverall}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {ATTRIBUTE_KEYS.map((key) => (
+                <div key={key} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-bold text-white">{ATTRIBUTE_LABELS[key]}</span>
+                      <span className="text-sm font-black text-emerald-400">{attributes[key]}</span>
+                    </div>
+                    <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${((attributes[key] - ALLOCATION_MIN_PER_ATTRIBUTE) / (ALLOCATION_MAX_PER_ATTRIBUTE - ALLOCATION_MIN_PER_ATTRIBUTE)) * 100}%`,
+                          background: "linear-gradient(90deg, #16a34a, #4ade80)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => adjustAttribute(key, -1)}
+                      disabled={attributes[key] <= ALLOCATION_MIN_PER_ATTRIBUTE}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-30"
+                      style={{ background: "rgba(255,255,255,0.08)" }}
+                      data-testid={`attr-decrement-${key}`}
+                    >
+                      <Minus className="w-3.5 h-3.5 text-white" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustAttribute(key, 1)}
+                      disabled={attributes[key] >= ALLOCATION_MAX_PER_ATTRIBUTE || remainingPoints <= 0}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-30"
+                      style={{ background: "rgba(74,222,128,0.15)" }}
+                      data-testid={`attr-increment-${key}`}
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+
+            <div className="flex gap-2">
+              <JogaButton
+                type="button"
+                variant="ghost"
+                size="lg"
+                onClick={() => setStep("info")}
+                data-testid="button-setup-back"
+              >
+                Voltar
+              </JogaButton>
+              <JogaButton
+                type="button"
+                variant="primary"
+                size="lg"
+                className="flex-1"
+                disabled={saving || remainingPoints !== 0}
+                onClick={() => void saveProfile()}
+                data-testid="button-setup-submit"
+              >
+                {saving ? "A guardar…" : "Criar carta"}
+              </JogaButton>
+            </div>
+          </div>
+        ) : (
+        <form onSubmit={handleInfoSubmit} className="space-y-4 mt-2">
           <div className="flex items-center gap-4">
             <button
               type="button"
@@ -331,9 +491,10 @@ export function ProfileSetupDialog({
             disabled={saving}
             data-testid="button-setup-submit"
           >
-            {saving ? "A guardar…" : isEditing ? "Guardar alterações" : "Criar carta"}
+            {saving ? "A guardar…" : isEditing ? "Guardar alterações" : "Continuar"}
           </JogaButton>
         </form>
+        )}
       </DialogContent>
     </Dialog>
     </>

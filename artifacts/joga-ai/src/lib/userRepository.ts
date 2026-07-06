@@ -608,6 +608,8 @@ export type ProfileSetupInput = {
   shirtNumber: number;
   photoUrl?: string;
   title?: string;
+  /** Distribuição manual dos 300 pontos iniciais (ver cardUtils). Se omitida, gera aleatório. */
+  attributes?: PlayerAttributes;
 };
 
 export async function completeUserProfile(
@@ -632,7 +634,7 @@ export async function completeUserProfile(
     profileComplete: true,
     attributes: current.profileComplete
       ? current.attributes
-      : generateInitialAttributes(position),
+      : (input.attributes ?? generateInitialAttributes(position)),
     updatedAt: new Date().toISOString(),
   };
 

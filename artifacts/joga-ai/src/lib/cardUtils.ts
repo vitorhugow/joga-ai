@@ -189,6 +189,40 @@ export function generateInitialAttributes(position?: string): PlayerAttributes {
   return distributeAttributes(pos, targetSum);
 }
 
+/**
+ * Distribuição manual no cadastro: o jogador reparte 300 pontos pelos 6
+ * atributos (soma = 300 → OVR inicial 50, igual à geração aleatória), com um
+ * piso e um teto por atributo para evitar cartas absurdas logo ao início.
+ */
+export const ALLOCATION_TOTAL_POINTS = 300;
+export const ALLOCATION_MIN_PER_ATTRIBUTE = 20;
+export const ALLOCATION_MAX_PER_ATTRIBUTE = 60;
+
+export function createInitialAllocation(): PlayerAttributes {
+  return STAT_KEYS.reduce((acc, key) => {
+    acc[key] = ALLOCATION_MIN_PER_ATTRIBUTE;
+    return acc;
+  }, {} as PlayerAttributes);
+}
+
+export function allocationPointsUsed(attrs: PlayerAttributes): number {
+  return STAT_KEYS.reduce((sum, key) => sum + attrs[key], 0);
+}
+
+export function allocationPointsRemaining(attrs: PlayerAttributes): number {
+  return ALLOCATION_TOTAL_POINTS - allocationPointsUsed(attrs);
+}
+
+export function isValidInitialAllocation(attrs: PlayerAttributes): boolean {
+  const sum = allocationPointsUsed(attrs);
+  if (sum !== ALLOCATION_TOTAL_POINTS) return false;
+  return STAT_KEYS.every(
+    (key) => attrs[key] >= ALLOCATION_MIN_PER_ATTRIBUTE && attrs[key] <= ALLOCATION_MAX_PER_ATTRIBUTE,
+  );
+}
+
+export const ATTRIBUTE_KEYS: readonly (keyof PlayerAttributes)[] = STAT_KEYS;
+
 export type MatchEventGains = {
   goals: number;
   assists: number;

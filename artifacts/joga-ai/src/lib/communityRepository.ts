@@ -100,6 +100,28 @@ export type CreateCommunityInput = {
   adminDisplayName: string;
 };
 
+/**
+ * Confirma para cada comunidade se o utilizador é membro, com um pedido
+ * directo por comunidade (communities/{id}/members/{userId}). Mais lento que
+ * uma única collection-group query, mas muito mais fiável: a regra da
+ * collection-group (`{path=**}/members/{memberId}`) exige que o Firestore
+ * consiga provar estaticamente a condição da regra a partir dos filtros da
+ * query, o que falha sempre que a regra tem mais do que uma cláusula — como
+ * é o caso aqui — deixando "Minhas" vazio para membros não-admin.
+ */
+async function loadMembershipFlags(
+  communityIds: string[],
+  userId: string,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  await Promise.all(
+    communityIds.map(async (communityId) => {
+      if (await isCommunityMember(communityId, userId)) ids.add(communityId);
+    }),
+  );
+  return ids;
+}
+
 /** Carrega todas as comunidades */
 export async function loadCommunities(userId?: string): Promise<Community[]> {
   if (!isFirebaseConfigured()) return [];
@@ -108,7 +130,9 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
     const snap = await getDocs(collection(db, "communities"));
     if (snap.empty) return [];
 
-    const memberIds = userId ? await loadMemberCommunityIds(userId) : new Set<string>();
+    const memberIds = userId
+      ? await loadMembershipFlags(snap.docs.map((d) => d.id), userId)
+      : new Set<string>();
     const pendingIds = userId ? await loadPendingRequestCommunityIds(userId) : new Set<string>();
 
     return snap.docs.map((d) => {
@@ -156,6 +180,29 @@ export async function loadMyCommunities(userId: string): Promise<Community[]> {
 
   const byId = new Map<string, Community>();
 
+  // Caminho fiável: lê todas as comunidades e confirma a membership com um
+  // pedido directo por comunidade (ver loadMembershipFlags). Cobre também o
+  // caso de o utilizador ser admin sem doc em members/.
+  try {
+    const allSnap = await getDocs(collection(db, "communities"));
+    const communityIds = allSnap.docs.map((d) => d.id);
+    const memberIds = await loadMembershipFlags(communityIds, userId);
+
+    for (const communityDoc of allSnap.docs) {
+      const data = communityDoc.data();
+      const isAdmin = data.adminId === userId;
+      if (memberIds.has(communityDoc.id) || isAdmin) {
+        byId.set(communityDoc.id, mapCommunityDoc(communityDoc.id, data));
+      }
+    }
+  } catch (err) {
+    console.warn("[communityRepository] loadMyCommunities direct:", err);
+  }
+
+  // Rede de segurança adicional via collection-group query — nem sempre
+  // funciona (ver nota em loadMembershipFlags), mas quando funciona pode
+  // apanhar comunidades que a leitura directa acima tenha falhado por algum
+  // erro pontual.
   try {
     const memberSnap = await getDocs(
       query(collectionGroup(db, "members"), where("userId", "==", userId)),
@@ -163,7 +210,7 @@ export async function loadMyCommunities(userId: string): Promise<Community[]> {
 
     for (const memberDoc of memberSnap.docs) {
       const communityRef = memberDoc.ref.parent.parent;
-      if (!communityRef) continue;
+      if (!communityRef || byId.has(communityRef.id)) continue;
       const communitySnap = await getDoc(communityRef);
       if (!communitySnap.exists()) continue;
       byId.set(communitySnap.id, mapCommunityDoc(communitySnap.id, communitySnap.data()));

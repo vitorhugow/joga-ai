@@ -110,12 +110,23 @@ service cloud.firestore {
         && request.resource.data.votedUserIds.hasAny([request.auth.uid]);
     }
 
+    // Configuração da app gerida pela consola (ex.: patrocinador do SponsorSlot)
+    match /appConfig/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isSignedIn();
-      allow create: if isOwner(userId);
+      // entitlements (PRO) é concedido APENAS por Cloud Functions (Stripe).
+      allow create: if isOwner(userId)
+        && !request.resource.data.keys().hasAny(['entitlements']);
       // Revert de evolução: só o organizador da partida, só os campos do revert,
       // e apenas se o user realmente participou dessa partida (tem matchHistory dela).
-      allow update: if isOwner(userId) || (
+      allow update: if (
+        isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['entitlements'])
+      ) || (
         isSignedIn()
         && request.resource.data.keys().hasAll(['_revertForMatchId'])
         && isMatchOrganizer(request.resource.data._revertForMatchId)
@@ -124,13 +135,18 @@ service cloud.firestore {
           .hasOnly(['attributes', 'seasonStats', '_revertForMatchId', 'updatedAt',
                     'lastAttributeDeltas', 'lastEvolutionMatchId', 'lastMatchRating'])
       ) || (
-        // Publicar notas/distintivos de TODOS os jogadores quando a votação
-        // termina — quem despoleta isto é normalmente o último a votar, não
-        // necessariamente o organizador nem o dono deste perfil.
+        // Ganho de participação (+1 Físico) e distintivos aplicados a TODO o
+        // plantel por quem termina a partida ao vivo — normalmente o
+        // organizador. Restrito ao organizador da partida real referida e a
+        // uma lista fechada de campos (nunca nome, foto, entitlements, etc.
+        // — corrige a vulnerabilidade em que qualquer signed-in user podia
+        // reescrever o perfil inteiro de qualquer pessoa via este marcador).
         isSignedIn()
         && request.resource.data.keys().hasAll(['_applyForMatchId'])
-        && matchDoc(request.resource.data._applyForMatchId).status
-          in ['ao_vivo', 'aguardando_auditoria', 'auditada', 'concluida']
+        && isMatchOrganizer(request.resource.data._applyForMatchId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['attributes', 'seasonStats', '_applyForMatchId', 'updatedAt',
+                    'lastAttributeDeltas', 'lastEvolutionMatchId', 'lastMatchRating', 'badges'])
       );
       allow delete: if false;
 

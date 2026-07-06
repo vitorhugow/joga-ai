@@ -3,6 +3,7 @@ import { Share2, TrendingUp, ChevronRight, ChevronLeft, Shield, LogOut, Link2 } 
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link, useRoute } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
+import { ReferralCard } from "@/components/ReferralCard";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
@@ -711,6 +712,13 @@ export default function Perfil() {
           </div>
           )}
         </div>
+        )}
+
+        {/* ════════════════════════════════════
+            Referral — Convida a malta
+        ════════════════════════════════════ */}
+        {!isViewingOther && userId && (
+          <ReferralCard uid={userId} unlockedSkins={activeProfile?.unlockedSkins} />
         )}
 
         {/* ════════════════════════════════════

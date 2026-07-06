@@ -1,4 +1,5 @@
 import { Search, Plus, X, Users } from "lucide-react";
+import { SponsorSlot } from "@/components/SponsorSlot";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -393,6 +394,7 @@ export default function Comunidades() {
                   {discoverList.map((c) => (
                     <CommunityCard key={c.id} {...c} joined={false} />
                   ))}
+                  <SponsorSlot />
                 </div>
               )}
             </div>

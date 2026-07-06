@@ -19,6 +19,7 @@ import {
   type DocumentReference,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { clearPendingReferral, consumePendingReferral } from "./referral";
 import type { PlayerAttributes } from "./cardUtils";
 import {
   applyParticipationGainsToCard,
@@ -79,6 +80,12 @@ export type UserProfile = {
   whatsapp?: string;
   showInstagramPublic?: boolean;
   showWhatsappPublic?: boolean;
+  /** uid de quem convidou este utilizador (referral) — gravado na criação */
+  referredBy?: string;
+  /** Skins de carta desbloqueadas (ex.: via referral) */
+  unlockedSkins?: string[];
+  /** PRO — APENAS leitura no cliente; escrito só por Functions (Stripe) */
+  entitlements?: import("./entitlements").Entitlements;
   updatedAt?: string;
 };
 
@@ -328,6 +335,11 @@ function mergeProfiles(
 }
 
 function profileForFirestore(profile: UserProfile) {
+  // Nunca escrever entitlements a partir do cliente (bloqueado pelas rules;
+  // concedido apenas por Functions via Stripe).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { entitlements: _entitlements, ...clientProfile } = profile;
+  profile = clientProfile as UserProfile;
   const { uid: _uid, ...rest } = profile;
   return rest;
 }
@@ -361,7 +373,17 @@ async function persistProfile(
   };
 
   if (create) {
-    await setDoc(userRef, { ...payload, createdAt: serverTimestamp() }, { merge: true });
+    const referredBy = consumePendingReferral(userRef.id);
+    await setDoc(
+      userRef,
+      {
+        ...payload,
+        ...(referredBy ? { referredBy } : {}),
+        createdAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+    if (referredBy) clearPendingReferral();
   } else {
     await setDoc(userRef, payload, { merge: true });
   }

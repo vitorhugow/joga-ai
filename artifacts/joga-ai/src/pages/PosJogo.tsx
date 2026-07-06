@@ -71,6 +71,8 @@ import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { toast } from "@/hooks/use-toast";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { SponsorSlot } from "@/components/SponsorSlot";
+import { generateResultImage } from "@/lib/resultImage";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 
 const eventLabels: Record<string, string> = {
@@ -342,6 +344,43 @@ export default function PosJogo() {
 
   const allEvents = useMemo(() => collectAllEvents(games), [games]);
   const topScorers = useMemo(() => computeTopScorers(allEvents), [allEvents]);
+
+  async function handleShareResult() {
+    if (!data) return;
+    try {
+      const teamA = data.teamNames?.A ?? "Time A";
+      const teamB = data.teamNames?.B ?? "Time B";
+      let scoreA = 0;
+      let scoreB = 0;
+      for (const g of games) {
+        scoreA += Number(g?.scoreA ?? 0);
+        scoreB += Number(g?.scoreB ?? 0);
+      }
+      const top = topScorers[0];
+      const blob = await generateResultImage({
+        title: data.title || "Pelada",
+        dateLabel: new Date(data.savedAt || data.createdAt || Date.now()).toLocaleDateString(
+          "pt-PT",
+          { weekday: "long", day: "numeric", month: "long" },
+        ),
+        teamAName: teamA,
+        teamBName: teamB,
+        scoreA,
+        scoreB,
+        gamesCount: games.length,
+        topScorerName: top?.name,
+        topScorerGoals: top?.goals,
+      });
+      await shareOrDownloadPng(
+        blob,
+        "resultado-joga-ai.png",
+        "Resultado da pelada",
+        "Resultado final da pelada — feito com Joga AI (jogaai.geniai.pt)",
+      );
+    } catch (err) {
+      console.warn("[PosJogo] partilhar resultado:", err);
+    }
+  }
   const matchNarrative = useMemo(
     () =>
       generateMatchNarrative({
@@ -1173,6 +1212,18 @@ export default function PosJogo() {
           </div>
         </section>
       )}
+
+      <button
+        type="button"
+        onClick={() => void handleShareResult()}
+        className="mt-4 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+        style={{ background: "#10b981" }}
+        data-testid="button-share-result"
+      >
+        📤 Partilhar resultado no grupo
+      </button>
+
+      <SponsorSlot className="mt-4" />
 
       {canFinalize && (
         <section

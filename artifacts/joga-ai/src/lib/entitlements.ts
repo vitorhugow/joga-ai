@@ -20,12 +20,19 @@ export type Entitlements = {
 /** Preços fechados (Sprint alinhado a 04/07/2026) */
 export const PRICING = {
   playerProMonthly: 4.99,
+  playerProAnnual: 49.9,
   organizerProMonthly: 9.99,
+  organizerProAnnual: 99.9,
   /** Pagamentos/mês isentos de taxa no plano organizador */
   organizerNoFeeCap: 50,
   /** Taxa de conveniência por pagamento de pelada (Sprint 3) */
   playerFeePerPayment: 0.5,
 } as const;
+
+/** Equivalente mensal de um preço anual (para mostrar na UI) */
+export function monthlyEquivalentFromAnnual(annualTotal: number): string {
+  return (annualTotal / 12).toFixed(2).replace(".", ",");
+}
 
 /** PRO ativo neste momento? (valida também a data de expiração) */
 export function isProActive(entitlements?: Entitlements | null): boolean {

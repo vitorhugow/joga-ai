@@ -1,10 +1,11 @@
 import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-react";
-import { startCheckout } from "@/lib/billing";
+import { startCheckout, type BillingInterval } from "@/lib/billing";
 import { useState } from "react";
-import { Link } from "wouter";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { monthlyEquivalentFromAnnual, PRICING } from "@/lib/entitlements";
+import type { EntitlementPlan } from "@/lib/entitlements";
 
 const benefits = [
   { icon: Star,     label: "Cartas Premium",       desc: "Skins exclusivas ouro, prata, diamante e élite" },
@@ -39,9 +40,98 @@ const planFeatures = {
   ],
 };
 
+function formatEuro(value: number): string {
+  return value.toFixed(2).replace(".", ",") + "€";
+}
+
+type PlanPricingProps = {
+  monthlyPrice: number;
+  annualPrice: number;
+  checkoutBusy: string | null;
+  busyKey: string;
+  onCheckout: (interval: BillingInterval) => void;
+  disabled?: boolean;
+  disabledLabel?: string;
+  variant?: "gold" | "primary";
+};
+
+function PlanPricing({
+  monthlyPrice,
+  annualPrice,
+  checkoutBusy,
+  busyKey,
+  onCheckout,
+  disabled,
+  disabledLabel,
+  variant = "primary",
+}: PlanPricingProps) {
+  const monthlyEq = monthlyEquivalentFromAnnual(annualPrice);
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div
+        className="rounded-2xl p-4"
+        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+      >
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Mensal</p>
+        <div className="flex items-baseline gap-1 mt-2 mb-4">
+          <span className="font-display font-black text-3xl text-white leading-none">{formatEuro(monthlyPrice)}</span>
+          <span className="text-white/40 text-sm">/mês</span>
+        </div>
+        <JogaButton
+          variant={variant}
+          size="md"
+          className="w-full"
+          disabled={disabled || checkoutBusy !== null}
+          onClick={() => onCheckout("month")}
+        >
+          {checkoutBusy === `${busyKey}-month`
+            ? "A abrir o checkout…"
+            : disabled
+              ? (disabledLabel ?? "Indisponível")
+              : `Escolher mensal — ${formatEuro(monthlyPrice)}/mês`}
+        </JogaButton>
+      </div>
+
+      <div
+        className="rounded-2xl p-4"
+        style={{ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.22)" }}
+      >
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-300/70">Anual</p>
+        <div className="flex items-baseline gap-1 mt-2">
+          <span className="font-display font-black text-3xl text-white leading-none">{formatEuro(annualPrice)}</span>
+          <span className="text-white/40 text-sm">/ano</span>
+        </div>
+        <p className="text-emerald-400 text-xs font-bold mt-1">
+          equivalente a {monthlyEq}€/mês
+        </p>
+        <p className="text-white/35 text-[11px] mt-0.5">Pagamento anual</p>
+        <JogaButton
+          variant={variant === "gold" ? "gold" : "primary"}
+          size="md"
+          className="w-full mt-3"
+          disabled={disabled || checkoutBusy !== null}
+          onClick={() => onCheckout("year")}
+        >
+          {checkoutBusy === `${busyKey}-year`
+            ? "A abrir o checkout…"
+            : disabled
+              ? (disabledLabel ?? "Indisponível")
+              : `Escolher anual — ${formatEuro(annualPrice)}/ano`}
+        </JogaButton>
+      </div>
+    </div>
+  );
+}
+
 export default function Premium() {
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
   useDocumentTitle("Premium");
+
+  function runCheckout(plan: EntitlementPlan, interval: BillingInterval, key: string) {
+    setCheckoutBusy(`${key}-${interval === "month" ? "month" : "year"}`);
+    void startCheckout(plan, interval).finally(() => setCheckoutBusy(null));
+  }
   return (
     <JogaPage theme="dark" padded={false}>
 
@@ -159,13 +249,6 @@ export default function Premium() {
                   Brevemente
                 </div>
               </div>
-              <div className="flex items-baseline gap-1.5 mb-5">
-                <span className="font-display font-black text-5xl text-white leading-none">9,99€</span>
-                <div className="flex flex-col">
-                  <span className="text-white/40 text-sm">/mês</span>
-                  <span className="text-emerald-400 text-xs font-bold">os teus jogadores poupam as taxas</span>
-                </div>
-              </div>
               <div className="space-y-2.5 mb-5">
                 {planFeatures.organizador.map((f, i) => (
                   <div key={i} className="flex items-start gap-2.5">
@@ -176,26 +259,29 @@ export default function Premium() {
                   </div>
                 ))}
               </div>
-              <JogaButton variant="gold" size="lg" data-testid="button-premium-subscribe" disabled>
-                Chega com os pagamentos de pelada
-              </JogaButton>
+              <PlanPricing
+                monthlyPrice={PRICING.organizerProMonthly}
+                annualPrice={PRICING.organizerProAnnual}
+                checkoutBusy={checkoutBusy}
+                busyKey="organizer"
+                variant="gold"
+                disabled
+                disabledLabel="Chega com os pagamentos de pelada"
+                onCheckout={() => {}}
+              />
             </div>
           </div>
 
-          {/* Monthly */}
+          {/* PRO Jogador */}
           <div
             className="rounded-3xl overflow-hidden"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-            data-testid="premium-card"
+            data-testid="premium-card-jogador"
           >
             <div className="px-5 py-5">
               <div className="flex items-center gap-2 mb-4">
                 <Crown className="w-5 h-5 text-white/50" />
                 <h3 className="font-display font-bold text-white/80 text-lg">PRO Jogador</h3>
-              </div>
-              <div className="flex items-baseline gap-1 mb-5">
-                <span className="font-display font-black text-4xl text-white/80 leading-none">4,99€</span>
-                <span className="text-white/35 text-sm">/mês</span>
               </div>
               <div className="space-y-2.5 mb-5">
                 {planFeatures.jogador.map((f, i) => (
@@ -207,18 +293,13 @@ export default function Premium() {
                   </div>
                 ))}
               </div>
-              <JogaButton
-                variant="primary"
-                size="lg"
-                data-testid="button-premium-subscribe-monthly"
-                disabled={checkoutBusy}
-                onClick={() => {
-                  setCheckoutBusy(true);
-                  void startCheckout("player_pro").finally(() => setCheckoutBusy(false));
-                }}
-              >
-                {checkoutBusy ? "A abrir o checkout…" : "Ficar PRO — 4,99€/mês"}
-              </JogaButton>
+              <PlanPricing
+                monthlyPrice={PRICING.playerProMonthly}
+                annualPrice={PRICING.playerProAnnual}
+                checkoutBusy={checkoutBusy}
+                busyKey="player"
+                onCheckout={(interval) => runCheckout("player_pro", interval, "player")}
+              />
             </div>
           </div>
         </div>

@@ -216,22 +216,28 @@ export default function Evolucao() {
               </JogaCard>
             ))}
           </div>
-          {hiddenCount > 0 && (
-            <WLink href="/premium" className="block mt-3">
-              <div
-                className="rounded-2xl px-4 py-3 text-center"
-                style={{ background: "rgba(230,182,76,0.08)", border: "1px dashed rgba(230,182,76,0.35)" }}
-              >
-                <p className="text-amber-300 font-black text-sm">
-                  +{hiddenCount} {hiddenCount === 1 ? "pelada antiga" : "peladas antigas"} no histórico completo
-                </p>
-                <p className="text-white/40 text-xs mt-0.5">
-                  O plano gratuito mostra os últimos 3 meses. Vê tudo com o PRO →
-                </p>
-              </div>
-            </WLink>
-          )}
         </section>
+      )}
+
+      {!pro && (
+        <WLink href="/premium" className="block mt-6">
+          <div
+            className="rounded-2xl px-4 py-3 text-center"
+            style={{ background: "rgba(230,182,76,0.08)", border: "1px dashed rgba(230,182,76,0.35)" }}
+          >
+            {hiddenCount > 0 && (
+              <p className="text-amber-300 font-black text-sm">
+                +{hiddenCount} {hiddenCount === 1 ? "pelada antiga" : "peladas antigas"} no histórico completo
+              </p>
+            )}
+            <p className={`text-amber-300 font-black text-sm${hiddenCount > 0 ? " mt-1" : ""}`}>
+              Plano gratuito: últimos 90 dias de evolução
+            </p>
+            <p className="text-white/40 text-xs mt-0.5">
+              Desbloqueia o histórico completo com o PRO →
+            </p>
+          </div>
+        </WLink>
       )}
     </JogaPage>
   );

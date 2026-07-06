@@ -13,7 +13,12 @@ import app, { isFirebaseConfigured } from "./firebase";
 import { toast } from "@/hooks/use-toast";
 import type { EntitlementPlan } from "./entitlements";
 
-export async function startCheckout(plan: EntitlementPlan): Promise<void> {
+export type BillingInterval = "month" | "year";
+
+export async function startCheckout(
+  plan: EntitlementPlan,
+  interval: BillingInterval = "month",
+): Promise<void> {
   if (!isFirebaseConfigured()) {
     toast({
       title: "Pagamentos indisponíveis",
@@ -26,11 +31,11 @@ export async function startCheckout(plan: EntitlementPlan): Promise<void> {
   try {
     const functions = getFunctions(app, "europe-west1");
     const createSession = httpsCallable<
-      { plan: EntitlementPlan; origin: string },
+      { plan: EntitlementPlan; interval: BillingInterval; origin: string },
       { url: string }
     >(functions, "createCheckoutSession");
 
-    const result = await createSession({ plan, origin: window.location.origin });
+    const result = await createSession({ plan, interval, origin: window.location.origin });
     const url = result.data?.url;
     if (!url) throw new Error("sessão sem URL");
     window.location.assign(url);

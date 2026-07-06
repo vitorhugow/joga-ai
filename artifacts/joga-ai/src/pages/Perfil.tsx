@@ -549,6 +549,12 @@ export default function Perfil() {
               </div>
             </JogaCard>
           </div>
+
+          {!isViewingOther && activeProfile && (
+            <div className="px-3 sm:px-4 pb-2">
+              <SkinPicker profile={activeProfile} onSkinChange={setSkinOverride} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -719,13 +725,6 @@ export default function Perfil() {
           </div>
           )}
         </div>
-        )}
-
-        {!isViewingOther && activeProfile && (
-          <SkinPicker
-            profile={activeProfile}
-            onSkinChange={setSkinOverride}
-          />
         )}
 
         {/* ════════════════════════════════════

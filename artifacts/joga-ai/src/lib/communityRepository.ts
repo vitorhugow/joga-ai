@@ -5,6 +5,7 @@
 import {
   collection,
   doc,
+  documentId,
   getDoc,
   getDocs,
   setDoc,
@@ -23,6 +24,7 @@ import {
 import { db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES } from "./matchRepository";
 import { MAX_PROFILE_PHOTO_BYTES } from "./userRepository";
+import { loadAllPostMatches } from "./postMatchStorage";
 
 export class CommunityCoverTooLargeError extends Error {
   constructor() {
@@ -611,6 +613,87 @@ export async function loadAvailableMatches(limitCount = 10): Promise<MatchListin
     console.warn("[communityRepository] loadAvailableMatches:", err);
     return readLocalMatchListings().filter(isOpenPublicMatch).slice(0, limitCount);
   }
+}
+
+const MY_MATCHES_ACTIVE_STATUSES = [
+  "configurando",
+  "ao_vivo",
+  "aguardando_auditoria",
+  "auditada",
+] as const;
+
+function isMatchPlayer(data: Record<string, unknown>, userId: string): boolean {
+  if (data.organizerId === userId) return true;
+  const players = Array.isArray(data.players) ? (data.players as Record<string, unknown>[]) : [];
+  return players.some((p) => p.userId === userId || p.id === userId);
+}
+
+/**
+ * Partidas onde o utilizador é organizador ou já confirmou presença — usada
+ * na aba "Minhas" de Jogos para acompanhar Ao Vivo/votação depois da
+ * partida sair da descoberta pública (ver OPEN_MATCH_STATUSES).
+ * Junta partidas organizadas por mim (query directa) com as que este
+ * aparelho já visitou localmente (postMatchStorage), e confirma o estado
+ * mais recente de cada uma no Firestore.
+ */
+export async function loadMyMatches(userId: string): Promise<MatchListing[]> {
+  if (!userId) return [];
+
+  if (!isFirebaseConfigured()) {
+    return loadAllPostMatches()
+      .filter(
+        (m) =>
+          MY_MATCHES_ACTIVE_STATUSES.includes(m.status as (typeof MY_MATCHES_ACTIVE_STATUSES)[number]) &&
+          isMatchPlayer(m as unknown as Record<string, unknown>, userId),
+      )
+      .map((m) => mapMatchDoc(m.matchId, m as unknown as Record<string, unknown>))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  const candidateIds = new Set<string>();
+
+  try {
+    const organizerSnap = await getDocs(
+      query(
+        collection(db, "matches"),
+        where("organizerId", "==", userId),
+        where("status", "in", [...MY_MATCHES_ACTIVE_STATUSES]),
+        limit(30),
+      ),
+    );
+    organizerSnap.docs.forEach((d) => candidateIds.add(d.id));
+  } catch (err) {
+    console.warn("[communityRepository] loadMyMatches (organizer):", err);
+  }
+
+  for (const m of loadAllPostMatches()) candidateIds.add(m.matchId);
+
+  const ids = [...candidateIds];
+  const docsById = new Map<string, Record<string, unknown>>();
+
+  for (let i = 0; i < ids.length; i += 30) {
+    const chunk = ids.slice(i, i + 30);
+    if (!chunk.length) continue;
+    try {
+      const snap = await getDocs(
+        query(collection(db, "matches"), where(documentId(), "in", chunk)),
+      );
+      snap.docs.forEach((d) => docsById.set(d.id, d.data()));
+    } catch (err) {
+      console.warn("[communityRepository] loadMyMatches (batch):", err);
+    }
+  }
+
+  const results: MatchListing[] = [];
+  docsById.forEach((data, id) => {
+    const status = String(data.status ?? "configurando");
+    if (!MY_MATCHES_ACTIVE_STATUSES.includes(status as (typeof MY_MATCHES_ACTIVE_STATUSES)[number])) return;
+    if (!isMatchPlayer(data, userId)) return;
+    results.push(mapMatchDoc(id, data));
+  });
+
+  results.sort((a, b) => b.date.localeCompare(a.date));
+  return results;
 }
 
 /** Partidas abertas de uma comunidade */

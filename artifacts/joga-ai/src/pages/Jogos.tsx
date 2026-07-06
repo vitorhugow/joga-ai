@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Search, SlidersHorizontal, Plus, X } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
-import { loadAvailableMatches, type MatchListing } from "@/lib/communityRepository";
+import { loadAvailableMatches, loadMyMatches, type MatchListing } from "@/lib/communityRepository";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaChip, JogaPage } from "@/components/joga";
@@ -18,13 +18,16 @@ const typeLabels: Record<string, string> = { todos: "Todos", futsal: "Futsal", f
 export default function Jogos() {
   useDocumentTitle("Jogos");
   const { requireLinked } = useAuthGate();
-  const { isLinked } = useAuth();
+  const { isLinked, userId } = useAuth();
+  const [view, setView] = useState<"descobrir" | "minhas">("descobrir");
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("todas");
   const [typeFilter, setTypeFilter] = useState("todos");
   const [showFilters, setShowFilters] = useState(false);
   const [allMatches, setAllMatches] = useState<MatchListing[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
+  const [myMatches, setMyMatches] = useState<MatchListing[]>([]);
+  const [loadingMyMatches, setLoadingMyMatches] = useState(true);
 
   useEffect(() => {
     setLoadingMatches(true);
@@ -32,6 +35,18 @@ export default function Jogos() {
       .then(setAllMatches)
       .finally(() => setLoadingMatches(false));
   }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      setMyMatches([]);
+      setLoadingMyMatches(false);
+      return;
+    }
+    setLoadingMyMatches(true);
+    loadMyMatches(userId)
+      .then(setMyMatches)
+      .finally(() => setLoadingMyMatches(false));
+  }, [userId]);
 
   const filtered = allMatches.filter((m) => {
     const s = m.title.toLowerCase().includes(search.toLowerCase()) || m.city.toLowerCase().includes(search.toLowerCase());
@@ -117,58 +132,136 @@ export default function Jogos() {
       </div>
 
       <div className="px-4 pt-5 space-y-6">
-        {hasFilters && (
-          <button type="button" onClick={() => { setCityFilter("todas"); setTypeFilter("todos"); }} className="text-emerald-400 text-xs font-semibold">
-            Limpar filtros
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.05)" }}>
+          <button
+            type="button"
+            onClick={() => setView("descobrir")}
+            data-testid="tab-descobrir-jogos"
+            className="py-2.5 rounded-xl text-sm font-bold transition-colors"
+            style={
+              view === "descobrir"
+                ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
+                : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
+            }
+          >
+            Descobrir
           </button>
-        )}
+          <button
+            type="button"
+            onClick={() => setView("minhas")}
+            data-testid="tab-minhas-jogos"
+            className="py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+            style={
+              view === "minhas"
+                ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
+                : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
+            }
+          >
+            Minhas
+            {myMatches.length > 0 && (
+              <span
+                className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: view === "minhas" ? "rgba(74,222,128,0.25)" : "rgba(255,255,255,0.1)",
+                  color: view === "minhas" ? "#4ade80" : "rgba(255,255,255,0.5)",
+                }}
+              >
+                {myMatches.length}
+              </span>
+            )}
+          </button>
+        </div>
 
-        <section>
-          <h2 className="font-display font-black text-white text-lg mb-3">
-            Com vagas ({available.length})
-          </h2>
-          {loadingMatches ? (
-            <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <p className="text-white/50 text-sm">A carregar jogos…</p>
-            </div>
-          ) : available.length === 0 ? (
-            <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <p className="text-white/50 text-sm">Nenhum jogo encontrado.</p>
-              {isLinked ? (
-                <Link href="/criar-partida" className="inline-block mt-3">
-                  <JogaButton variant="primary" size="sm">
-                    Criar partida
-                  </JogaButton>
-                </Link>
-              ) : (
+        {view === "minhas" ? (
+          <section>
+            <h2 className="font-display font-black text-white text-lg mb-3">
+              As minhas partidas ({myMatches.length})
+            </h2>
+            {!isLinked ? (
+              <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="text-white/50 text-sm">Cria conta para acompanhares as tuas partidas.</p>
                 <JogaButton
                   variant="primary"
                   size="sm"
                   className="mt-3"
-                  onClick={() => requireLinked({ mode: "register", title: "Cria conta para organizar partidas" })}
+                  onClick={() => requireLinked({ mode: "register", title: "Cria conta para ver as tuas partidas" })}
                 >
-                  Criar partida
+                  Criar conta
                 </JogaButton>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {available.map((m) => (
-                <MatchCard key={m.id} {...m} returnTo="/jogos" />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {full.length > 0 && (
-          <section>
-            <h2 className="font-display font-black text-white/50 text-lg mb-3">Lotados ({full.length})</h2>
-            <div className="space-y-3 opacity-60">
-              {full.map((m) => (
-                <MatchCard key={m.id} {...m} returnTo="/jogos" />
-              ))}
-            </div>
+              </div>
+            ) : loadingMyMatches ? (
+              <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="text-white/50 text-sm">A carregar as tuas partidas…</p>
+              </div>
+            ) : myMatches.length === 0 ? (
+              <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="text-white/50 text-sm">Ainda não entraste em nenhuma partida ativa.</p>
+                <p className="text-white/35 text-xs mt-1">Assim que confirmares presença, ela aparece aqui — mesmo depois de ir para o Ao Vivo.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {myMatches.map((m) => (
+                  <MatchCard key={m.id} {...m} returnTo="/jogos" />
+                ))}
+              </div>
+            )}
           </section>
+        ) : (
+          <>
+            {hasFilters && (
+              <button type="button" onClick={() => { setCityFilter("todas"); setTypeFilter("todos"); }} className="text-emerald-400 text-xs font-semibold">
+                Limpar filtros
+              </button>
+            )}
+
+            <section>
+              <h2 className="font-display font-black text-white text-lg mb-3">
+                Com vagas ({available.length})
+              </h2>
+              {loadingMatches ? (
+                <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <p className="text-white/50 text-sm">A carregar jogos…</p>
+                </div>
+              ) : available.length === 0 ? (
+                <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <p className="text-white/50 text-sm">Nenhum jogo encontrado.</p>
+                  {isLinked ? (
+                    <Link href="/criar-partida" className="inline-block mt-3">
+                      <JogaButton variant="primary" size="sm">
+                        Criar partida
+                      </JogaButton>
+                    </Link>
+                  ) : (
+                    <JogaButton
+                      variant="primary"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => requireLinked({ mode: "register", title: "Cria conta para organizar partidas" })}
+                    >
+                      Criar partida
+                    </JogaButton>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {available.map((m) => (
+                    <MatchCard key={m.id} {...m} returnTo="/jogos" />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {full.length > 0 && (
+              <section>
+                <h2 className="font-display font-black text-white/50 text-lg mb-3">Lotados ({full.length})</h2>
+                <div className="space-y-3 opacity-60">
+                  {full.map((m) => (
+                    <MatchCard key={m.id} {...m} returnTo="/jogos" />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     </JogaPage>

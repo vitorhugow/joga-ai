@@ -7,10 +7,15 @@
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteField,
   serverTimestamp,
+  collection,
+  query,
+  where,
+  limit as fsLimit,
   type DocumentReference,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
@@ -571,6 +576,30 @@ export async function loadPublicProfiles(
   );
 
   return map;
+}
+
+/**
+ * Liga Global — perfis públicos de todos os jogadores com carta completa,
+ * para o ranking geral (não filtrado por comunidade). Busca um lote razoável
+ * de jogadores (mais recentes/ativos primeiro) e o ranking calcula o
+ * "overall"/estatísticas e ordena no cliente.
+ */
+export async function loadGlobalRanking(maxPlayers = 200): Promise<PublicPlayerProfile[]> {
+  if (!isFirebaseConfigured()) return [];
+
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, "users"),
+        where("profileComplete", "==", true),
+        fsLimit(maxPlayers),
+      ),
+    );
+    return snap.docs.map((d) => mapPublicPlayerProfile(d.id, d.data() as Record<string, unknown>));
+  } catch (err) {
+    console.warn("[userRepository] loadGlobalRanking:", err);
+    return [];
+  }
 }
 
 export type ProfileSetupInput = {

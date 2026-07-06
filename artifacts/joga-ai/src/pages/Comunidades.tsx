@@ -133,6 +133,7 @@ export default function Comunidades() {
   const [location] = useLocation();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todas");
+  const [view, setView] = useState<"descobrir" | "minhas">("descobrir");
   const [allCommunities, setAllCommunities] = useState<Community[]>([]);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [loadingCommunities, setLoadingCommunities] = useState(true);
@@ -173,17 +174,23 @@ export default function Comunidades() {
     return gameType === filter;
   }
 
-  const filtered = allCommunities.filter((c) => {
-    const matchSearch =
+  function matchesSearch(c: Community) {
+    return (
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.city.toLowerCase().includes(search.toLowerCase());
-    return matchSearch && matchesGameTypeFilter(c.gameType);
-  });
+      c.city.toLowerCase().includes(search.toLowerCase())
+    );
+  }
+
+  const filtered = allCommunities.filter(
+    (c) => matchesSearch(c) && matchesGameTypeFilter(c.gameType),
+  );
 
   const myIds = new Set(mergedMyCommunities.map((c) => c.id));
-  const showSections = search === "" && filter === "todas";
   const discoverList = filtered.filter(
     (c) => !myIds.has(c.id) && !c.isMember && !(c as Community & { joinPending?: boolean }).joinPending,
+  );
+  const myFilteredList = mergedMyCommunities.filter(
+    (c) => matchesSearch(c) && matchesGameTypeFilter(c.gameType),
   );
 
   return (
@@ -244,6 +251,46 @@ export default function Comunidades() {
         className="relative z-10 -mt-5 rounded-t-[24px] px-4 pt-4 space-y-5"
         style={{ background: "#0a0f1a" }}
       >
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.05)" }}>
+          <button
+            type="button"
+            onClick={() => setView("descobrir")}
+            data-testid="tab-descobrir-comunidades"
+            className="py-2.5 rounded-xl text-sm font-bold transition-colors"
+            style={
+              view === "descobrir"
+                ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
+                : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
+            }
+          >
+            Descobrir
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("minhas")}
+            data-testid="tab-minhas-comunidades"
+            className="py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+            style={
+              view === "minhas"
+                ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
+                : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
+            }
+          >
+            Minhas
+            {mergedMyCommunities.length > 0 && (
+              <span
+                className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: view === "minhas" ? "rgba(74,222,128,0.25)" : "rgba(255,255,255,0.1)",
+                  color: view === "minhas" ? "#4ade80" : "rgba(255,255,255,0.5)",
+                }}
+              >
+                {mergedMyCommunities.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="flex flex-wrap gap-2">
           {filters.map((f) => (
             <JogaChip
@@ -270,11 +317,11 @@ export default function Comunidades() {
           )}
         </div>
 
-        {showSections && loadingCommunities && (
+        {loadingCommunities && (
           <p className="text-white/40 text-sm text-center py-4">A carregar comunidades…</p>
         )}
 
-        {showSections && !loadingCommunities && mergedMyCommunities.length > 0 && (
+        {!loadingCommunities && view === "minhas" ? (
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display font-black text-white text-lg">As Minhas</h2>
@@ -282,52 +329,75 @@ export default function Comunidades() {
                 className="text-xs font-bold px-2.5 py-1 rounded-full"
                 style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)" }}
               >
-                {mergedMyCommunities.length}
+                {myFilteredList.length}
               </span>
             </div>
-            <div className="space-y-5">
-              {mergedMyCommunities.map((c) => (
-                <CommunityCard key={c.id} {...c} joined />
-              ))}
-            </div>
+            {myFilteredList.length === 0 ? (
+              <div className="text-center py-16 flex flex-col items-center gap-4">
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
+                  style={{ background: "rgba(255,255,255,0.05)" }}
+                >
+                  🙋
+                </div>
+                <div>
+                  <p className="font-display font-bold text-white text-lg">
+                    {mergedMyCommunities.length === 0 ? "Ainda não entraste em nenhuma" : "Sem resultados"}
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    {mergedMyCommunities.length === 0
+                      ? "Explora em «Descobrir» e entra numa comunidade da tua zona."
+                      : "Tenta outra pesquisa ou filtro."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {myFilteredList.map((c) => (
+                  <CommunityCard key={c.id} {...c} joined />
+                ))}
+              </div>
+            )}
           </div>
+        ) : (
+          !loadingCommunities && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-display font-black text-white text-lg">
+                  {search || filter !== "todas" ? "Resultados" : "Descobrir"}
+                </h2>
+                <span
+                  className="text-xs font-bold px-2.5 py-1 rounded-full"
+                  style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)" }}
+                >
+                  {discoverList.length}
+                </span>
+              </div>
+              {discoverList.length === 0 ? (
+                <div className="text-center py-16 flex flex-col items-center gap-4">
+                  <div
+                    className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
+                  >
+                    🏟️
+                  </div>
+                  <div>
+                    <p className="font-display font-bold text-white text-lg">Sem comunidades ainda</p>
+                    <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
+                      Sê o primeiro a criar uma comunidade para a tua malta.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {discoverList.map((c) => (
+                    <CommunityCard key={c.id} {...c} joined={false} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )
         )}
-
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">
-              {search || filter !== "todas" ? "Resultados" : "Descobrir"}
-            </h2>
-            <span
-              className="text-xs font-bold px-2.5 py-1 rounded-full"
-              style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)" }}
-            >
-              {discoverList.length}
-            </span>
-          </div>
-          {discoverList.length === 0 ? (
-            <div className="text-center py-16 flex flex-col items-center gap-4">
-              <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
-                style={{ background: "rgba(255,255,255,0.05)" }}
-              >
-                🏟️
-              </div>
-              <div>
-                <p className="font-display font-bold text-white text-lg">Sem comunidades ainda</p>
-                <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
-                  Sê o primeiro a criar uma comunidade para a tua malta.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-5">
-              {discoverList.map((c) => (
-                <CommunityCard key={c.id} {...c} joined={false} />
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </JogaPage>
   );

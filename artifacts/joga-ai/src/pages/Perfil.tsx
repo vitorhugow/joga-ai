@@ -18,6 +18,7 @@ import { ProfileSocialLinks } from "@/components/profile/ProfileSocialLinks";
 import { toast } from "@/hooks/use-toast";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { badgesFromIds } from "@/lib/badgeCatalog";
+import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 
 /* ─── Pitch SVG texture ─── */
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -141,6 +142,18 @@ function MiniEpoca({ card }: { card: PastCardItem }) {
 export default function Perfil() {
   const { isLinked, displayName, loading: authLoading, logout, userId: authUserId } = useAuth();
   const { openAuth } = useAuthGate();
+  const { confirm, ConfirmDialog } = useJogaConfirm();
+
+  async function handleLogout() {
+    const ok = await confirm({
+      title: "Sair da conta?",
+      description: "Vais precisar de entrar novamente para aceder ao teu perfil, comunidades e peladas.",
+      confirmLabel: "Sair",
+      cancelLabel: "Cancelar",
+      destructive: true,
+    });
+    if (ok) await logout();
+  }
   const userId = useUserId();
   const [, perfilParams] = useRoute("/perfil/:viewId");
   const [, jogadorParams] = useRoute("/jogador/:id");
@@ -265,6 +278,7 @@ export default function Perfil() {
 
   return (
     <JogaPage theme="dark" padded={false} className="pb-28">
+      {ConfirmDialog}
       {!isViewingOther && (
       <ProfileSetupDialog
         open={showSetup}
@@ -372,7 +386,7 @@ export default function Perfil() {
             variant="ghost"
             size="sm"
             className="shrink-0 gap-1.5 text-white/50"
-            onClick={() => logout()}
+            onClick={() => void handleLogout()}
           >
             <LogOut className="w-3.5 h-3.5" />
             Sair

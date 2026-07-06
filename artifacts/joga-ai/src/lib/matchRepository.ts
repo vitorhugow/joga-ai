@@ -304,7 +304,10 @@ export type MatchStatus =
   | "expirada"
   | "cancelada";
 
-export const OPEN_MATCH_STATUSES: MatchStatus[] = ["configurando", "ao_vivo"];
+// Só "configurando" aparece na descoberta pública de Jogos — assim que a
+// partida vai para "ao_vivo" já não pode ser encontrada por gente nova,
+// só quem já entrou (ver loadMyMatches, aba "Minhas" em Jogos).
+export const OPEN_MATCH_STATUSES: MatchStatus[] = ["configurando"];
 
 export const COMMUNITY_ACTIVE_MATCH_STATUSES: MatchStatus[] = [
   "configurando",

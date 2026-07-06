@@ -27,7 +27,10 @@ const POSITION_WEIGHTS: Record<string, Record<keyof PlayerAttributes, number>> =
 };
 
 const MIN_STAT = 28;
-const MAX_STAT = 78;
+/** Faixa usada só na geração da carta inicial (aleatória, OVR 50). */
+const GEN_MAX_STAT = 78;
+/** Teto real de um atributo ao longo da carreira do jogador. */
+export const ATTRIBUTE_CAP = 99;
 
 const STAT_COUNT = 6;
 
@@ -61,8 +64,67 @@ export function overallDelta(before: PlayerAttributes, after: PlayerAttributes):
   return calculateOverall(after) - calculateOverall(before);
 }
 
+/** Clamp genérico usado para perdas/reverts — teto real (99), não o da geração. */
 function clampStat(value: number): number {
-  return Math.max(MIN_STAT, Math.min(MAX_STAT, value));
+  return Math.max(MIN_STAT, Math.min(ATTRIBUTE_CAP, value));
+}
+
+function clampGenStat(value: number): number {
+  return Math.max(MIN_STAT, Math.min(GEN_MAX_STAT, value));
+}
+
+/**
+ * Soma `amount` (sempre positivo) ao atributo `key`. Assim que esse atributo
+ * atinge o limite de 99, o que sobrar dos pontos "transborda" para o
+ * atributo com o valor mais baixo da carta atual — os pontos nunca se
+ * perdem, só mudam de sítio.
+ */
+export function addAttributePoints(
+  attrs: PlayerAttributes,
+  key: keyof PlayerAttributes,
+  amount: number,
+): PlayerAttributes {
+  if (amount <= 0) return attrs;
+
+  const result: PlayerAttributes = { ...attrs };
+  let remaining = amount;
+  let targetKey = key;
+  let guard = 0;
+
+  while (remaining > 0 && guard < 100) {
+    guard += 1;
+    const current = result[targetKey];
+    const room = ATTRIBUTE_CAP - current;
+
+    if (room <= 0) {
+      // Já está no limite: procura o atributo mais baixo da carta para
+      // continuar a distribuir o resto dos pontos.
+      targetKey = STAT_KEYS.reduce((lowest, k) => (result[k] < result[lowest] ? k : lowest), STAT_KEYS[0]);
+      if (result[targetKey] >= ATTRIBUTE_CAP) break; // carta toda a 99, não há para onde ir
+      continue;
+    }
+
+    const applied = Math.min(room, remaining);
+    result[targetKey] = current + applied;
+    remaining -= applied;
+
+    if (remaining > 0) {
+      targetKey = STAT_KEYS.reduce((lowest, k) => (result[k] < result[lowest] ? k : lowest), STAT_KEYS[0]);
+    }
+  }
+
+  return result;
+}
+
+/** Aplica um delta (positivo ou negativo) a um atributo, com overflow (ver addAttributePoints) só quando soma. */
+function applyStatDelta(
+  attrs: PlayerAttributes,
+  key: keyof PlayerAttributes,
+  delta: number,
+): PlayerAttributes {
+  if (delta > 0) return addAttributePoints(attrs, key, delta);
+  if (delta < 0) return { ...attrs, [key]: clampStat(attrs[key] + delta) };
+  return attrs;
 }
 
 function shuffleStatsPreservingSum(values: number[], iterations = 10): number[] {
@@ -71,7 +133,7 @@ function shuffleStatsPreservingSum(values: number[], iterations = 10): number[] 
     const from = Math.floor(Math.random() * next.length);
     const to = Math.floor(Math.random() * next.length);
     if (from === to) continue;
-    if (next[from] > MIN_STAT && next[to] < MAX_STAT) {
+    if (next[from] > MIN_STAT && next[to] < GEN_MAX_STAT) {
       next[from] -= 1;
       next[to] += 1;
     }
@@ -86,14 +148,14 @@ function distributeAttributes(position: string, targetSum: number): PlayerAttrib
   const rawTotal = raw.reduce((acc, val) => acc + val, 0);
 
   let values = STAT_KEYS.map((_, index) =>
-    clampStat(Math.round((raw[index] / rawTotal) * targetSum)),
+    clampGenStat(Math.round((raw[index] / rawTotal) * targetSum)),
   );
 
   let diff = targetSum - values.reduce((acc, val) => acc + val, 0);
   let guard = 0;
   while (diff !== 0 && guard < 200) {
     const index = guard % values.length;
-    if (diff > 0 && values[index] < MAX_STAT) {
+    if (diff > 0 && values[index] < GEN_MAX_STAT) {
       values[index] += 1;
       diff -= 1;
     } else if (diff < 0 && values[index] > MIN_STAT) {
@@ -154,20 +216,14 @@ export function applyRatingGainsToCard(
   rating: number,
 ): PlayerAttributes {
   const deltas = computeRatingAttributeDeltas(rating);
-  return {
-    ...currentAttrs,
-    drible: clampStat(currentAttrs.drible + (deltas.drible ?? 0)),
-  };
+  return applyStatDelta(currentAttrs, "drible", deltas.drible ?? 0);
 }
 
 /** +1 Físico por jogar a pelada */
 export function applyParticipationGainsToCard(
   currentAttrs: PlayerAttributes,
 ): PlayerAttributes {
-  return {
-    ...currentAttrs,
-    fisico: clampStat(currentAttrs.fisico + 1),
-  };
+  return applyStatDelta(currentAttrs, "fisico", 1);
 }
 
 /** Reverte +1 Físico de participação */
@@ -199,17 +255,24 @@ export function applyVoteGainsToCard(
     finalizacaoGain += 1;
   }
 
-  return {
-    ritmo: clampStat(currentAttrs.ritmo + ritmoDelta),
-    finalizacao: clampStat(currentAttrs.finalizacao + finalizacaoGain),
-    passe: clampStat(currentAttrs.passe + events.assists),
-    defesa: clampStat(currentAttrs.defesa + defesaGain),
-    drible: clampStat(currentAttrs.drible),
-    fisico: clampStat(currentAttrs.fisico),
-  };
+  // Aplica cada delta em sequência: ganhos positivos usam addAttributePoints
+  // (transbordam para o atributo mais baixo ao atingir 99); perdas só
+  // fazem clamp normal.
+  let result = applyStatDelta(currentAttrs, "ritmo", ritmoDelta);
+  result = applyStatDelta(result, "finalizacao", finalizacaoGain);
+  result = applyStatDelta(result, "passe", events.assists);
+  result = applyStatDelta(result, "defesa", defesaGain);
+  return result;
 }
 
-/** Reverte ganhos de votação aplicados por applyVoteGainsToCard */
+/**
+ * Reverte ganhos de votação aplicados por applyVoteGainsToCard.
+ * Nota: se o ganho original tiver "transbordado" para outro atributo (por
+ * ter batido no limite de 99), o revert subtrai sempre do atributo de
+ * origem — em teoria isso pode deixar esse atributo um pouco mais baixo do
+ * que estava antes do ganho. É um caso extremo (exige o atributo já perto
+ * de 99) e o revert só acontece ao apagar/corrigir uma partida.
+ */
 export function revertVoteGainsFromCard(
   currentAttrs: PlayerAttributes,
   events: MatchEventGains,

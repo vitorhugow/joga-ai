@@ -53,7 +53,7 @@ Ordem manual:
 | `FIREBASE_TOKEN` | `cd artifacts/joga-ai && firebase login:ci` |
 
 Projeto Firebase: **joga-ai-f7622**  
-Site: **https://joga-ai.pages.dev**
+Site: **https://jogaai.geniai.pt** (domínio próprio; `https://joga-ai.pages.dev` continua ativo em paralelo)
 
 ## Git
 

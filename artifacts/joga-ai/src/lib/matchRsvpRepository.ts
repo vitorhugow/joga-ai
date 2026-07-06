@@ -17,6 +17,14 @@ import { loadMatchDetails } from "./matchRepository";
 import { addNotification } from "./notificationsRepository";
 import { OPEN_MATCH_STATUSES, type MatchStatus } from "./matchRepository";
 
+/** uids únicos dos jogadores com conta — usado pelas rules para validar
+ *  que só participantes reais recebem ganhos/reverts do organizador. */
+export function participantUserIdsFrom(players: LivePlayer[]): string[] {
+  return Array.from(
+    new Set(players.map((p) => p.userId).filter((id): id is string => Boolean(id))),
+  );
+}
+
 export type WaitlistEntry = {
   userId: string;
   name: string;
@@ -73,6 +81,7 @@ async function persistRsvpState(
     try {
       await updateDoc(doc(db, "matches", matchId), {
         players: roster.players,
+        participantUserIds: participantUserIdsFrom(roster.players),
         playerTeams: roster.playerTeams,
         assignments: roster.assignments ?? {},
         waitlist,

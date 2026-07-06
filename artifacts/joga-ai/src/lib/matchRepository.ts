@@ -584,6 +584,13 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     teamCount: data.teamCount,
     teamNames: data.teamNames,
     players: data.players,
+    participantUserIds: Array.from(
+      new Set(
+        (data.players ?? [])
+          .map((p) => p.userId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ),
     playerTeams: data.playerTeams,
     assignments: data.assignments ?? {},
     currentPlayerId: data.currentPlayerId ?? "",

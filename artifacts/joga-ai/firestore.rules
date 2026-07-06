@@ -50,7 +50,7 @@ service cloud.firestore {
         && request.resource.data.organizerId == resource.data.organizerId
         && request.resource.data.status == resource.data.status
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['players', 'waitlist', 'playerTeams', 'assignments', 'savedAt']);
+          .hasOnly(['players', 'participantUserIds', 'waitlist', 'playerTeams', 'assignments', 'savedAt']);
     }
 
     function isCommunityMatchRsvpUpdate(matchId) {
@@ -61,7 +61,7 @@ service cloud.firestore {
         && request.resource.data.organizerId == resource.data.organizerId
         && request.resource.data.status == resource.data.status
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['players', 'waitlist', 'playerTeams', 'assignments', 'savedAt']);
+          .hasOnly(['players', 'participantUserIds', 'waitlist', 'playerTeams', 'assignments', 'savedAt']);
     }
 
     // Qualquer participante presente (não só o organizador) pode fechar a
@@ -75,7 +75,7 @@ service cloud.firestore {
         && request.resource.data.organizerId == resource.data.organizerId
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
-            'status', 'miniGames', 'players', 'playerTeams',
+            'status', 'miniGames', 'players', 'participantUserIds', 'playerTeams',
             'currentPlayerId', 'assignments', 'savedAt',
             'votedUserIds', 'waitlist', 'title', 'communityId', 'organizerId'
           ]);
@@ -144,6 +144,11 @@ service cloud.firestore {
         isSignedIn()
         && request.resource.data.keys().hasAll(['_applyForMatchId'])
         && isMatchOrganizer(request.resource.data._applyForMatchId)
+        // O alvo tem de ter participado DESSA partida — sem isto, qualquer
+        // pessoa criava uma pelada própria e reescrevia atributos/badges de
+        // qualquer utilizador da app.
+        && userId in matchDoc(request.resource.data._applyForMatchId)
+          .get('participantUserIds', [])
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['attributes', 'seasonStats', '_applyForMatchId', 'updatedAt',
                     'lastAttributeDeltas', 'lastEvolutionMatchId', 'lastMatchRating', 'badges'])
@@ -180,7 +185,7 @@ service cloud.firestore {
         || (
           resource.data.currentPlayerId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['currentPlayerId', 'players', 'savedAt'])
+            .hasOnly(['currentPlayerId', 'players', 'participantUserIds', 'savedAt'])
         )
         || isMatchRsvpUpdate()
         || isCommunityMatchRsvpUpdate(matchId)

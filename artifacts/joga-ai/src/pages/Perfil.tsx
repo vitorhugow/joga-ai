@@ -4,6 +4,8 @@ import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link, useRoute } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
 import { ReferralCard } from "@/components/ReferralCard";
+import { SkinPicker } from "@/components/SkinPicker";
+import { isProActive } from "@/lib/entitlements";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
@@ -201,6 +203,7 @@ export default function Perfil() {
     loadUserMatchHistory(userId).then(setMatchHistory);
   }, [userId, isViewingOther]);
 
+  const [skinOverride, setSkinOverride] = useState<string | null>(null);
   const player = profileToPlayerCard(activeProfile);
 
   const overall = calculateOverall(player.attributes);
@@ -235,8 +238,10 @@ export default function Perfil() {
     }
 
     try {
+      // HD (4x) é PRO; plano gratuito exporta em qualidade normal (1.5x)
+      const proExport = isProActive(activeProfile?.entitlements);
       const blob = await exportPlayerCardPng(exportNode, {
-        pixelRatio: 2,
+        pixelRatio: proExport ? 4 : 1.5,
       });
       const result = await shareOrDownloadPng(
         blob,
@@ -484,6 +489,7 @@ export default function Perfil() {
                 shirtNumber={player.shirtNumber}
                 title={player.title}
                 photoUrl={player.photoUrl}
+              skin={skinOverride ?? player.skin}
                 size="profile"
                 attributeDeltas={attrDeltas}
               />
@@ -503,6 +509,7 @@ export default function Perfil() {
                   shirtNumber={player.shirtNumber}
                   title={player.title}
                   photoUrl={player.photoUrl}
+              skin={skinOverride ?? player.skin}
                   size="profile"
                   attributeDeltas={attrDeltas}
                 />
@@ -714,6 +721,13 @@ export default function Perfil() {
         </div>
         )}
 
+        {!isViewingOther && activeProfile && (
+          <SkinPicker
+            profile={activeProfile}
+            onSkinChange={setSkinOverride}
+          />
+        )}
+
         {/* ════════════════════════════════════
             Referral — Convida a malta
         ════════════════════════════════════ */}
@@ -766,6 +780,7 @@ export default function Perfil() {
               shirtNumber={player.shirtNumber}
               title={player.title}
               photoUrl={player.photoUrl}
+              skin={skinOverride ?? player.skin}
               size="profile"
               attributeDeltas={attrDeltas}
             />

@@ -1,4 +1,6 @@
 import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-react";
+import { startCheckout } from "@/lib/billing";
+import { useState } from "react";
 import { Link } from "wouter";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
@@ -21,28 +23,24 @@ const premiumSkins = [
 ];
 
 const planFeatures = {
-  annual: [
-    "Cartas premium exclusivas (Ouro, Platina, Diamante, Élite)",
-    "Exportar carta para Instagram e Stories",
-    "Estatísticas avançadas completas",
-    "Perfil em destaque nos rankings",
-    "Prioridade em jogos públicos",
-    "Título personalizado na carta",
-    "Histórico completo de épocas",
-    "Top momentos da temporada",
-    "Badges premium exclusivos",
-    "Carta especial no fim da época",
+  organizador: [
+    "Peladas sem taxa para os teus jogadores (até 50 pagamentos/mês)",
+    "Peladas recorrentes automáticas (semanais ou do mês inteiro)",
+    "Lembretes de pagamento automáticos aos pendentes",
+    "Histórico ilimitado da comunidade",
+    "Inclui tudo do PRO Jogador",
   ],
-  monthly: [
-    "Cartas premium exclusivas",
-    "Exportar carta para Instagram",
-    "Estatísticas avançadas",
-    "Perfil em destaque",
-    "Prioridade em jogos públicos",
+  jogador: [
+    "Skins premium da carta: Fogo, Raio e Diamante",
+    "Histórico de evolução completo (grátis: últimos 3 meses)",
+    "Instagram visível no teu perfil",
+    "Download da carta em alta resolução (4x)",
+    "Estatísticas avançadas — mais por vir",
   ],
 };
 
 export default function Premium() {
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   useDocumentTitle("Premium");
   return (
     <JogaPage theme="dark" padded={false}>
@@ -146,30 +144,30 @@ export default function Premium() {
           >
             {/* Gold top bar */}
             <div style={{ background: "linear-gradient(90deg, #b45309, #d97706, #fbbf24, #f59e0b)", padding: "6px 16px", textAlign: "center" }}>
-              <span className="font-display font-black text-amber-900 text-[11px] uppercase tracking-[0.2em]">✦ Melhor Valor ✦</span>
+              <span className="font-display font-black text-amber-900 text-[11px] uppercase tracking-[0.2em]">✦ Para quem organiza ✦</span>
             </div>
             <div className="px-5 py-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Crown className="w-5 h-5 text-amber-400" />
-                  <h3 className="font-display font-bold text-white text-lg">Premium Anual</h3>
+                  <h3 className="font-display font-bold text-white text-lg">PRO Organizador</h3>
                 </div>
                 <div
                   className="px-2.5 py-1 rounded-full text-[11px] font-bold"
                   style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }}
                 >
-                  -30%
+                  Brevemente
                 </div>
               </div>
               <div className="flex items-baseline gap-1.5 mb-5">
-                <span className="font-display font-black text-5xl text-white leading-none">39,99€</span>
+                <span className="font-display font-black text-5xl text-white leading-none">9,99€</span>
                 <div className="flex flex-col">
-                  <span className="text-white/40 text-sm">/ano</span>
-                  <span className="text-emerald-400 text-xs font-bold">≈ 3,33€/mês</span>
+                  <span className="text-white/40 text-sm">/mês</span>
+                  <span className="text-emerald-400 text-xs font-bold">os teus jogadores poupam as taxas</span>
                 </div>
               </div>
               <div className="space-y-2.5 mb-5">
-                {planFeatures.annual.map((f, i) => (
+                {planFeatures.organizador.map((f, i) => (
                   <div key={i} className="flex items-start gap-2.5">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(251,191,36,0.2)" }}>
                       <Check className="w-3 h-3 text-amber-400" strokeWidth={3} />
@@ -179,7 +177,7 @@ export default function Premium() {
                 ))}
               </div>
               <JogaButton variant="gold" size="lg" data-testid="button-premium-subscribe" disabled>
-                Em breve
+                Chega com os pagamentos de pelada
               </JogaButton>
             </div>
           </div>
@@ -193,14 +191,14 @@ export default function Premium() {
             <div className="px-5 py-5">
               <div className="flex items-center gap-2 mb-4">
                 <Crown className="w-5 h-5 text-white/50" />
-                <h3 className="font-display font-bold text-white/80 text-lg">Premium Mensal</h3>
+                <h3 className="font-display font-bold text-white/80 text-lg">PRO Jogador</h3>
               </div>
               <div className="flex items-baseline gap-1 mb-5">
                 <span className="font-display font-black text-4xl text-white/80 leading-none">4,99€</span>
                 <span className="text-white/35 text-sm">/mês</span>
               </div>
               <div className="space-y-2.5 mb-5">
-                {planFeatures.monthly.map((f, i) => (
+                {planFeatures.jogador.map((f, i) => (
                   <div key={i} className="flex items-start gap-2.5">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(255,255,255,0.08)" }}>
                       <Check className="w-3 h-3 text-white/50" strokeWidth={3} />
@@ -209,8 +207,17 @@ export default function Premium() {
                   </div>
                 ))}
               </div>
-              <JogaButton variant="ghost" size="md" data-testid="button-premium-subscribe-monthly" disabled>
-                Em breve
+              <JogaButton
+                variant="primary"
+                size="lg"
+                data-testid="button-premium-subscribe-monthly"
+                disabled={checkoutBusy}
+                onClick={() => {
+                  setCheckoutBusy(true);
+                  void startCheckout("player_pro").finally(() => setCheckoutBusy(false));
+                }}
+              >
+                {checkoutBusy ? "A abrir o checkout…" : "Ficar PRO — 4,99€/mês"}
               </JogaButton>
             </div>
           </div>

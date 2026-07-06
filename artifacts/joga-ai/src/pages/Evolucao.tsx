@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link as WLink } from "wouter";
+import { isProActive } from "@/lib/entitlements";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Shield, Trophy } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,6 +44,14 @@ export default function Evolucao() {
       pendingMatch.status !== "expirada" &&
       pendingMatch.status !== "concluida",
   );
+
+  const { profile: ownProfile } = useUserProfile();
+  const pro = isProActive(ownProfile?.entitlements);
+  const FREE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+  const visibleHistory = pro
+    ? history
+    : history.filter((r) => Date.now() - new Date(r.savedAt).getTime() <= FREE_WINDOW_MS);
+  const hiddenCount = history.length - visibleHistory.length;
 
   const latest = history.find((r) => r.playerId === authUserId) ?? history[0] ?? null;
 
@@ -185,11 +196,11 @@ export default function Evolucao() {
         </JogaCard>
       )}
 
-      {history.length > 1 && (
+      {visibleHistory.length > 1 && (
         <section className="mt-6">
           <h3 className="font-display font-black text-white text-lg mb-3">Histórico</h3>
           <div className="space-y-2">
-            {history.slice(1).map((record) => (
+            {visibleHistory.slice(1).map((record) => (
               <JogaCard key={record.id} variant="arena">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -205,6 +216,21 @@ export default function Evolucao() {
               </JogaCard>
             ))}
           </div>
+          {hiddenCount > 0 && (
+            <WLink href="/premium" className="block mt-3">
+              <div
+                className="rounded-2xl px-4 py-3 text-center"
+                style={{ background: "rgba(230,182,76,0.08)", border: "1px dashed rgba(230,182,76,0.35)" }}
+              >
+                <p className="text-amber-300 font-black text-sm">
+                  +{hiddenCount} {hiddenCount === 1 ? "pelada antiga" : "peladas antigas"} no histórico completo
+                </p>
+                <p className="text-white/40 text-xs mt-0.5">
+                  O plano gratuito mostra os últimos 3 meses. Vê tudo com o PRO →
+                </p>
+              </div>
+            </WLink>
+          )}
         </section>
       )}
     </JogaPage>

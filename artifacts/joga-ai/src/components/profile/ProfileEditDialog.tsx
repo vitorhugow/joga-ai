@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { Lock } from "lucide-react";
+import { Link } from "wouter";
+import { isProActive } from "@/lib/entitlements";
 import { KeyRound } from "lucide-react";
 import {
   Dialog,
@@ -35,6 +38,7 @@ export function ProfileEditDialog({
   const [whatsapp, setWhatsapp] = useState("");
   const [showInstagramPublic, setShowInstagramPublic] = useState(false);
   const [showWhatsappPublic, setShowWhatsappPublic] = useState(false);
+  const pro = isProActive(profile.entitlements);
   const [saving, setSaving] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
   const [error, setError] = useState("");
@@ -157,23 +161,40 @@ export function ProfileEditDialog({
               <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
                 Instagram
               </label>
-              <input
-                value={instagram}
-                onChange={(e) => setInstagram(e.target.value)}
-                placeholder="@utilizador ou link"
-                className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50"
-                data-testid="input-profile-instagram"
-              />
-              <label className="mt-2 flex items-center gap-2 text-white/55 text-xs cursor-pointer">
+              {pro ? (
                 <input
-                  type="checkbox"
-                  checked={showInstagramPublic}
-                  onChange={(e) => setShowInstagramPublic(e.target.checked)}
-                  className="accent-emerald-500"
-                  data-testid="checkbox-profile-instagram-public"
+                  value={instagram}
+                  onChange={(e) => setInstagram(e.target.value)}
+                  placeholder="@utilizador ou link"
+                  className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50"
+                  data-testid="input-profile-instagram"
                 />
-                Mostrar no perfil público
-              </label>
+              ) : (
+                <Link href="/premium" className="block">
+                  <div
+                    className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm flex items-center justify-between"
+                    style={{ background: "rgba(230,182,76,0.06)", border: "1px dashed rgba(230,182,76,0.35)" }}
+                    data-testid="input-profile-instagram-locked"
+                  >
+                    <span className="text-white/45">Mostra o teu Instagram na carta e no perfil</span>
+                    <span className="flex items-center gap-1 text-amber-300 font-black text-xs shrink-0">
+                      <Lock className="w-3 h-3" /> PRO
+                    </span>
+                  </div>
+                </Link>
+              )}
+              {pro && (
+                <label className="mt-2 flex items-center gap-2 text-white/55 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showInstagramPublic}
+                    onChange={(e) => setShowInstagramPublic(e.target.checked)}
+                    className="accent-emerald-500"
+                    data-testid="checkbox-profile-instagram-public"
+                  />
+                  Mostrar no perfil público
+                </label>
+              )}
             </div>
 
             <div>

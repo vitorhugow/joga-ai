@@ -438,3 +438,30 @@
 .joga-new-player-card-wrap--small .joga-new-card-inner {
   border-radius: 0 !important;
 }
+
+
+/* ═══════════════ SKINS PREMIUM (Sprint 2) ═══════════════
+   Cada skin troca APENAS o gradiente da moldura e o brilho.
+   O layout interno da carta fica 100% intocado. */
+
+.joga-new-player-card--skin-fogo {
+  background: linear-gradient(160deg, #ffd08a 0%, #f97316 20%, #b91c1c 45%, #7f1d1d 70%, #fb923c 100%);
+  box-shadow: 0 0 34px rgba(249, 115, 22, 0.35);
+}
+
+.joga-new-player-card--skin-raio {
+  background:
+    linear-gradient(115deg, transparent 42%, rgba(196, 181, 253, 0.55) 46%, transparent 50%),
+    linear-gradient(160deg, #c7d2fe 0%, #6366f1 22%, #312e81 48%, #1e1b4b 72%, #818cf8 100%);
+  box-shadow: 0 0 34px rgba(129, 140, 248, 0.38);
+}
+
+.joga-new-player-card--skin-diamante {
+  background: linear-gradient(150deg, #f0f9ff 0%, #7dd3fc 24%, #0ea5e9 48%, #0c4a6e 74%, #bae6fd 100%);
+  box-shadow: 0 0 34px rgba(125, 211, 252, 0.35);
+}
+
+.joga-new-player-card--skin-embaixador {
+  background: linear-gradient(155deg, #d1fae5 0%, #34d399 22%, #059669 48%, #064e3b 74%, #6ee7b7 100%);
+  box-shadow: 0 0 34px rgba(52, 211, 153, 0.38);
+}

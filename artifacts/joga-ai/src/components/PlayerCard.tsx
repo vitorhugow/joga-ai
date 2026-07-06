@@ -19,6 +19,8 @@ interface PlayerCardProps {
   clubLogoUrl?: string;
   className?: string;
   attributeDeltas?: Partial<PlayerAttributes>;
+  /** id da skin (cardSkins.ts) — muda só a moldura, nunca o layout */
+  skin?: string;
 }
 
 const STAT_ATTR_KEYS: Record<string, keyof PlayerAttributes> = {
@@ -61,6 +63,7 @@ export function PlayerCard({
   flagUrl,
   className,
   attributeDeltas,
+  skin,
 }: PlayerCardProps) {
   const overall = calculateOverall(attributes);
   const stats = getStats(attributes);
@@ -68,6 +71,7 @@ export function PlayerCard({
   const cardClass = [
     "joga-new-player-card",
     `joga-new-player-card--${size}`,
+    skin && skin !== "classica" ? `joga-new-player-card--skin-${skin}` : null,
     className,
   ]
     .filter(Boolean)

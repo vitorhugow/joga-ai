@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import { clearPendingReferral, consumePendingReferral } from "./referral";
+import { effectiveSkinId } from "./cardSkins";
 import type { PlayerAttributes } from "./cardUtils";
 import {
   applyParticipationGainsToCard,
@@ -84,6 +85,8 @@ export type UserProfile = {
   referredBy?: string;
   /** Skins de carta desbloqueadas (ex.: via referral) */
   unlockedSkins?: string[];
+  /** Skin escolhida para a carta (cardSkins.ts) */
+  cardSkin?: string;
   /** PRO — APENAS leitura no cliente; escrito só por Functions (Stripe) */
   entitlements?: import("./entitlements").Entitlements;
   updatedAt?: string;
@@ -272,6 +275,14 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
     whatsapp: data.whatsapp ? sanitizeWhatsappInput(String(data.whatsapp)) : undefined,
     showInstagramPublic: Boolean(data.showInstagramPublic),
     showWhatsappPublic: Boolean(data.showWhatsappPublic),
+    referredBy: data.referredBy ? String(data.referredBy) : undefined,
+    unlockedSkins: Array.isArray(data.unlockedSkins)
+      ? (data.unlockedSkins as string[])
+      : undefined,
+    cardSkin: data.cardSkin ? String(data.cardSkin) : undefined,
+    entitlements: data.entitlements
+      ? (data.entitlements as UserProfile["entitlements"])
+      : undefined,
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }
@@ -1113,6 +1124,7 @@ export function profileToPlayerCard(profile: UserProfile) {
     title: profile.title,
     attributes: profile.attributes,
     seasonStats: profile.seasonStats,
+    skin: effectiveSkinId(profile),
   };
 }
 

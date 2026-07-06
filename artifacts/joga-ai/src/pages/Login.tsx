@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { GeniCredit } from "@/components/SponsorSlot";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { ChevronRight, X, Check, ArrowRight, ZoomIn } from "lucide-react";
@@ -808,7 +807,6 @@ export default function Login() {
           </Link>
         </div>
         <p className="text-white/20 text-[11px]">© Joga AI · Feito para quem joga a sério</p>
-        <div className="mt-2"><GeniCredit /></div>
       </footer>
     </JogaPage>
   );

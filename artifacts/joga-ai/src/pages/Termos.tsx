@@ -1,5 +1,4 @@
 import { Link } from "wouter";
-import { GeniCredit } from "@/components/SponsorSlot";
 import { ChevronLeft } from "lucide-react";
 import { JogaPage } from "@/components/joga";
 
@@ -37,7 +36,6 @@ export default function Termos() {
         </p>
         <p className="text-white/40 text-xs">Última actualização: Julho 2026</p>
       </div>
-    <div className="text-center py-6"><GeniCredit /></div>
     </JogaPage>
   );
 }

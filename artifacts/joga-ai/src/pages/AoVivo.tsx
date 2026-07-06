@@ -555,7 +555,7 @@ export default function AoVivo() {
 
   if (!phaseReady) {
     return (
-      <JogaPage theme="arena" padded className="py-6" bottomSpace={false}>
+      <JogaPage theme="arena" padded className="py-6" bottomSpace={false} hideFooterCredit>
         <JogaCard variant="arena" padding="lg" className="text-center">
           <p className="text-white/45 text-sm">A carregar partida…</p>
         </JogaCard>
@@ -565,7 +565,7 @@ export default function AoVivo() {
 
   if (organizerId === undefined) {
     return (
-      <JogaPage theme="arena" padded className="py-6" bottomSpace={false}>
+      <JogaPage theme="arena" padded className="py-6" bottomSpace={false} hideFooterCredit>
         <JogaCard variant="arena" padding="lg" className="text-center">
           <p className="text-white/45 text-sm">A carregar partida…</p>
         </JogaCard>
@@ -600,7 +600,7 @@ export default function AoVivo() {
     );
 
     return (
-      <JogaPage theme="arena" padded={false} bottomSpace={false} className="pb-8">
+      <JogaPage theme="arena" padded={false} bottomSpace={false} className="pb-8" hideFooterCredit>
         <div className="flex items-center justify-between px-4 pt-5 pb-3">
           <button
             type="button"
@@ -745,7 +745,7 @@ export default function AoVivo() {
 
   if (!preMatch) {
     return (
-      <JogaPage theme="arena" padded className="py-6" bottomSpace={false}>
+      <JogaPage theme="arena" padded className="py-6" bottomSpace={false} hideFooterCredit>
         <JogaCard variant="arena" padding="lg" className="text-center">
           <h1 className="font-display font-black text-white text-2xl">Nenhuma partida preparada</h1>
           <p className="text-white/45 text-sm mt-2">Configura equipas e jogadores no Pré-Jogo antes de iniciar o Ao Vivo.</p>
@@ -759,7 +759,7 @@ export default function AoVivo() {
 
   if (showResumo) {
     return (
-      <JogaPage theme="arena" padded className="py-5" bottomSpace={false}>
+      <JogaPage theme="arena" padded className="py-5" bottomSpace={false} hideFooterCredit>
         <JogaButton variant="danger" size="md" className="mb-5 gap-2" onClick={() => setShowResumo(false)}>
           <ChevronLeft className="w-5 h-5" />
           Voltar ao jogo
@@ -803,7 +803,7 @@ export default function AoVivo() {
   }
 
   return (
-    <JogaPage theme="arena" padded={false} bottomSpace={false} className="pb-8">
+    <JogaPage theme="arena" padded={false} bottomSpace={false} className="pb-8" hideFooterCredit>
       <div className="flex items-center justify-between px-4 pt-5 pb-3">
         <button
           type="button"

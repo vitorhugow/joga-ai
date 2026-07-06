@@ -1056,6 +1056,16 @@ export default function PosJogo() {
           Partilhar evolução
         </JogaButton>
 
+        <button
+          type="button"
+          onClick={() => void handleShareResult()}
+          className="mt-2 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+          style={{ background: "#10b981" }}
+          data-testid="button-share-result"
+        >
+          📤 Partilhar resultado no grupo
+        </button>
+
         <JogaButton
           variant="gold"
           size="lg"
@@ -1071,6 +1081,8 @@ export default function PosJogo() {
             Ir para Home
           </JogaButton>
         </Link>
+
+        <SponsorSlot className="mt-4" />
       </JogaPage>
     );
   }

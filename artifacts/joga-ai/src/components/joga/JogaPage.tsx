@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { pageTransition } from "./motion";
+import { GeniCredit } from "@/components/SponsorSlot";
 
 type JogaPageTheme = "light" | "arena" | "dark";
 
@@ -10,6 +11,8 @@ interface JogaPageProps {
   children: React.ReactNode;
   padded?: boolean;
   bottomSpace?: boolean;
+  /** Esconde o rodapé "Feito pela Geni AI" (ex.: ecrãs cheios como Ao Vivo em modo foco) */
+  hideFooterCredit?: boolean;
 }
 
 export function JogaPage({
@@ -18,6 +21,7 @@ export function JogaPage({
   children,
   padded = true,
   bottomSpace = true,
+  hideFooterCredit = false,
 }: JogaPageProps) {
   return (
     <motion.div
@@ -33,6 +37,11 @@ export function JogaPage({
       {...pageTransition}
     >
       {children}
+      {!hideFooterCredit && (
+        <div className="text-center pt-6 pb-2">
+          <GeniCredit />
+        </div>
+      )}
     </motion.div>
   );
 }

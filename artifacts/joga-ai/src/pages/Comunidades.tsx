@@ -394,12 +394,13 @@ export default function Comunidades() {
                   {discoverList.map((c) => (
                     <CommunityCard key={c.id} {...c} joined={false} />
                   ))}
-                  <SponsorSlot />
                 </div>
               )}
             </div>
           )
         )}
+
+        {!loadingCommunities && <SponsorSlot className="mt-6" />}
       </div>
     </JogaPage>
   );

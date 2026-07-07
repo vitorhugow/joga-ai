@@ -54,7 +54,7 @@ export function clearPendingReferral(): void {
 }
 
 export function getReferralLink(uid: string): string {
-  return `https://jogaai.geniai.pt/?ref=${encodeURIComponent(uid)}`;
+  return `https://jogaai.pt/?ref=${encodeURIComponent(uid)}`;
 }
 
 export function getReferralWhatsAppLink(uid: string): string {

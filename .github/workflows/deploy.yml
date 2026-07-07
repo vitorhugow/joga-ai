@@ -16,7 +16,7 @@ jobs:
       contents: read
       deployments: write
     env:
-      PAGES_URL: https://jogaai.geniai.pt
+      PAGES_URL: https://jogaai.pt
       FIREBASE_PROJECT: joga-ai-f7622
     steps:
       - name: Checkout

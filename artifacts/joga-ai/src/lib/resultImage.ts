@@ -121,7 +121,7 @@ export async function generateResultImage(data: ResultImageData): Promise<Blob> 
   ctx.fillText("Cria a tua carta de jogador e evolui a cada pelada", W / 2, 1200);
   ctx.fillStyle = "#10b981";
   ctx.font = "900 40px system-ui, sans-serif";
-  ctx.fillText("jogaai.geniai.pt", W / 2, 1260);
+  ctx.fillText("jogaai.pt", W / 2, 1260);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(

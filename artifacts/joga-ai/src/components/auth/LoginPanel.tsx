@@ -31,7 +31,8 @@ function mapAuthError(err: unknown): string {
   const code = String((err as { code?: string })?.code ?? (err as Error)?.message ?? err);
   if (code.includes("auth/redirect-started")) return "A redirecionar para o Google…";
   if (code.includes("auth/unauthorized-domain")) {
-    return "Domínio não autorizado no Firebase. Adiciona o URL do site em Authentication → Authorized domains.";
+    const host = typeof window !== "undefined" ? window.location.hostname : "este domínio";
+    return `Domínio «${host}» não está autorizado no Firebase. Em Authentication → Settings → Authorized domains adiciona exactamente: ${host} (sem https://). Projecto: joga-ai-f7622.`;
   }
   if (code.includes("auth/invalid-email")) return "Email inválido.";
   if (code.includes("auth/wrong-password") || code.includes("auth/invalid-credential")) {

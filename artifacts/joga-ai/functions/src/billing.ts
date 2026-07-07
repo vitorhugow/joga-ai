@@ -21,6 +21,8 @@ const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 
 const REGION = "europe-west1";
 const ALLOWED_ORIGINS = new Set([
+  "https://jogaai.pt",
+  "https://www.jogaai.pt",
   "https://jogaai.geniai.pt",
   "https://joga-ai.pages.dev",
   "http://localhost:5173",
@@ -67,7 +69,7 @@ async function ensureStripeCustomer(stripe: Stripe, uid: string): Promise<string
 function safeOrigin(origin: unknown): string {
   return typeof origin === "string" && ALLOWED_ORIGINS.has(origin)
     ? origin
-    : "https://jogaai.geniai.pt";
+    : "https://jogaai.pt";
 }
 
 export const createCheckoutSession = onCall(

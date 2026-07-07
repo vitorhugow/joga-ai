@@ -375,7 +375,7 @@ export default function PosJogo() {
         blob,
         "resultado-joga-ai.png",
         "Resultado da pelada",
-        "Resultado final da pelada — feito com Joga AI (jogaai.geniai.pt)",
+        "Resultado final da pelada — feito com Joga AI (jogaai.pt)",
       );
     } catch (err) {
       console.warn("[PosJogo] partilhar resultado:", err);

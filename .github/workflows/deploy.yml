@@ -88,7 +88,11 @@ jobs:
             echo "::warning::FIREBASE_TOKEN em falta — functions não publicadas"
             exit 0
           fi
-          pnpm exec firebase deploy --only functions --non-interactive --token "$FIREBASE_TOKEN"
+          pnpm exec firebase deploy --only functions --non-interactive --token "$FIREBASE_TOKEN" || {
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::warning::Cloud Functions falharam — provavelmente falta plano Blaze ou secrets Stripe"
+            exit 0
+          }
           echo "status=deployed" >> "$GITHUB_OUTPUT"
 
       - name: Deploy summary

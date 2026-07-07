@@ -1,5 +1,7 @@
 import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-react";
-import { startCheckout, type BillingInterval } from "@/lib/billing";
+import { startCheckout, openBillingPortal, type BillingInterval } from "@/lib/billing";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { isProActive } from "@/lib/entitlements";
 import { useState } from "react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
@@ -99,13 +101,13 @@ function PlanPricing({
       >
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-300/70">Anual</p>
         <div className="flex items-baseline gap-1 mt-2">
-          <span className="font-display font-black text-3xl text-white leading-none">{formatEuro(annualPrice)}</span>
-          <span className="text-white/40 text-sm">/ano</span>
+          <span className="font-display font-black text-3xl text-white leading-none">{monthlyEq}€</span>
+          <span className="text-white/40 text-sm">/mês</span>
         </div>
         <p className="text-emerald-400 text-xs font-bold mt-1">
-          equivalente a {monthlyEq}€/mês
+          poupas {formatEuro(monthlyPrice * 12 - annualPrice)} por ano
         </p>
-        <p className="text-white/35 text-[11px] mt-0.5">Pagamento anual</p>
+        <p className="text-white/35 text-[11px] mt-0.5">{formatEuro(annualPrice)} cobrados anualmente</p>
         <JogaButton
           variant={variant === "gold" ? "gold" : "primary"}
           size="md"
@@ -125,6 +127,13 @@ function PlanPricing({
 }
 
 export default function Premium() {
+  const { profile } = useUserProfile();
+  const pro = isProActive(profile?.entitlements);
+  const proUntil = profile?.entitlements?.proUntil;
+  const daysLeft = proUntil
+    ? Math.max(0, Math.ceil((new Date(proUntil).getTime() - Date.now()) / 86400000))
+    : null;
+  const planLabel = profile?.entitlements?.plan === "organizer_pro" ? "PRO Organizador" : "PRO Jogador";
   const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
   useDocumentTitle("Premium");
 
@@ -223,6 +232,33 @@ export default function Premium() {
         {/* ═══════════════════════════════
             PLANS
         ═══════════════════════════════ */}
+        {pro && (
+          <div
+            className="rounded-3xl p-5 mb-4"
+            style={{ background: "rgba(74,222,128,0.08)", border: "1.5px solid rgba(74,222,128,0.35)" }}
+            data-testid="subscription-panel"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300/70">
+              A tua assinatura
+            </p>
+            <h3 className="font-display font-black text-white text-xl mt-1">{planLabel} ativo ✓</h3>
+            {daysLeft != null && proUntil && (
+              <p className="text-white/50 text-sm mt-1">
+                Renova a {new Date(proUntil).toLocaleDateString("pt-PT")} · {daysLeft} {daysLeft === 1 ? "dia" : "dias"} restantes
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => void openBillingPortal()}
+              className="mt-3 w-full rounded-2xl py-3 font-black text-sm text-white/85"
+              style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)" }}
+              data-testid="button-manage-subscription"
+            >
+              Gerir assinatura — cartão, faturas, cancelar
+            </button>
+          </div>
+        )}
+
         <div>
           <h2 className="font-display font-black text-white text-lg mb-4">Escolhe o Teu Plano</h2>
 

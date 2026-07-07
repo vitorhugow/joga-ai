@@ -48,3 +48,28 @@ export async function startCheckout(
     });
   }
 }
+
+/**
+ * Abre o Stripe Customer Portal — trocar cartão, ver faturas, cancelar.
+ * Depende da Cloud Function `createPortalSession` (Sprint 2B).
+ */
+export async function openBillingPortal(): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+  try {
+    const functions = getFunctions(app, "europe-west1");
+    const createPortal = httpsCallable<{ origin: string }, { url: string }>(
+      functions,
+      "createPortalSession",
+    );
+    const result = await createPortal({ origin: window.location.origin });
+    const url = result.data?.url;
+    if (!url) throw new Error("portal sem URL");
+    window.location.assign(url);
+  } catch (err) {
+    console.warn("[billing] openBillingPortal:", err);
+    toast({
+      title: "Gestão de assinatura em ativação",
+      description: "Esta área fica disponível com o checkout. Tenta em breve.",
+    });
+  }
+}

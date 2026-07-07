@@ -1,5 +1,6 @@
 import "./PlayerCard.css";
 import { PlayerAttributes, calculateOverall } from "@/lib/cardUtils";
+import { getSkin } from "@/lib/cardSkins";
 import { BRAND_ASSETS } from "@/components/brand";
 import { CardStatChevrons } from "@/components/CardStatChevrons";
 
@@ -67,6 +68,7 @@ export function PlayerCard({
 }: PlayerCardProps) {
   const overall = calculateOverall(attributes);
   const stats = getStats(attributes);
+  const skinSymbol = skin && skin !== "classica" ? getSkin(skin).symbol : undefined;
 
   const cardClass = [
     "joga-new-player-card",
@@ -80,6 +82,13 @@ export function PlayerCard({
   return (
     <div className={`joga-new-player-card-wrap joga-new-player-card-wrap--${size}`}>
       <div className={cardClass} aria-label={`Carta do jogador ${name}`} data-testid="player-card">
+        {skinSymbol && (
+          <>
+            <span className="joga-new-card-skin-decor joga-new-card-skin-decor--tl" aria-hidden="true">{skinSymbol}</span>
+            <span className="joga-new-card-skin-decor joga-new-card-skin-decor--tr" aria-hidden="true">{skinSymbol}</span>
+            <span className="joga-new-card-skin-decor joga-new-card-skin-decor--name" aria-hidden="true">{skinSymbol}</span>
+          </>
+        )}
         <div className="joga-new-card-inner">
           <div className="joga-new-card-top-mark">
             <img

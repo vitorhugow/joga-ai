@@ -18,6 +18,8 @@ export type CardSkin = {
   access: "free" | "pro" | "referral";
   /** Cor de destaque usada no seletor */
   accent: string;
+  /** Símbolo decorativo renderizado na carta (cantos + junto ao nome) */
+  symbol?: string;
 };
 
 export const CARD_SKINS: CardSkin[] = [
@@ -30,6 +32,7 @@ export const CARD_SKINS: CardSkin[] = [
   },
   {
     id: "fogo",
+    symbol: "🔥",
     name: "Fogo",
     description: "Para quem está em chamas",
     access: "pro",
@@ -37,6 +40,7 @@ export const CARD_SKINS: CardSkin[] = [
   },
   {
     id: "raio",
+    symbol: "⚡",
     name: "Raio",
     description: "Energia elétrica pura",
     access: "pro",
@@ -44,6 +48,7 @@ export const CARD_SKINS: CardSkin[] = [
   },
   {
     id: "diamante",
+    symbol: "💎",
     name: "Diamante",
     description: "Gelo e brilho de elite",
     access: "pro",
@@ -51,6 +56,7 @@ export const CARD_SKINS: CardSkin[] = [
   },
   {
     id: "embaixador",
+    symbol: "🏅",
     name: "Embaixador",
     description: "Exclusiva — convida 3 amigos",
     access: "referral",

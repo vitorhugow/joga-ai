@@ -48,6 +48,19 @@
 }
 
 .joga-new-player-card {
+  /* Tema da skin — defaults = Clássica dourada. As skins premium só
+     redefinem estas variáveis (+ moldura), preservando todo o layout. */
+  --skin-text: #f8d66b;
+  --skin-text-strong: #f9d960;
+  --skin-inner-border: rgba(255, 221, 112, 0.75);
+  --skin-glow-a: rgba(255, 221, 112, 0.18);
+  --skin-glow-b: rgba(255, 185, 45, 0.16);
+  --skin-glow-c: rgba(251, 203, 80, 0.18);
+  --skin-sheen: rgba(255, 206, 80, 0.15);
+  --skin-line: rgba(255, 220, 100, 0.8);
+  --skin-badge-a: #fff0a2;
+  --skin-badge-b: #c78a22;
+  --skin-badge-c: #94620f;
   position: relative;
   width: 100%;
   aspect-ratio: 650 / 900;
@@ -73,11 +86,11 @@
   height: 100%;
   padding: 13% 8.5% 11%;
   overflow: hidden;
-  color: #f8d66b;
+  color: var(--skin-text);
   background:
-    radial-gradient(circle at 70% 12%, rgba(255, 221, 112, 0.18), transparent 30%),
-    radial-gradient(circle at 15% 22%, rgba(255, 185, 45, 0.16), transparent 34%),
-    linear-gradient(135deg, rgba(251, 203, 80, 0.18) 0%, transparent 22%),
+    radial-gradient(circle at 70% 12%, var(--skin-glow-a), transparent 30%),
+    radial-gradient(circle at 15% 22%, var(--skin-glow-b), transparent 34%),
+    linear-gradient(135deg, var(--skin-glow-c) 0%, transparent 22%),
     linear-gradient(180deg, #17150d 0%, #070806 52%, #111006 100%);
   clip-path: inherit;
 }
@@ -88,7 +101,7 @@
   inset: 9px;
   z-index: 0;
   pointer-events: none;
-  border: 1.5px solid rgba(255, 221, 112, 0.75);
+  border: 1.5px solid var(--skin-inner-border);
   clip-path: inherit;
 }
 
@@ -101,7 +114,7 @@
   background:
     linear-gradient(120deg, transparent 0 44%, rgba(255,255,255,.12) 47%, transparent 51%),
     repeating-linear-gradient(135deg, rgba(255,255,255,.045) 0 1px, transparent 1px 9px),
-    radial-gradient(circle at 50% 38%, rgba(255, 206, 80, 0.15), transparent 38%);
+    radial-gradient(circle at 50% 38%, var(--skin-sheen), transparent 38%);
   opacity: .68;
 }
 
@@ -157,7 +170,7 @@
   font-weight: 900;
   line-height: .8;
   letter-spacing: -.04em;
-  color: #f9d960;
+  color: var(--skin-text-strong);
 }
 
 /* OVR removido de todas as cartas */
@@ -170,13 +183,13 @@
   font-size: clamp(24px, 10cqw, 46px);
   font-weight: 900;
   letter-spacing: -.03em;
-  color: #f9d960;
+  color: var(--skin-text-strong);
 }
 
 .joga-new-card-divider {
   width: 68%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 220, 100, .8), transparent);
+  background: linear-gradient(90deg, transparent, var(--skin-line), transparent);
 }
 
 .joga-new-card-flag {
@@ -239,7 +252,7 @@
   align-items: center;
   justify-content: center;
   padding: 1% 1.5%;
-  background: linear-gradient(180deg, #fff0a2, #c78a22 58%, #94620f);
+  background: linear-gradient(180deg, var(--skin-badge-a), var(--skin-badge-b) 58%, var(--skin-badge-c));
   clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%);
   box-shadow: 0 5px 12px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.55);
 }
@@ -257,7 +270,7 @@
   position: relative;
   z-index: 2;
   margin-top: 7.5%;
-  color: #f8d66b;
+  color: var(--skin-text);
   font-family: Oswald, Inter, sans-serif;
   font-size: clamp(26px, 10cqw, 48px);
   font-weight: 900;
@@ -276,7 +289,7 @@
   height: 1px;
   margin: 5.5% auto 5.5%;
   width: 88%;
-  background: linear-gradient(90deg, transparent, rgba(255, 214, 92, .75), transparent);
+  background: linear-gradient(90deg, transparent, var(--skin-line), transparent);
 }
 
 .joga-new-card-stats {
@@ -292,7 +305,7 @@
   min-width: 0;
   text-align: center;
   font-family: Oswald, Inter, sans-serif;
-  color: #f8d66b;
+  color: var(--skin-text);
 }
 
 .joga-new-card-stat strong,
@@ -440,16 +453,39 @@
 }
 
 
+
 /* ═══════════════ SKINS PREMIUM (Sprint 2) ═══════════════
-   Cada skin troca APENAS o gradiente da moldura e o brilho.
-   O layout interno da carta fica 100% intocado. */
+   Cada skin redefine o tema (moldura + interior via variáveis).
+   O layout fica 100% intocado. */
 
 .joga-new-player-card--skin-fogo {
+  --skin-text: #ffb27d;
+  --skin-text-strong: #ffc490;
+  --skin-inner-border: rgba(251, 146, 60, 0.75);
+  --skin-glow-a: rgba(249, 115, 22, 0.26);
+  --skin-glow-b: rgba(220, 38, 38, 0.22);
+  --skin-glow-c: rgba(251, 146, 60, 0.20);
+  --skin-sheen: rgba(249, 115, 22, 0.18);
+  --skin-line: rgba(251, 146, 60, 0.8);
+  --skin-badge-a: #ffd7ae;
+  --skin-badge-b: #ea580c;
+  --skin-badge-c: #7c2d12;
   background: linear-gradient(160deg, #ffd08a 0%, #f97316 20%, #b91c1c 45%, #7f1d1d 70%, #fb923c 100%);
   box-shadow: 0 0 34px rgba(249, 115, 22, 0.35);
 }
 
 .joga-new-player-card--skin-raio {
+  --skin-text: #c7d2fe;
+  --skin-text-strong: #ddd6fe;
+  --skin-inner-border: rgba(129, 140, 248, 0.75);
+  --skin-glow-a: rgba(129, 140, 248, 0.26);
+  --skin-glow-b: rgba(167, 139, 250, 0.20);
+  --skin-glow-c: rgba(99, 102, 241, 0.20);
+  --skin-sheen: rgba(129, 140, 248, 0.18);
+  --skin-line: rgba(165, 180, 252, 0.8);
+  --skin-badge-a: #e0e7ff;
+  --skin-badge-b: #6366f1;
+  --skin-badge-c: #312e81;
   background:
     linear-gradient(115deg, transparent 42%, rgba(196, 181, 253, 0.55) 46%, transparent 50%),
     linear-gradient(160deg, #c7d2fe 0%, #6366f1 22%, #312e81 48%, #1e1b4b 72%, #818cf8 100%);
@@ -457,11 +493,46 @@
 }
 
 .joga-new-player-card--skin-diamante {
+  --skin-text: #bae6fd;
+  --skin-text-strong: #e0f2fe;
+  --skin-inner-border: rgba(125, 211, 252, 0.75);
+  --skin-glow-a: rgba(125, 211, 252, 0.26);
+  --skin-glow-b: rgba(56, 189, 248, 0.20);
+  --skin-glow-c: rgba(14, 165, 233, 0.18);
+  --skin-sheen: rgba(186, 230, 253, 0.20);
+  --skin-line: rgba(165, 224, 252, 0.85);
+  --skin-badge-a: #f0f9ff;
+  --skin-badge-b: #0ea5e9;
+  --skin-badge-c: #0c4a6e;
   background: linear-gradient(150deg, #f0f9ff 0%, #7dd3fc 24%, #0ea5e9 48%, #0c4a6e 74%, #bae6fd 100%);
   box-shadow: 0 0 34px rgba(125, 211, 252, 0.35);
 }
 
 .joga-new-player-card--skin-embaixador {
+  --skin-text: #a7f3d0;
+  --skin-text-strong: #d1fae5;
+  --skin-inner-border: rgba(52, 211, 153, 0.75);
+  --skin-glow-a: rgba(52, 211, 153, 0.26);
+  --skin-glow-b: rgba(16, 185, 129, 0.20);
+  --skin-glow-c: rgba(110, 231, 183, 0.18);
+  --skin-sheen: rgba(52, 211, 153, 0.18);
+  --skin-line: rgba(110, 231, 183, 0.85);
+  --skin-badge-a: #d1fae5;
+  --skin-badge-b: #059669;
+  --skin-badge-c: #064e3b;
   background: linear-gradient(155deg, #d1fae5 0%, #34d399 22%, #059669 48%, #064e3b 74%, #6ee7b7 100%);
   box-shadow: 0 0 34px rgba(52, 211, 153, 0.38);
 }
+
+/* Símbolos decorativos das skins — camada absoluta, nunca mexe no layout */
+.joga-new-card-skin-decor {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  line-height: 1;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+}
+.joga-new-card-skin-decor--tl { top: 6.5%; left: 7%; font-size: 7cqw; opacity: 0.9; }
+.joga-new-card-skin-decor--tr { top: 6.5%; right: 7%; font-size: 7cqw; opacity: 0.9; }
+.joga-new-card-skin-decor--name { top: 55.5%; right: 9%; font-size: 5.5cqw; opacity: 0.95; }

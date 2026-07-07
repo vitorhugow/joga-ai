@@ -1,7 +1,8 @@
 /**
  * index.ts — ponto de entrada das Cloud Functions do Joga AI.
  *
- * Deploy: cd artifacts/joga-ai && firebase deploy --only functions
+ * Deploy: cd functions && npm install && npm run build
+ *         firebase deploy --only functions   (a partir de artifacts/joga-ai)
  * Requer: plano Blaze no Firebase.
  */
 

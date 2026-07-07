@@ -36,7 +36,7 @@ function formatProStatus(row: AdminUserRow): string {
 export default function Admin() {
   useDocumentTitle("Admin");
   const { isAdmin, loading: adminLoading } = useAppAdmin();
-  const { isLinked } = useAuth();
+  const { firebaseUser } = useAuth();
 
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<AdminUserRow[]>([]);
@@ -136,7 +136,9 @@ export default function Admin() {
     );
   }
 
-  if (!isLinked || !isAdmin) {
+  const loggedIn = Boolean(firebaseUser && !firebaseUser.isAnonymous);
+
+  if (!loggedIn || !isAdmin) {
     return (
       <JogaPage>
         <div className="px-4 pt-6 max-w-lg mx-auto text-center">
@@ -145,6 +147,11 @@ export default function Admin() {
           <p className="text-white/45 text-sm mt-2">
             Esta área é só para administradores da app.
           </p>
+          {loggedIn && firebaseUser && (
+            <p className="text-white/30 text-xs mt-4 font-mono break-all">
+              {firebaseUser.email ?? "sem email"} · {firebaseUser.uid}
+            </p>
+          )}
           <Link href="/perfil" className="inline-block mt-6">
             <JogaButton variant="ghost">Voltar ao perfil</JogaButton>
           </Link>

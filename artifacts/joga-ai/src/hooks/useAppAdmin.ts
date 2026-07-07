@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useUserId } from "@/contexts/AuthContext";
-import { getEnvAdminUids, isUidAppAdmin, loadFirestoreAdminUids } from "@/lib/adminConfig";
+import { useAuth, useUserId } from "@/contexts/AuthContext";
+import { loadFirestoreAdminUids, resolveIsAppAdmin } from "@/lib/adminConfig";
 
 export function useAppAdmin(): { isAdmin: boolean; loading: boolean } {
   const userId = useUserId();
+  const { firebaseUser } = useAuth();
   const [firestoreUids, setFirestoreUids] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,9 +21,8 @@ export function useAppAdmin(): { isAdmin: boolean; loading: boolean } {
     };
   }, []);
 
-  const adminUids = [...new Set([...getEnvAdminUids(), ...firestoreUids])];
-  return {
-    isAdmin: isUidAppAdmin(userId, adminUids),
-    loading,
-  };
+  const email = firebaseUser?.email ?? null;
+  const isAdmin = resolveIsAppAdmin(userId, email, firestoreUids);
+
+  return { isAdmin, loading };
 }

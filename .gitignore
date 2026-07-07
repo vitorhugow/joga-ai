@@ -5,6 +5,7 @@ dist
 tmp
 out-tsc
 *.tsbuildinfo
+**/functions/lib
 
 # arquivos/patches soltos (zips de entrega, backups) — nunca versionar
 *.zip

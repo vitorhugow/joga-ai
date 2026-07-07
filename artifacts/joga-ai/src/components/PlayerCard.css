@@ -536,3 +536,44 @@
 .joga-new-card-skin-decor--tl { top: 6.5%; left: 7%; font-size: 7cqw; opacity: 0.9; }
 .joga-new-card-skin-decor--tr { top: 6.5%; right: 7%; font-size: 7cqw; opacity: 0.9; }
 .joga-new-card-skin-decor--name { top: 55.5%; right: 9%; font-size: 5.5cqw; opacity: 0.95; }
+
+/* ── Padrões temáticos por skin (camada ::after do inner, herda clip) ── */
+.joga-new-player-card--skin-fogo .joga-new-card-inner::after {
+  background:
+    radial-gradient(ellipse 60% 32% at 50% 104%, rgba(249, 115, 22, 0.34), transparent 70%),
+    radial-gradient(ellipse 34% 20% at 22% 102%, rgba(220, 38, 38, 0.30), transparent 70%),
+    radial-gradient(ellipse 34% 20% at 78% 102%, rgba(251, 146, 60, 0.28), transparent 70%),
+    repeating-linear-gradient(100deg, rgba(251, 146, 60, 0.05) 0 2px, transparent 2px 14px);
+  opacity: 1;
+}
+
+.joga-new-player-card--skin-raio .joga-new-card-inner::after {
+  background:
+    linear-gradient(72deg, transparent 30%, rgba(196, 181, 253, 0.22) 32%, transparent 34%),
+    linear-gradient(118deg, transparent 60%, rgba(165, 180, 252, 0.20) 62%, transparent 64%),
+    linear-gradient(95deg, transparent 78%, rgba(221, 214, 254, 0.16) 80%, transparent 82%),
+    radial-gradient(circle at 50% 30%, rgba(129, 140, 248, 0.16), transparent 46%);
+  opacity: 1;
+}
+
+.joga-new-player-card--skin-diamante .joga-new-card-inner::after {
+  background:
+    conic-gradient(from 45deg at 24% 20%, transparent 0 84deg, rgba(224, 242, 254, 0.14) 84deg 96deg, transparent 96deg),
+    conic-gradient(from 210deg at 78% 64%, transparent 0 84deg, rgba(186, 230, 253, 0.12) 84deg 96deg, transparent 96deg),
+    repeating-linear-gradient(58deg, rgba(186, 230, 253, 0.06) 0 1.5px, transparent 1.5px 16px),
+    repeating-linear-gradient(-58deg, rgba(125, 211, 252, 0.05) 0 1.5px, transparent 1.5px 16px),
+    radial-gradient(circle at 50% 26%, rgba(224, 242, 254, 0.16), transparent 44%);
+  opacity: 1;
+}
+
+.joga-new-player-card--skin-embaixador .joga-new-card-inner::after {
+  background:
+    radial-gradient(ellipse 70% 34% at 50% -6%, rgba(52, 211, 153, 0.24), transparent 68%),
+    repeating-conic-gradient(from 0deg at 50% 118%, rgba(110, 231, 183, 0.06) 0 5deg, transparent 5deg 14deg),
+    radial-gradient(circle at 50% 40%, rgba(16, 185, 129, 0.12), transparent 48%);
+  opacity: 1;
+}
+
+/* Símbolos também nos cantos inferiores, mais presentes */
+.joga-new-card-skin-decor--bl { bottom: 13%; left: 8%; font-size: 5cqw; opacity: 0.75; }
+.joga-new-card-skin-decor--br { bottom: 13%; right: 8%; font-size: 5cqw; opacity: 0.75; }

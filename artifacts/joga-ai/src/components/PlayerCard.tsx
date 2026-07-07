@@ -87,6 +87,8 @@ export function PlayerCard({
             <span className="joga-new-card-skin-decor joga-new-card-skin-decor--tl" aria-hidden="true">{skinSymbol}</span>
             <span className="joga-new-card-skin-decor joga-new-card-skin-decor--tr" aria-hidden="true">{skinSymbol}</span>
             <span className="joga-new-card-skin-decor joga-new-card-skin-decor--name" aria-hidden="true">{skinSymbol}</span>
+            <span className="joga-new-card-skin-decor joga-new-card-skin-decor--bl" aria-hidden="true">{skinSymbol}</span>
+            <span className="joga-new-card-skin-decor joga-new-card-skin-decor--br" aria-hidden="true">{skinSymbol}</span>
           </>
         )}
         <div className="joga-new-card-inner">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link as WLink } from "wouter";
 import { isProActive } from "@/lib/entitlements";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Shield, Trophy } from "lucide-react";
@@ -105,7 +106,10 @@ export default function Evolucao() {
         </Link>
         <div>
           <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em]">Perfil</p>
-          <h1 className="font-display font-black text-white text-2xl">Evolução</h1>
+          <h1 className="font-display font-black text-white text-2xl flex items-center gap-2">
+            Evolução
+            <ProFeatureBadge tier="player" />
+          </h1>
         </div>
       </div>
 

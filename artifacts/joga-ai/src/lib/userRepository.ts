@@ -739,7 +739,7 @@ export async function updateUserProfile(
   const updated: UserProfile = {
     ...current,
     displayName: patch.displayName?.trim() ?? current.displayName,
-    position: current.position,
+    position: patch.position ?? current.position,
     shirtNumber: patch.shirtNumber ?? current.shirtNumber,
     photoUrl,
     title: patch.title?.trim() ?? current.title,

@@ -5,7 +5,9 @@ import { Link, useRoute } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
 import { ReferralCard } from "@/components/ReferralCard";
 import { SkinPicker } from "@/components/SkinPicker";
-import { isProActive } from "@/lib/entitlements";
+import { hasPlayerPro, isOrganizerPro, isProActive } from "@/lib/entitlements";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { ProfileSubscriptionCard } from "@/components/ProfileSubscriptionCard";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
@@ -207,6 +209,8 @@ export default function Perfil() {
 
   const [skinOverride, setSkinOverride] = useState<string | null>(null);
   const player = profileToPlayerCard(activeProfile);
+  const playerPro = hasPlayerPro(activeProfile?.entitlements);
+  const orgPro = isOrganizerPro(activeProfile?.entitlements);
 
   const overall = calculateOverall(player.attributes);
   const attrDeltas = isViewingOther ? undefined : getLastMatchAttributeDeltas(activeProfile, matchHistory[0]?.matchId);
@@ -466,7 +470,7 @@ export default function Perfil() {
               <JogaButton
                 variant="ghost"
                 size="sm"
-                className="rounded-full px-4"
+                className="rounded-full px-4 gap-1.5"
                 data-testid="button-share-card"
                 onClick={() => {
                   if (!isLinked) {
@@ -482,6 +486,7 @@ export default function Perfil() {
               >
                 <Share2 className="w-3.5 h-3.5" />
                 Partilhar
+                <ProFeatureBadge tier="player" />
               </JogaButton>
             </div>
             )}
@@ -532,12 +537,36 @@ export default function Perfil() {
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] mb-1 text-emerald-300/80">
                 {isViewingOther ? "Jogador" : "O Meu Perfil"}
               </p>
-              <h2 className="font-display font-black uppercase leading-none tracking-tight text-xl text-white">
-                {player.name.split(" ")[0]}
-              </h2>
-              <h2 className="font-display font-black uppercase leading-none tracking-tight text-xl text-white">
-                {player.name.split(" ").slice(1).join(" ")}
-              </h2>
+              <div className="flex items-start gap-2 flex-wrap">
+                <div className="min-w-0">
+                  <h2 className="font-display font-black uppercase leading-none tracking-tight text-xl text-white">
+                    {player.name.split(" ")[0]}
+                  </h2>
+                  <h2 className="font-display font-black uppercase leading-none tracking-tight text-xl text-white">
+                    {player.name.split(" ").slice(1).join(" ")}
+                  </h2>
+                </div>
+                {(playerPro || orgPro) && (
+                  <div className="flex flex-col gap-1.5 shrink-0 pt-0.5" data-testid="profile-pro-badges">
+                    {playerPro && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide whitespace-nowrap"
+                        style={{ background: "rgba(251,191,36,0.22)", color: "#fde047", border: "1px solid rgba(251,191,36,0.5)", boxShadow: "0 0 12px rgba(251,191,36,0.15)" }}
+                      >
+                        ✦ PRO Jogador
+                      </span>
+                    )}
+                    {orgPro && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide whitespace-nowrap"
+                        style={{ background: "rgba(250,204,21,0.28)", color: "#fef08a", border: "1px solid rgba(250,204,21,0.6)", boxShadow: "0 0 12px rgba(250,204,21,0.2)" }}
+                      >
+                        ✦ PRO Organizador
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/25">
@@ -571,6 +600,10 @@ export default function Perfil() {
       </div>
 
       <div className="px-4 space-y-4 pt-4">
+
+        {!isViewingOther && (
+          <ProfileSubscriptionCard profile={activeProfile} />
+        )}
 
         <JogaCard variant="arena" className="flex items-center gap-4">
           <div
@@ -759,6 +792,7 @@ export default function Perfil() {
           >
             <Shield className="w-5 h-5 text-white/70" />
             Ver Evolução
+            <ProFeatureBadge tier="player" />
             <ChevronRight className="w-5 h-5 text-white/50" />
           </JogaButton>
         </Link>

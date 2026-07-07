@@ -28,6 +28,9 @@ import {
 } from "@/lib/cardUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { hasPlayerPro } from "@/lib/entitlements";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 
 const POSITIONS = [
   { value: "AVA", label: "Avançado" },
@@ -70,14 +73,15 @@ export function ProfileSetupDialog({
   const [step, setStep] = useState<"info" | "attributes">("info");
   const [displayName, setDisplayName] = useState("");
   const [position, setPosition] = useState("AVA");
-  const [shirtNumber, setShirtNumber] = useState("10");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
   const [attributes, setAttributes] = useState<PlayerAttributes>(createInitialAllocation);
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showProEditDialog, setShowProEditDialog] = useState(false);
   const syncedOnOpenRef = useRef(false);
+  const pro = hasPlayerPro(profile?.entitlements);
 
   useEffect(() => {
     if (!open) {
@@ -89,7 +93,6 @@ export function ProfileSetupDialog({
     setStep("info");
     setDisplayName(profile?.displayName ?? "");
     setPosition(profile?.position ?? "AVA");
-    setShirtNumber(String(profile?.shirtNumber ?? 10));
     setPhotoUrl(profile?.photoUrl);
     setAttributes(createInitialAllocation());
     setError("");
@@ -119,10 +122,14 @@ export function ProfileSetupDialog({
       setError("Indica o teu nome (mínimo 2 caracteres).");
       return;
     }
-    const num = Number(shirtNumber);
-    if (!Number.isFinite(num) || num < 1 || num > 99) {
-      setError("Número da camisola entre 1 e 99.");
-      return;
+
+    if (isEditing && !pro) {
+      const nameChanged = name !== (profile?.displayName ?? "").trim();
+      const positionChanged = position !== (profile?.position ?? "AVA");
+      if (nameChanged || positionChanged) {
+        setShowProEditDialog(true);
+        return;
+      }
     }
 
     setError("");
@@ -163,7 +170,6 @@ export function ProfileSetupDialog({
 
   async function saveProfile() {
     const name = displayName.trim();
-    const num = Number(shirtNumber);
 
     if (!isEditing && !isValidInitialAllocation(attributes)) {
       setError(`Distribui todos os ${ALLOCATION_TOTAL_POINTS} pontos antes de continuar.`);
@@ -176,7 +182,7 @@ export function ProfileSetupDialog({
       const input = {
         displayName: name,
         position,
-        shirtNumber: num,
+        shirtNumber: profile?.shirtNumber ?? 10,
         photoUrl,
         attributes: isEditing ? undefined : attributes,
       };
@@ -184,7 +190,9 @@ export function ProfileSetupDialog({
       const saveTask = isEditing
         ? updateUserProfile(
             userId,
-            { displayName: name, shirtNumber: num, photoUrl },
+            pro
+              ? { displayName: name, position, photoUrl }
+              : { photoUrl },
             !isLinked,
           )
         : completeUserProfile(userId, input, !isLinked);
@@ -251,7 +259,9 @@ export function ProfileSetupDialog({
           </DialogTitle>
           <DialogDescription className="text-white/50">
             {isEditing
-              ? "Atualiza nome, número e foto. A posição e os atributos não mudam aqui."
+              ? pro
+                ? "Atualiza nome, posição e foto. Os atributos não mudam aqui."
+                : "Atualiza a foto. Nome e posição são recursos PRO."
               : step === "attributes"
                 ? `Reparte ${ALLOCATION_TOTAL_POINTS} pontos pelos 6 atributos, no máximo ${ALLOCATION_MAX_PER_ATTRIBUTE} em cada. É a tua carta — decide onde é que és melhor.`
                 : "Nome, posição e foto — leva 10 segundos. A posição só pode ser escolhida agora."}
@@ -402,14 +412,16 @@ export function ProfileSetupDialog({
           </div>
 
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+            <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40">
               Nome
+              {isEditing && <ProFeatureBadge tier="player" />}
             </label>
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Ex: O teu nome"
-              className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50"
+              readOnly={isEditing && !pro}
+              className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50 disabled:opacity-60"
               data-testid="input-setup-name"
               autoFocus
             />
@@ -417,22 +429,41 @@ export function ProfileSetupDialog({
 
           {isEditing ? (
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+              <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40">
                 Posição
+                <ProFeatureBadge tier="player" />
               </label>
-              <div
-                className="mt-1.5 rounded-xl px-4 py-3 text-sm font-bold"
-                style={{
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1.5px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.55)",
-                }}
-              >
-                {POSITIONS.find((p) => p.value === position)?.label ?? position}
-                <span className="block text-white/30 text-[11px] font-medium mt-1">
-                  Definida no cadastro — não pode ser alterada.
-                </span>
-              </div>
+              {pro ? (
+                <div className="grid grid-cols-2 gap-2 mt-1.5">
+                  {POSITIONS.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setPosition(p.value)}
+                      className="rounded-xl py-2.5 text-sm font-bold transition-colors"
+                      style={
+                        position === p.value
+                          ? { background: "rgba(74,222,128,0.15)", border: "1.5px solid rgba(74,222,128,0.4)", color: "#4ade80" }
+                          : { background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }
+                      }
+                      data-testid={`setup-position-${p.value}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  className="mt-1.5 rounded-xl px-4 py-3 text-sm font-bold"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1.5px solid rgba(255,255,255,0.08)",
+                    color: "rgba(255,255,255,0.55)",
+                  }}
+                >
+                  {POSITIONS.find((p) => p.value === position)?.label ?? position}
+                </div>
+              )}
             </div>
           ) : (
             <div>
@@ -463,24 +494,6 @@ export function ProfileSetupDialog({
             </div>
           )}
 
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
-              Nº camisola
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={99}
-              value={shirtNumber}
-              onChange={(e) => setShirtNumber(e.target.value)}
-              className="mt-1.5 w-full rounded-xl px-4 py-3 text-sm bg-white/6 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50"
-              data-testid="input-setup-shirt"
-            />
-            <p className="text-white/30 text-[11px] mt-1.5">
-              Guardado no perfil; a carta ainda não mostra o número visualmente.
-            </p>
-          </div>
-
           {error && <p className="text-red-400 text-sm">{error}</p>}
 
           <JogaButton
@@ -497,6 +510,14 @@ export function ProfileSetupDialog({
         )}
       </DialogContent>
     </Dialog>
+
+      <ProUpgradeDialog
+        open={showProEditDialog}
+        onOpenChange={setShowProEditDialog}
+        tier="player"
+        featureTitle="Editar nome e posição"
+        featureDescription="Alterar o nome e a posição na carta é exclusivo PRO Jogador."
+      />
     </>
   );
 }

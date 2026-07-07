@@ -134,7 +134,7 @@ export default function Comunidades() {
   const [location] = useLocation();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todas");
-  const [view, setView] = useState<"descobrir" | "minhas">("descobrir");
+  const [view, setView] = useState<"descobrir" | "minhas">("minhas");
   const [allCommunities, setAllCommunities] = useState<Community[]>([]);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [loadingCommunities, setLoadingCommunities] = useState(true);
@@ -255,19 +255,6 @@ export default function Comunidades() {
         <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.05)" }}>
           <button
             type="button"
-            onClick={() => setView("descobrir")}
-            data-testid="tab-descobrir-comunidades"
-            className="py-2.5 rounded-xl text-sm font-bold transition-colors"
-            style={
-              view === "descobrir"
-                ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
-                : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
-            }
-          >
-            Descobrir
-          </button>
-          <button
-            type="button"
             onClick={() => setView("minhas")}
             data-testid="tab-minhas-comunidades"
             className="py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
@@ -289,6 +276,19 @@ export default function Comunidades() {
                 {mergedMyCommunities.length}
               </span>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("descobrir")}
+            data-testid="tab-descobrir-comunidades"
+            className="py-2.5 rounded-xl text-sm font-bold transition-colors"
+            style={
+              view === "descobrir"
+                ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
+                : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
+            }
+          >
+            Descobrir
           </button>
         </div>
 

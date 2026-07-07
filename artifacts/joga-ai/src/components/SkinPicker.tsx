@@ -10,6 +10,7 @@ import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import { CARD_SKINS, canUseSkin, effectiveSkinId } from "@/lib/cardSkins";
 import type { UserProfile } from "@/lib/userRepository";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 
 type Props = {
   profile: UserProfile;
@@ -48,8 +49,9 @@ export function SkinPicker({ profile, onSkinChange }: Props) {
 
   return (
     <div className="mt-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 text-center">
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 text-center flex items-center justify-center gap-1.5">
         Skin da carta
+        <ProFeatureBadge tier="player" />
       </p>
       <div className="flex gap-2 mt-2 overflow-x-auto pb-1 justify-center" role="listbox" aria-label="Skins da carta">
         {CARD_SKINS.map((skin) => {
@@ -74,7 +76,8 @@ export function SkinPicker({ profile, onSkinChange }: Props) {
                 style={{ background: skin.accent, opacity: usable ? 1 : 0.35 }}
               />
               {skin.name}
-              {!usable && <Lock className="w-3 h-3" />}
+              {skin.access === "pro" && <ProFeatureBadge tier="player" className="scale-90" />}
+              {!usable && skin.access !== "pro" && <Lock className="w-3 h-3" />}
             </button>
           );
         })}

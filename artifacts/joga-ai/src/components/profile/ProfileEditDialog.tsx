@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Lock } from "lucide-react";
 import { Link } from "wouter";
-import { isProActive } from "@/lib/entitlements";
 import { KeyRound } from "lucide-react";
+import { isProActive } from "@/lib/entitlements";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import {
   Dialog,
   DialogContent,
@@ -158,8 +158,9 @@ export function ProfileEditDialog({
             </p>
 
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+              <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40">
                 Instagram
+                <ProFeatureBadge tier="player" />
               </label>
               {pro ? (
                 <input
@@ -177,9 +178,7 @@ export function ProfileEditDialog({
                     data-testid="input-profile-instagram-locked"
                   >
                     <span className="text-white/45">Mostra o teu Instagram na carta e no perfil</span>
-                    <span className="flex items-center gap-1 text-amber-300 font-black text-xs shrink-0">
-                      <Lock className="w-3 h-3" /> PRO
-                    </span>
+                    <ProFeatureBadge tier="player" />
                   </div>
                 </Link>
               )}

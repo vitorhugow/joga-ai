@@ -22,7 +22,7 @@ import {
   increment,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
-import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES } from "./matchRepository";
+import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
 import { MAX_PROFILE_PHOTO_BYTES } from "./userRepository";
 import { loadAllPostMatches } from "./postMatchStorage";
 
@@ -715,6 +715,12 @@ export async function loadMyMatches(userId: string): Promise<MatchListing[]> {
 
   for (const m of loadAllPostMatches()) candidateIds.add(m.matchId);
 
+  for (const listing of loadLocalMatchListings()) {
+    candidateIds.add(listing.id);
+    const details = loadMatchDetails(listing.id);
+    if (details?.organizerId === userId) candidateIds.add(listing.id);
+  }
+
   const ids = [...candidateIds];
   const docsById = new Map<string, Record<string, unknown>>();
 
@@ -738,6 +744,36 @@ export async function loadMyMatches(userId: string): Promise<MatchListing[]> {
     if (!isMatchPlayer(data, userId)) return;
     results.push(mapMatchDoc(id, data));
   });
+
+  for (const id of candidateIds) {
+    if (results.some((r) => r.id === id)) continue;
+    const local =
+      loadAllPostMatches().find((m) => m.matchId === id) ??
+      (() => {
+        const details = loadMatchDetails(id);
+        if (!details) return null;
+        return {
+          matchId: id,
+          status: details.status ?? "configurando",
+          organizerId: details.organizerId,
+          players: [],
+          title: details.title,
+          city: details.city,
+          location: details.location,
+          gameType: details.gameType,
+          level: details.level,
+          scheduledDate: details.scheduledDate,
+          scheduledTime: details.scheduledTime,
+          price: details.price,
+          communityId: details.communityId,
+        } as Record<string, unknown>;
+      })();
+    if (!local) continue;
+    const status = String((local as Record<string, unknown>).status ?? "configurando");
+    if (!MY_MATCHES_ACTIVE_STATUSES.includes(status as (typeof MY_MATCHES_ACTIVE_STATUSES)[number])) continue;
+    if (!isMatchPlayer(local as Record<string, unknown>, userId)) continue;
+    results.push(mapMatchDoc(id, local as Record<string, unknown>));
+  }
 
   results.sort((a, b) => b.date.localeCompare(a.date));
   return results;

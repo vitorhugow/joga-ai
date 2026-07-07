@@ -44,3 +44,8 @@ export function isProActive(entitlements?: Entitlements | null): boolean {
 export function isOrganizerPro(entitlements?: Entitlements | null): boolean {
   return isProActive(entitlements) && entitlements?.plan === "organizer_pro";
 }
+
+/** PRO Jogador (inclui quem tem PRO Organizador — tem tudo do jogador). */
+export function hasPlayerPro(entitlements?: Entitlements | null): boolean {
+  return isProActive(entitlements);
+}

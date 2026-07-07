@@ -6,7 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { isOrganizerPro } from "@/lib/entitlements";
-import { Link } from "wouter";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { createMatch } from "@/lib/matchRepository";
 import { calculateOverall } from "@/lib/cardUtils";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
@@ -28,12 +29,23 @@ const levels = [
   { value: "competitivo", label: "Competitivo", color: "#f87171", desc: "Nível elevado" },
 ];
 
-function Field({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
+function Field({
+  label,
+  icon,
+  proBadge,
+  children,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  proBadge?: "player" | "organizer";
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <label className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] mb-2" style={{ color: "rgba(255,255,255,0.35)" }}>
         {icon}
         {label}
+        {proBadge && <ProFeatureBadge tier={proBadge} />}
       </label>
       {children}
     </div>
@@ -93,6 +105,7 @@ export default function CriarPartida() {
   const { profile, needsSetup, refresh } = useUserProfile();
   const orgPro = isOrganizerPro(profile?.entitlements);
   const [repeatWeeks, setRepeatWeeks] = useState(1);
+  const [showProRepeatDialog, setShowProRepeatDialog] = useState(false);
 
   function addDaysIso(dateIso: string, days: number): string {
     const d = new Date(`${dateIso}T12:00:00`);
@@ -136,6 +149,10 @@ export default function CriarPartida() {
     }
     if (needsSetup || !profile.profileComplete) {
       setShowSetup(true);
+      return;
+    }
+    if (repeatWeeks > 1 && !orgPro) {
+      setShowProRepeatDialog(true);
       return;
     }
 
@@ -280,34 +297,18 @@ export default function CriarPartida() {
           </Field>
         </div>
 
-        <Field label="Repetir semanalmente" icon={<Repeat className="w-3 h-3" />}>
-          {orgPro ? (
-            <select
-              value={repeatWeeks}
-              onChange={(e) => setRepeatWeeks(Number(e.target.value))}
-              className="w-full rounded-2xl px-4 py-3.5 text-sm text-white bg-[#0f172a] border border-white/20 outline-none focus:border-emerald-500/60 [color-scheme:dark]"
-              data-testid="select-repeat-weeks"
-            >
-              <option value={1} className="bg-[#0f172a] text-white">Não repetir</option>
-              <option value={2} className="bg-[#0f172a] text-white">2 semanas (2 peladas)</option>
-              <option value={4} className="bg-[#0f172a] text-white">4 semanas (4 peladas)</option>
-              <option value={8} className="bg-[#0f172a] text-white">8 semanas (8 peladas)</option>
-            </select>
-          ) : (
-            <Link href="/premium">
-              <div
-                className="flex items-center justify-between px-4 py-3.5 rounded-2xl cursor-pointer active:scale-[0.99] transition-transform"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)" }}
-                data-testid="repeat-weeks-locked"
-              >
-                <span className="text-sm text-white/50">Peladas recorrentes automáticas</span>
-                <span className="text-xs font-bold text-amber-300/90 flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5" />
-                  PRO Org
-                </span>
-              </div>
-            </Link>
-          )}
+        <Field label="Repetir semanalmente" icon={<Repeat className="w-3 h-3" />} proBadge="organizer">
+          <select
+            value={repeatWeeks}
+            onChange={(e) => setRepeatWeeks(Number(e.target.value))}
+            className="w-full rounded-2xl px-4 py-3.5 text-sm text-white bg-[#0f172a] border border-white/20 outline-none focus:border-emerald-500/60 [color-scheme:dark]"
+            data-testid="select-repeat-weeks"
+          >
+            <option value={1} className="bg-[#0f172a] text-white">1 semana (só esta pelada)</option>
+            <option value={2} className="bg-[#0f172a] text-white">2 semanas (2 peladas)</option>
+            <option value={3} className="bg-[#0f172a] text-white">3 semanas (3 peladas)</option>
+            <option value={4} className="bg-[#0f172a] text-white">4 semanas (4 peladas)</option>
+          </select>
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -342,6 +343,14 @@ export default function CriarPartida() {
           {submitting ? "A criar…" : "⚽ Criar Partida"}
         </JogaButton>
       </form>
+
+      <ProUpgradeDialog
+        open={showProRepeatDialog}
+        onOpenChange={setShowProRepeatDialog}
+        tier="organizer"
+        featureTitle="Peladas recorrentes"
+        featureDescription="Cria até 4 semanas de peladas de uma vez, com a mesma hora e definições — exclusivo PRO Organizador."
+      />
     </JogaPage>
   );
 }

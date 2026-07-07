@@ -12,3 +12,4 @@ initializeApp();
 
 export { createCheckoutSession, createPortalSession, stripeWebhook } from "./billing";
 export { closeExpiredMatches } from "./closeExpiredMatches";
+export { paymentReminders } from "./paymentReminders";

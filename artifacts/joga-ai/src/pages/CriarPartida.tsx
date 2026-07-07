@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
-import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock } from "lucide-react";
+import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock, Repeat } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { isOrganizerPro } from "@/lib/entitlements";
+import { Link } from "wouter";
 import { createMatch } from "@/lib/matchRepository";
 import { calculateOverall } from "@/lib/cardUtils";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
@@ -89,6 +91,14 @@ export default function CriarPartida() {
   const { userId } = useAuth();
   const { requireLinked } = useAuthGate();
   const { profile, needsSetup, refresh } = useUserProfile();
+  const orgPro = isOrganizerPro(profile?.entitlements);
+  const [repeatWeeks, setRepeatWeeks] = useState(1);
+
+  function addDaysIso(dateIso: string, days: number): string {
+    const d = new Date(`${dateIso}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
   const [showSetup, setShowSetup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
@@ -149,6 +159,34 @@ export default function CriarPartida() {
         organizerOverall: calculateOverall(profile.attributes),
         communityId,
       });
+      // PRO Organizador: cria as ocorrências seguintes (semanais)
+      if (orgPro && repeatWeeks > 1) {
+        for (let week = 1; week < repeatWeeks; week++) {
+          try {
+            await createMatch({
+              title: form.title,
+              city: form.city,
+              location: form.location,
+              gameType: form.gameType,
+              level: form.level,
+              date: addDaysIso(form.date, week * 7),
+              time: form.time,
+              maxPlayers: Number(form.maxPlayers) || 14,
+              price: form.price,
+              openToExternal: form.openToExternal,
+              notes: form.notes,
+              organizerId: userId,
+              organizerName: profile.displayName,
+              organizerPosition: profile.position,
+              organizerOverall: calculateOverall(profile.attributes),
+              communityId,
+            });
+          } catch (err) {
+            console.warn("[CriarPartida] ocorrência semanal", week, err);
+          }
+        }
+        toast({ title: `${repeatWeeks} peladas criadas 🔁`, description: "Uma por semana, mesmas definições." });
+      }
       setLocation(`/partida/${matchId}/pre-jogo`);
     } catch (err) {
       console.error(err);
@@ -241,6 +279,36 @@ export default function CriarPartida() {
             <StyledInput type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="input-time" />
           </Field>
         </div>
+
+        <Field label="Repetir semanalmente" icon={<Repeat className="w-3 h-3" />}>
+          {orgPro ? (
+            <select
+              value={repeatWeeks}
+              onChange={(e) => setRepeatWeeks(Number(e.target.value))}
+              className="w-full rounded-2xl px-4 py-3.5 text-sm text-white bg-[#0f172a] border border-white/20 outline-none focus:border-emerald-500/60 [color-scheme:dark]"
+              data-testid="select-repeat-weeks"
+            >
+              <option value={1} className="bg-[#0f172a] text-white">Não repetir</option>
+              <option value={2} className="bg-[#0f172a] text-white">2 semanas (2 peladas)</option>
+              <option value={4} className="bg-[#0f172a] text-white">4 semanas (4 peladas)</option>
+              <option value={8} className="bg-[#0f172a] text-white">8 semanas (8 peladas)</option>
+            </select>
+          ) : (
+            <Link href="/premium">
+              <div
+                className="flex items-center justify-between px-4 py-3.5 rounded-2xl cursor-pointer active:scale-[0.99] transition-transform"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)" }}
+                data-testid="repeat-weeks-locked"
+              >
+                <span className="text-sm text-white/50">Peladas recorrentes automáticas</span>
+                <span className="text-xs font-bold text-amber-300/90 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5" />
+                  PRO Org
+                </span>
+              </div>
+            </Link>
+          )}
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nº Jogadores" icon={<Users className="w-3 h-3" />}>

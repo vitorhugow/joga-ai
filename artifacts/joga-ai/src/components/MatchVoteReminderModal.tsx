@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Trophy, ChevronRight } from "lucide-react";
+import { Trophy, ChevronRight, Euro } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { JogaButton } from "@/components/joga";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,7 +34,10 @@ export function MatchVoteReminderModal() {
 
     const unsub = subscribeToNotifications(userId, (items) => {
       const pending = items.filter(
-        (n) => n.id.startsWith("vote-") && !n.read && !shownRef.current.has(n.id),
+        (n) =>
+          (n.id.startsWith("vote-") || n.id.startsWith("pay-")) &&
+          !n.read &&
+          !shownRef.current.has(n.id),
       );
       if (pending.length === 0) return;
 
@@ -45,6 +48,7 @@ export function MatchVoteReminderModal() {
       // não faz sentido mostrar um pop-up para uma votação que já fechou.
       void Promise.all(
         pending.map(async (n) => {
+          if (!n.id.startsWith("vote-")) return n;
           const matchId = n.id.replace(/^vote-/, "");
           try {
             const match = await loadMatchFromFirestore(matchId);
@@ -67,6 +71,7 @@ export function MatchVoteReminderModal() {
   }, [isLinked, userId]);
 
   const current = queue[0] ?? null;
+  const isPayment = current?.id.startsWith("pay-") ?? false;
 
   function dismiss() {
     setQueue((q) => q.slice(1));
@@ -100,13 +105,17 @@ export function MatchVoteReminderModal() {
             className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center"
             style={{ background: "rgba(250,204,21,0.15)", border: "1px solid rgba(250,204,21,0.3)" }}
           >
-            <Trophy className="w-7 h-7 text-amber-300" />
+            {isPayment ? (
+              <Euro className="w-7 h-7 text-amber-300" />
+            ) : (
+              <Trophy className="w-7 h-7 text-amber-300" />
+            )}
           </div>
           <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.22em]">
-            Pelada terminada
+            {isPayment ? "Pagamento pendente" : "Pelada terminada"}
           </p>
           <h2 className="font-display font-black text-white text-2xl mt-1">
-            A tua pelada já acabou!
+            {isPayment ? (current?.title ?? "Tens uma pelada por pagar") : "A tua pelada já acabou!"}
           </h2>
           <p className="text-white/60 text-sm mt-2">
             {current.body || "Falta só a tua nota para fechar a votação."}
@@ -115,7 +124,7 @@ export function MatchVoteReminderModal() {
 
         <div className="px-6 pb-6 space-y-2">
           <JogaButton variant="gold" size="lg" className="w-full gap-2" onClick={handleVoteNow}>
-            Votar agora
+            {isPayment ? "Ver a pelada" : "Votar agora"}
             <ChevronRight className="w-4 h-4" />
           </JogaButton>
           <JogaButton variant="ghost" size="md" className="w-full" onClick={handleLater}>

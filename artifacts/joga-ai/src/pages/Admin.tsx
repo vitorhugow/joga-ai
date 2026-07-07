@@ -17,6 +17,9 @@ import {
 } from "@/lib/adminRepository";
 import { toast } from "@/hooks/use-toast";
 
+const ADMIN_FIELD =
+  "w-full rounded-xl px-3 py-2.5 text-sm text-white bg-[#0f172a] border border-white/20 outline-none focus:border-emerald-500/60 placeholder:text-white/40 [color-scheme:dark]";
+
 function defaultProUntil(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() + 1);
@@ -128,7 +131,7 @@ export default function Admin() {
 
   if (adminLoading) {
     return (
-      <JogaPage>
+      <JogaPage theme="dark" padded={false}>
         <div className="flex min-h-[50vh] items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
@@ -140,7 +143,7 @@ export default function Admin() {
 
   if (!loggedIn || !isAdmin) {
     return (
-      <JogaPage>
+      <JogaPage theme="dark" padded={false}>
         <div className="px-4 pt-6 max-w-lg mx-auto text-center">
           <Shield className="w-12 h-12 mx-auto text-white/25 mb-4" />
           <h1 className="font-display font-black text-xl text-white">Acesso restrito</h1>
@@ -161,7 +164,7 @@ export default function Admin() {
   }
 
   return (
-    <JogaPage>
+    <JogaPage theme="dark" padded={false}>
       <div className="px-4 pt-4 pb-8 max-w-lg mx-auto space-y-5">
         <div className="flex items-center gap-3">
           <Link href="/perfil">
@@ -194,7 +197,7 @@ export default function Admin() {
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && void runSearch()}
               placeholder="uid, email ou nome"
-              className="flex-1 rounded-xl px-3 py-2.5 text-sm text-white bg-white/5 border border-white/10 outline-none focus:border-emerald-500/50"
+              className={`flex-1 ${ADMIN_FIELD}`}
               data-testid="admin-search-input"
             />
             <JogaButton
@@ -255,23 +258,23 @@ export default function Admin() {
 
             <div className="grid grid-cols-2 gap-3">
               <label className="space-y-1">
-                <span className="text-[10px] font-bold uppercase text-white/35">Plano</span>
+                <span className="text-[10px] font-bold uppercase text-white/60">Plano</span>
                 <select
                   value={plan}
                   onChange={(e) => setPlan(e.target.value as EntitlementPlan)}
-                  className="w-full rounded-xl px-3 py-2 text-sm text-white bg-white/5 border border-white/10"
+                  className={ADMIN_FIELD}
                 >
-                  <option value="player_pro">PRO Jogador</option>
-                  <option value="organizer_pro">PRO Organizador</option>
+                  <option value="player_pro" className="bg-[#0f172a] text-white">PRO Jogador</option>
+                  <option value="organizer_pro" className="bg-[#0f172a] text-white">PRO Organizador</option>
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-[10px] font-bold uppercase text-white/35">Válido até</span>
+                <span className="text-[10px] font-bold uppercase text-white/60">Válido até</span>
                 <input
                   type="date"
                   value={proUntil}
                   onChange={(e) => setProUntil(e.target.value)}
-                  className="w-full rounded-xl px-3 py-2 text-sm text-white bg-white/5 border border-white/10"
+                  className={ADMIN_FIELD}
                 />
               </label>
             </div>

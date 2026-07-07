@@ -33,6 +33,7 @@ const CriarComunidade = lazy(() => import("@/pages/CriarComunidade"));
 const Privacidade = lazy(() => import("@/pages/Privacidade"));
 const Termos = lazy(() => import("@/pages/Termos"));
 const DemoCarta = lazy(() => import("@/pages/DemoCarta"));
+const Admin = lazy(() => import("@/pages/Admin"));
 
 function PageFallback() {
   return (
@@ -44,7 +45,7 @@ function PageFallback() {
 
 const queryClient = new QueryClient();
 
-const HIDE_NAV_RE = /\/partida\/[^/]+\/(ao-vivo|pos-jogo)|\/entrar|\/demo-carta|\/privacidade|\/termos/;
+const HIDE_NAV_RE = /\/partida\/[^/]+\/(ao-vivo|pos-jogo)|\/entrar|\/demo-carta|\/privacidade|\/termos|\/admin/;
 
 function AnimatedRoutes() {
   const [location] = useLocation();
@@ -75,6 +76,7 @@ function AnimatedRoutes() {
             <Route path="/demo-carta" component={DemoCarta} />
             <Route path="/jogos" component={Jogos} />
             <Route path="/premium" component={Premium} />
+            <Route path="/admin" component={Admin} />
             <Route path="/campos" component={Campos} />
             <Route path="/ranking" component={Ranking} />
               <Route component={NotFound} />

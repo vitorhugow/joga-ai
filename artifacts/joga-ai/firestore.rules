@@ -26,6 +26,21 @@ service cloud.firestore {
         && matchDoc(matchId).organizerId == request.auth.uid;
     }
 
+    // Administradores da app (painel /admin — PRO manual sem Stripe)
+    function isAppAdmin() {
+      return isSignedIn() && (
+        request.auth.uid == 'KrnnjgKclcPJm4In4W9ORp3iX6j2'
+        || (exists(/databases/$(database)/documents/appConfig/admins)
+            && request.auth.uid in get(/databases/$(database)/documents/appConfig/admins).data.uids)
+      );
+    }
+
+    function isAdminUserMaintenanceUpdate() {
+      return isAppAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['entitlements', 'unlockedSkins', 'updatedAt']);
+    }
+
     // Collection-group queries (loadMyCommunities, pedidos pendentes)
     // Apenas leitura: este wildcard existe para as collection-group queries.
     // Criação/remoção de membros acontece SÓ no bloco communities/{id}/members.
@@ -118,7 +133,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isSignedIn();
-      // entitlements (PRO) é concedido APENAS por Cloud Functions (Stripe).
+      // entitlements (PRO) é concedido por Cloud Functions (Stripe) ou admin da app.
       allow create: if isOwner(userId)
         && !request.resource.data.keys().hasAny(['entitlements']);
       // Revert de evolução: só o organizador da partida, só os campos do revert,
@@ -126,7 +141,7 @@ service cloud.firestore {
       allow update: if (
         isOwner(userId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['entitlements'])
-      ) || (
+      ) || isAdminUserMaintenanceUpdate() || (
         isSignedIn()
         && request.resource.data.keys().hasAll(['_revertForMatchId'])
         && isMatchOrganizer(request.resource.data._revertForMatchId)

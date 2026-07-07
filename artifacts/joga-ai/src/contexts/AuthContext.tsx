@@ -13,6 +13,7 @@ import {
   signInAnonymousSession,
 } from "@/lib/auth";
 import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
+import { syncProfileEmail } from "@/lib/adminRepository";
 import { processPendingRatings } from "@/lib/ratingsRelease";
 import { processPendingNotifications } from "@/lib/notificationsRepository";
 import {
@@ -55,6 +56,9 @@ function applyUserState(user: User | null, localUserId: string) {
   const linked = user ? isAccountLinked() : false;
   if (user && linked) {
     markProfileAsLinked(user.uid).catch(console.warn);
+    if (user.email) {
+      void syncProfileEmail(user.uid, user.email);
+    }
   }
   return {
     userId: user ? user.uid : localUserId,

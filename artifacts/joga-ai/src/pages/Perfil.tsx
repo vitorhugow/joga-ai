@@ -21,6 +21,7 @@ import { ProfileSocialLinks } from "@/components/profile/ProfileSocialLinks";
 import { toast } from "@/hooks/use-toast";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { badgesFromIds } from "@/lib/badgeCatalog";
+import { useAppAdmin } from "@/hooks/useAppAdmin";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 
 /* ─── Pitch SVG texture ─── */
@@ -146,6 +147,7 @@ export default function Perfil() {
   const { isLinked, displayName, loading: authLoading, logout, userId: authUserId } = useAuth();
   const { openAuth } = useAuthGate();
   const { confirm, ConfirmDialog } = useJogaConfirm();
+  const { isAdmin } = useAppAdmin();
 
   async function handleLogout() {
     const ok = await confirm({
@@ -388,15 +390,25 @@ export default function Perfil() {
           <p className="text-white/45 text-sm truncate">
             Sessão: <span className="text-white/70 font-medium">{displayName || "Conta ligada"}</span>
           </p>
-          <JogaButton
-            variant="ghost"
-            size="sm"
-            className="shrink-0 gap-1.5 text-white/50"
-            onClick={() => void handleLogout()}
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Sair
-          </JogaButton>
+          <div className="flex items-center gap-2 shrink-0">
+            {isAdmin && (
+              <Link href="/admin">
+                <JogaButton variant="ghost" size="sm" className="gap-1.5 text-emerald-400/90">
+                  <Shield className="w-3.5 h-3.5" />
+                  Admin
+                </JogaButton>
+              </Link>
+            )}
+            <JogaButton
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-white/50"
+              onClick={() => void handleLogout()}
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sair
+            </JogaButton>
+          </div>
         </div>
       )}
 

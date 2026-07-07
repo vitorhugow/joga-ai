@@ -87,7 +87,9 @@ export type UserProfile = {
   unlockedSkins?: string[];
   /** Skin escolhida para a carta (cardSkins.ts) */
   cardSkin?: string;
-  /** PRO — APENAS leitura no cliente; escrito só por Functions (Stripe) */
+  /** email (Auth) — para pesquisa no painel admin */
+  email?: string;
+  /** PRO — leitura no cliente; escrito por Stripe (Functions) ou admin */
   entitlements?: import("./entitlements").Entitlements;
   updatedAt?: string;
 };
@@ -280,6 +282,7 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
       ? (data.unlockedSkins as string[])
       : undefined,
     cardSkin: data.cardSkin ? String(data.cardSkin) : undefined,
+    email: data.email ? String(data.email).toLowerCase() : undefined,
     entitlements: data.entitlements
       ? (data.entitlements as UserProfile["entitlements"])
       : undefined,

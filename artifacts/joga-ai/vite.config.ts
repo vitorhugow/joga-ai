@@ -40,11 +40,16 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // SPA: qualquer rota (/admin, /premium, …) serve index.html
+        navigateFallback: "index.html",
+        navigateFallbackDenylist: [/^\/api\//],
+        // Novo deploy substitui o SW de imediato (evita router antigo em cache)
+        skipWaiting: true,
+        clientsClaim: true,
         // Deixa as leituras/escritas do Firestore fluírem pela persistência
         // nativa do SDK (persistentLocalCache); o service worker só cacheia
         // os assets estáticos da app (JS/CSS/imagens/fontes).
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
     ...(process.env.NODE_ENV !== "production" &&

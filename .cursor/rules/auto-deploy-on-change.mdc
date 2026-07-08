@@ -43,11 +43,15 @@ Ordem manual:
 2. `wrangler pages deploy` (se mudaste frontend)
 3. `firebase deploy --only firestore:rules,firestore:indexes` (se mudaste Firestore)
 
+**Cloud Functions:** deploy **apenas** via GitHub Actions (`.github/workflows/deploy-functions.yml`). **Nunca** correr `firebase deploy --only functions` no Mac — causa conflitos 409 com o CI.
+
 ## Secrets necessários no GitHub
 
 | Secret | Origem |
 |--------|--------|
 | `VITE_FIREBASE_*` (7 vars) | `artifacts/joga-ai/.env.local` |
+| `VITE_FIREBASE_VAPID_KEY` | Firebase Console → Cloud Messaging → Web Push |
+| `VITE_RECAPTCHA_SITE_KEY` | reCAPTCHA v3 + Firebase App Check |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare → API Tokens |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard |
 | `FIREBASE_TOKEN` | `cd artifacts/joga-ai && firebase login:ci` |

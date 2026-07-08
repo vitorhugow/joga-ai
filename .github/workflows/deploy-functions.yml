@@ -1,0 +1,54 @@
+# Cloud Functions — deploy EXCLUSIVO via CI (nunca em paralelo com deploy local).
+# Evita conflitos 409 no Cloud Run quando dois deploys correm ao mesmo tempo.
+name: Deploy Cloud Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "artifacts/joga-ai/functions/**"
+      - ".github/workflows/deploy-functions.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: joga-ai-cloud-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy-functions:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT: joga-ai-f7622
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Deploy Cloud Functions
+        working-directory: artifacts/joga-ai
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "::warning::FIREBASE_TOKEN em falta — functions não publicadas"
+            exit 0
+          fi
+          pnpm exec firebase deploy --only functions --non-interactive --token "$FIREBASE_TOKEN"
+
+      - name: Summary
+        run: |
+          echo "## Cloud Functions" >> "$GITHUB_STEP_SUMMARY"
+          echo "Projeto: **${FIREBASE_PROJECT}** (região europe-west1)" >> "$GITHUB_STEP_SUMMARY"

@@ -27,10 +27,12 @@ const premiumSkins = [
 
 const planFeatures = {
   organizador: [
-    "Peladas sem taxa para os teus jogadores (até 50 pagamentos/mês)",
-    "Peladas recorrentes automáticas (semanais ou do mês inteiro)",
-    "Lembretes de pagamento automáticos aos pendentes",
-    "Histórico ilimitado da comunidade",
+    "Mensalistas: define o teu preço mensal e gere quem está em dia",
+    "Selo ✦ Clube PRO nas tuas peladas + destaque no Encontrar Jogos",
+    "Peladas da comunidade abertas ao público (enche mais rápido)",
+    "Marca do clube na convocatória e na imagem de resultado",
+    "Painel do clube: pagamentos, presenças e estatísticas da época",
+    "Recorrentes, lembretes automáticos e histórico ilimitado",
     "Inclui tudo do PRO Jogador",
   ],
   jogador: [
@@ -133,7 +135,7 @@ export default function Premium() {
   const daysLeft = proUntil
     ? Math.max(0, Math.ceil((new Date(proUntil).getTime() - Date.now()) / 86400000))
     : null;
-  const planLabel = profile?.entitlements?.plan === "organizer_pro" ? "PRO Organizador" : "PRO Jogador";
+  const planLabel = profile?.entitlements?.plan === "organizer_pro" ? "Clube PRO" : "PRO Jogador";
   const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
   useDocumentTitle("Premium");
 
@@ -270,13 +272,13 @@ export default function Premium() {
           >
             {/* Gold top bar */}
             <div style={{ background: "linear-gradient(90deg, #b45309, #d97706, #fbbf24, #f59e0b)", padding: "6px 16px", textAlign: "center" }}>
-              <span className="font-display font-black text-amber-900 text-[11px] uppercase tracking-[0.2em]">✦ Para quem organiza ✦</span>
+              <span className="font-display font-black text-amber-900 text-[11px] uppercase tracking-[0.2em]">✦ O teu clube, a sério ✦</span>
             </div>
             <div className="px-5 py-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Crown className="w-5 h-5 text-amber-400" />
-                  <h3 className="font-display font-bold text-white text-lg">PRO Organizador</h3>
+                  <h3 className="font-display font-bold text-white text-lg">Clube PRO</h3>
                 </div>
                 <div
                   className="px-2.5 py-1 rounded-full text-[11px] font-bold"

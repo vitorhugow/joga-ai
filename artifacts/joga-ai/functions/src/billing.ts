@@ -217,18 +217,14 @@ export const stripeWebhook = onRequest(
 /* ═══════════════════ SPRINT 3B — Pagamentos de pelada (Connect) ═══════════════════ */
 
 const PLAYER_FEE_CENTS = 50; // taxa de conveniência do jogador
-const ORG_NO_FEE_CAP = 50; // pagamentos/mês isentos no PRO Organizador
+const MAX_PELADA_PRICE_CENTS = 500; // máx. 5€/jogador na app
 
 function parsePriceCents(price: unknown): number | null {
   if (typeof price !== "string") return null;
   const value = parseFloat(price.replace(",", ".").replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(value) || value <= 0) return null;
   const cents = Math.round(value * 100);
-  return cents >= 50 && cents <= 50000 ? cents : null;
-}
-
-function monthKey(): string {
-  return new Date().toISOString().slice(0, 7); // YYYY-MM
+  return cents >= 50 && cents <= MAX_PELADA_PRICE_CENTS ? cents : null;
 }
 
 /** Onboarding Stripe Connect Express do organizador */
@@ -295,7 +291,10 @@ export const createPeladaCheckout = onCall(
 
     const priceCents = parsePriceCents(match.price);
     if (!priceCents) {
-      throw new HttpsError("failed-precondition", "Preço da pelada inválido para pagamentos.");
+      throw new HttpsError(
+        "failed-precondition",
+        "Preço inválido — define entre 0,50€ e 5€ por jogador.",
+      );
     }
 
     const organizerId = String(match.organizerId ?? "");
@@ -312,14 +311,10 @@ export const createPeladaCheckout = onCall(
       throw new HttpsError("failed-precondition", "A conta do organizador ainda está em verificação no Stripe.");
     }
 
-    // Sem-taxa: organizador PRO dentro do teto mensal → jogador paga só o preço
-    let waived = false;
-    if (isOrganizerProEnt(org.entitlements)) {
-      const counter = await db.doc(`users/${organizerId}/billingCounters/${monthKey()}`).get();
-      waived = Number(counter.data()?.waivedCount ?? 0) < ORG_NO_FEE_CAP;
-    }
-    const feeCents = waived ? 0 : PLAYER_FEE_CENTS;
-    const totalCents = priceCents + feeCents;
+    // Modelo final: taxa de 0,50€ SEMPRE (receita da plataforma em todas
+    // as peladas). O Clube PRO vende ferramentas e estatuto, não isenção.
+    const totalCents = priceCents + PLAYER_FEE_CENTS;
+    const feeCents = PLAYER_FEE_CENTS;
 
     const origin = safeOrigin(request.data?.origin);
     const session = await stripe.checkout.sessions.create({
@@ -333,9 +328,7 @@ export const createPeladaCheckout = onCall(
             unit_amount: totalCents,
             product_data: {
               name: `Pelada — ${String(match.title ?? "Joga AI").slice(0, 60)}`,
-              description: waived
-                ? "Sem taxa de serviço (organizador PRO)"
-                : "Inclui 0,50€ de taxa de serviço",
+              description: "Inclui 0,50€ de taxa de serviço",
             },
           },
         },
@@ -343,31 +336,23 @@ export const createPeladaCheckout = onCall(
       payment_intent_data: {
         application_fee_amount: feeCents,
         transfer_data: { destination: accountId },
-        metadata: { kind: "pelada", matchId, uid, organizerId, waived: String(waived) },
+        metadata: { kind: "pelada", matchId, uid, organizerId },
       },
-      metadata: { kind: "pelada", matchId, uid, organizerId, waived: String(waived) },
+      metadata: { kind: "pelada", matchId, uid, organizerId },
       success_url: `${origin}/partida/${matchId}/pre-jogo?pagamento=sucesso`,
       cancel_url: `${origin}/partida/${matchId}/pre-jogo?pagamento=cancelado`,
     });
 
     if (!session.url) throw new HttpsError("internal", "Stripe não devolveu URL.");
-    return { url: session.url, totalCents, waived };
+    return { url: session.url, totalCents };
   },
 );
-
-function isOrganizerProEnt(ent: unknown): boolean {
-  if (!ent || typeof ent !== "object") return false;
-  const e = ent as { pro?: boolean; plan?: string; proUntil?: string };
-  if (!e.pro || e.plan !== "organizer_pro") return false;
-  if (e.proUntil && Date.now() >= new Date(e.proUntil).getTime()) return false;
-  return true;
-}
 
 /** Marca o jogador como pago no doc da pelada (chamado pelo webhook) */
 export async function markPlayerPaidFromSession(
   session: Stripe.Checkout.Session,
 ): Promise<void> {
-  const { matchId, uid, organizerId, waived } = (session.metadata ?? {}) as Record<string, string>;
+  const { matchId, uid } = (session.metadata ?? {}) as Record<string, string>;
   if (!matchId || !uid) return;
 
   const db = getFirestore();
@@ -382,13 +367,6 @@ export async function markPlayerPaidFromSession(
     players[idx] = { ...players[idx], paid: true, paidVia: "app", paidAt: new Date().toISOString() };
     tx.update(ref, { players, savedAt: FieldValue.serverTimestamp() });
 
-    if (waived === "true" && organizerId) {
-      tx.set(
-        db.doc(`users/${organizerId}/billingCounters/${monthKey()}`),
-        { waivedCount: FieldValue.increment(1) },
-        { merge: true },
-      );
-    }
   });
-  console.log(`[stripeWebhook] pelada ${matchId}: ${uid} marcado como pago (waived=${waived}).`);
+  console.log(`[stripeWebhook] pelada ${matchId}: ${uid} marcado como pago.`);
 }

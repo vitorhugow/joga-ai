@@ -5,6 +5,7 @@ import { getMatchRoutePath, getMatchStatusLabel } from "@/lib/matchRepository";
 interface MatchCardProps {
   id: string;
   title: string;
+  proBadge?: boolean;
   city: string;
   location: string;
   gameType: string;
@@ -38,6 +39,7 @@ const statusBadgeStyle: Record<string, { background: string; color: string }> = 
 export function MatchCard({
   id,
   title,
+  proBadge,
   city,
   location,
   gameType,
@@ -75,7 +77,17 @@ export function MatchCard({
         {/* Content */}
         <div className="flex-1 px-4 py-3.5">
           <div className="flex items-start justify-between gap-2 mb-2.5">
-            <h3 className="font-display font-bold text-white text-base leading-tight">{title}</h3>
+            <h3 className="font-display font-bold text-white text-base leading-tight">
+              {title}
+              {proBadge && (
+                <span
+                  className="ml-1.5 align-middle inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide"
+                  style={{ background: "rgba(251,191,36,0.14)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.35)" }}
+                >
+                  ✦ Clube PRO
+                </span>
+              )}
+            </h3>
             <div className="flex flex-col items-end gap-1 shrink-0">
               {status && (
                 <span

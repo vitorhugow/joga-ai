@@ -561,7 +561,7 @@ export default function Perfil() {
                         className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide whitespace-nowrap"
                         style={{ background: "rgba(250,204,21,0.28)", color: "#fef08a", border: "1px solid rgba(250,204,21,0.6)", boxShadow: "0 0 12px rgba(250,204,21,0.2)" }}
                       >
-                        ✦ PRO Organizador
+                        ✦ Clube PRO
                       </span>
                     )}
                   </div>

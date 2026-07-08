@@ -29,7 +29,7 @@ function defaultProUntil(): string {
 function formatProStatus(row: AdminUserRow): string {
   const e = row.entitlements;
   if (!isProActive(e)) return "Sem PRO";
-  const plan = e?.plan === "organizer_pro" ? "Organizador" : "Jogador";
+  const plan = e?.plan === "organizer_pro" ? "Clube PRO" : "Jogador";
   const until = e?.proUntil
     ? new Date(e.proUntil).toLocaleDateString("pt-PT")
     : "sem data";
@@ -265,7 +265,7 @@ export default function Admin() {
                   className={ADMIN_FIELD}
                 >
                   <option value="player_pro" className="bg-[#0f172a] text-white">PRO Jogador</option>
-                  <option value="organizer_pro" className="bg-[#0f172a] text-white">PRO Organizador</option>
+                  <option value="organizer_pro" className="bg-[#0f172a] text-white">Clube PRO</option>
                 </select>
               </label>
               <label className="space-y-1">

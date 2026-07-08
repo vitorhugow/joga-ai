@@ -56,6 +56,8 @@ export type Community = {
 
 export type MatchListing = {
   paymentsEnabled?: boolean;
+  proBadge?: boolean;
+  openToExternal?: boolean;
   id: string;
   title: string;
   city: string;
@@ -621,7 +623,7 @@ export async function deleteCommunity(communityId: string): Promise<void> {
 }
 
 function isOpenPublicMatch(m: MatchListing): boolean {
-  if (m.communityId) return false;
+  if (m.communityId) return m.openToExternal === true;
   return !m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number]);
 }
 
@@ -873,6 +875,8 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
     price: String(data.price ?? "—"),
     communityId: data.communityId ? String(data.communityId) : undefined,
     status: data.status ? String(data.status) : undefined,
+    proBadge: data.proBadge === true,
+    openToExternal: data.openToExternal === true,
   };
 }
 

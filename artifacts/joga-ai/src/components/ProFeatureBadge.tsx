@@ -1,4 +1,4 @@
-/** Badge compacto para marcar recursos PRO / PRO Organizador (estilo CapCut). */
+/** Badge compacto para marcar recursos PRO / Clube PRO (estilo CapCut). */
 
 type ProFeatureBadgeProps = {
   tier?: "player" | "organizer";
@@ -16,7 +16,7 @@ export function ProFeatureBadge({ tier = "player", className = "" }: ProFeatureB
           : { background: "rgba(251,191,36,0.15)", color: "#fcd34d", border: "1px solid rgba(251,191,36,0.35)" }
       }
     >
-      ✦ {isOrg ? "PRO Org" : "PRO"}
+      ✦ {isOrg ? "Clube PRO" : "PRO"}
     </span>
   );
 }

@@ -10,6 +10,7 @@ export type PostMatchEventType = "golo" | "assistencia" | "defesa" | "cartao_ama
 export type SavedPostMatch = {
   /** Pagamentos in-app ativos nesta pelada (organizador opt-in) */
   paymentsEnabled?: boolean;
+  proBadge?: boolean;
   version: 1;
   matchId: string;
   status: "configurando" | "ao_vivo" | "aguardando_auditoria" | "auditada" | "concluida" | "expirada" | "cancelada";

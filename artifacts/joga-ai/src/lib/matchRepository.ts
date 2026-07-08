@@ -53,6 +53,7 @@ export type CreateMatchInput = {
   maxPlayers: number;
   price: string;
   paymentsEnabled?: boolean;
+  proBadge?: boolean;
   openToExternal: boolean;
   notes: string;
   organizerId: string;
@@ -78,6 +79,7 @@ export type MatchDetails = {
   spotsRemaining: string;
   price: string;
   paymentsEnabled?: boolean;
+  proBadge?: boolean;
   maxPlayers?: number;
   notes?: string;
   openToExternal?: boolean;
@@ -218,6 +220,9 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     communityId: input.communityId,
     organizerId: input.organizerId,
     paymentsEnabled: input.paymentsEnabled ?? false,
+    proBadge: input.proBadge ?? false,
+    openToExternal: input.openToExternal,
+    maxPlayers,
   };
 
   const preMatch: SavedPreMatch = {
@@ -246,7 +251,9 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     spotsRemaining: spotsLeft > 0 ? `${spotsLeft} vagas` : "Lotado",
     price: input.price.trim() || "Grátis",
     paymentsEnabled: input.paymentsEnabled ?? false,
+    proBadge: input.proBadge ?? false,
     communityId: input.communityId,
+    openToExternal: input.openToExternal,
     status: "configurando",
   };
 
@@ -277,13 +284,14 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
         gameType: input.gameType,
         maxPlayers,
         price: listing.price,
+        paymentsEnabled: input.paymentsEnabled ?? false,
+        proBadge: input.proBadge ?? false,
         openToExternal: input.openToExternal,
         notes: input.notes,
         organizerId: input.organizerId,
         communityId: input.communityId ?? null,
         scheduledDate: input.date,
         scheduledTime: input.time,
-        paymentsEnabled: input.paymentsEnabled ?? false,
         savedAt: serverTimestamp(),
       });
     } catch (err) {
@@ -603,6 +611,8 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     votedUserIds: data.votedUserIds ?? [],
     waitlist: data.waitlist ?? [],
     paymentsEnabled: data.paymentsEnabled ?? false,
+    proBadge: data.proBadge ?? false,
+    openToExternal: data.openToExternal ?? null,
     title: data.title ?? null,
     communityId: data.communityId ?? null,
     organizerId: data.organizerId ?? null,
@@ -784,6 +794,7 @@ export async function loadMatchFromFirestore(
       communityId: remote.communityId,
       organizerId: remote.organizerId,
       paymentsEnabled: remote.paymentsEnabled ?? false,
+      proBadge: remote.proBadge ?? false,
     };
 
     const merged = mergeMatchSources(matchId, remoteMatch, local, pre);

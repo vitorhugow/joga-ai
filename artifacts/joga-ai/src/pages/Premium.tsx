@@ -112,7 +112,7 @@ function PlanPricing({
         </p>
         <p className="text-white/35 text-[11px] mt-0.5">{formatEuro(annualPrice)} cobrados anualmente</p>
         <JogaButton
-          variant={variant === "gold" ? "gold" : "primary"}
+          variant={variant}
           size="md"
           className="w-full mt-3"
           disabled={disabled || checkoutBusy !== null}
@@ -140,8 +140,23 @@ export default function Premium() {
   const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [successPlan, setSuccessPlan] = useState<EntitlementPlan | null>(null);
+  const [activatingPlan, setActivatingPlan] = useState<EntitlementPlan | null>(null);
   const checkoutHandled = useRef(false);
   useDocumentTitle("Premium");
+
+  const showSubscription = pro || activatingPlan !== null;
+  const activePlanLabel = pro
+    ? planLabel
+    : activatingPlan === "organizer_pro"
+      ? "Clube PRO"
+      : "PRO Jogador";
+
+  function onCheckoutSuccess(plan: EntitlementPlan) {
+    setSuccessPlan(plan);
+    setSuccessOpen(true);
+    setActivatingPlan(plan);
+    void refresh();
+  }
 
   useEffect(() => {
     if (checkoutHandled.current) return;
@@ -156,21 +171,49 @@ export default function Premium() {
     if (status === "sucesso") {
       const plan: EntitlementPlan =
         planParam === "organizer_pro" ? "organizer_pro" : "player_pro";
-      setSuccessPlan(plan);
-      setSuccessOpen(true);
-      void refresh();
-      const timers = [2000, 5000, 10000].map((ms) =>
-        window.setTimeout(() => void refresh(), ms),
-      );
-      return () => timers.forEach(clearTimeout);
+      onCheckoutSuccess(plan);
     }
     if (status === "cancelado") {
       toast({ title: "Checkout cancelado", description: "Não foste cobrado." });
+      setActivatingPlan(null);
     }
   }, [refresh]);
 
+  // Poll até webhook activar PRO (checkout em nova aba ou redirect)
+  useEffect(() => {
+    if (!activatingPlan) return;
+
+    const tick = () => {
+      void refresh().then((p) => {
+        if (!isProActive(p?.entitlements)) return;
+        if (!successOpen) {
+          setSuccessPlan(activatingPlan);
+          setSuccessOpen(true);
+        }
+        setActivatingPlan(null);
+      });
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 1500);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", onVisible);
+    const timeout = window.setTimeout(() => setActivatingPlan(null), 10 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [activatingPlan, successOpen, refresh]);
+
   function runCheckout(plan: EntitlementPlan, interval: BillingInterval, key: string) {
     setCheckoutBusy(`${key}-${interval === "month" ? "month" : "year"}`);
+    setActivatingPlan(plan);
     void startCheckout(plan, interval).finally(() => setCheckoutBusy(null));
   }
   return (
@@ -269,25 +312,28 @@ export default function Premium() {
         {/* ═══════════════════════════════
             PLANS
         ═══════════════════════════════ */}
-        {pro && (
+        {showSubscription && (
           <div
             className="rounded-3xl p-5 mb-4"
-            style={{ background: "rgba(74,222,128,0.08)", border: "1.5px solid rgba(74,222,128,0.35)" }}
+            style={{ background: "rgba(251,191,36,0.08)", border: "1.5px solid rgba(251,191,36,0.35)" }}
             data-testid="subscription-panel"
           >
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300/70">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300/70">
               A tua assinatura
             </p>
-            <h3 className="font-display font-black text-white text-xl mt-1">{planLabel} ativo ✓</h3>
-            {daysLeft != null && proUntil && (
+            <h3 className="font-display font-black text-white text-xl mt-1">{activePlanLabel} ativo ✓</h3>
+            {pro && daysLeft != null && proUntil ? (
               <p className="text-white/50 text-sm mt-1">
                 Renova a {new Date(proUntil).toLocaleDateString("pt-PT")} · {daysLeft} {daysLeft === 1 ? "dia" : "dias"} restantes
               </p>
+            ) : (
+              <p className="text-amber-200/60 text-sm mt-1">A confirmar pagamento…</p>
             )}
             <button
               type="button"
               onClick={() => void openBillingPortal()}
-              className="mt-3 w-full rounded-2xl py-3 font-black text-sm text-white/85"
+              disabled={!pro}
+              className="mt-3 w-full rounded-2xl py-3 font-black text-sm text-white/85 disabled:opacity-40"
               style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)" }}
               data-testid="button-manage-subscription"
             >
@@ -369,6 +415,7 @@ export default function Premium() {
                 annualPrice={PRICING.playerProAnnual}
                 checkoutBusy={checkoutBusy}
                 busyKey="player"
+                variant="gold"
                 onCheckout={(interval) => runCheckout("player_pro", interval, "player")}
               />
             </div>

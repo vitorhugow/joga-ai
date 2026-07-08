@@ -256,7 +256,7 @@ export const createConnectOnboarding = onCall(
         if (stripeMsg.includes("signed up for Connect")) {
           throw new HttpsError(
             "failed-precondition",
-            "Stripe Connect ainda não está activo. No Dashboard, activa Connect (modo Test) em dashboard.stripe.com/connect — escolhe Plataforma.",
+            "Stripe Connect ainda não está activo. No Dashboard (modo Test), abre dashboard.stripe.com/test/connect, clica «Continuar configuração», escolhe Plataforma e completa o guia até ao fim.",
           );
         }
         throw err;

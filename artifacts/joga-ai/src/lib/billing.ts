@@ -16,6 +16,20 @@ import { callableErrorMessage } from "./callableError";
 
 export type BillingInterval = "month" | "year";
 
+/** Abre páginas Stripe (checkout, portal, Connect) noutro separador. */
+export function openStripeUrl(url: string): boolean {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    toast({
+      title: "Popup bloqueado",
+      description: "Permite popups para jogaai.pt e tenta outra vez.",
+      variant: "destructive",
+    });
+    return false;
+  }
+  return true;
+}
+
 export async function startCheckout(
   plan: EntitlementPlan,
   interval: BillingInterval = "month",
@@ -39,7 +53,11 @@ export async function startCheckout(
     const result = await createSession({ plan, interval, origin: window.location.origin });
     const url = result.data?.url;
     if (!url) throw new Error("sessão sem URL");
-    window.location.assign(url);
+    openStripeUrl(url);
+    toast({
+      title: "Checkout aberto",
+      description: "Completa o pagamento no separador Stripe e volta aqui.",
+    });
   } catch (err) {
     console.warn("[billing] startCheckout:", err);
     toast({

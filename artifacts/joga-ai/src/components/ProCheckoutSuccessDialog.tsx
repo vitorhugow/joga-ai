@@ -1,7 +1,8 @@
-import { Crown, Sparkles } from "lucide-react";
+import { Crown, Sparkles, Settings } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { JogaButton } from "@/components/joga";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { openBillingPortal } from "@/lib/billing";
 import type { EntitlementPlan } from "@/lib/entitlements";
 
 type ProCheckoutSuccessDialogProps = {
@@ -32,19 +33,19 @@ export function ProCheckoutSuccessDialog({ open, onOpenChange, plan }: ProChecko
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-sm border-emerald-400/35 text-white p-0 overflow-hidden"
+        className="max-w-sm border-amber-400/35 text-white p-0 overflow-hidden"
         style={{ background: "#0f172a" }}
       >
         <DialogTitle className="sr-only">{copy.title}</DialogTitle>
         <div
           className="p-6 pb-4 text-center"
-          style={{ background: "linear-gradient(160deg, rgba(74,222,128,0.16), rgba(15,23,42,0))" }}
+          style={{ background: "linear-gradient(160deg, rgba(250,204,21,0.14), rgba(15,23,42,0))" }}
         >
           <div
             className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center"
-            style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.35)" }}
+            style={{ background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)" }}
           >
-            <Crown className="w-7 h-7 text-emerald-300" />
+            <Crown className="w-7 h-7 text-amber-300" />
           </div>
           <div className="flex justify-center mb-2">
             <ProFeatureBadge tier={copy.tier} />
@@ -52,10 +53,22 @@ export function ProCheckoutSuccessDialog({ open, onOpenChange, plan }: ProChecko
           <h2 className="font-display font-black text-xl text-white">{copy.title}</h2>
           <p className="text-white/55 text-sm mt-2 leading-relaxed">{copy.description}</p>
         </div>
-        <div className="px-6 pb-6">
-          <JogaButton variant="primary" size="lg" className="w-full gap-2" onClick={() => onOpenChange(false)}>
+        <div className="px-6 pb-6 space-y-2">
+          <JogaButton variant="gold" size="lg" className="w-full gap-2" onClick={() => onOpenChange(false)}>
             <Sparkles className="w-4 h-4" />
             Vamos jogar
+          </JogaButton>
+          <JogaButton
+            variant="gold"
+            size="md"
+            className="w-full gap-2"
+            onClick={() => {
+              onOpenChange(false);
+              void openBillingPortal();
+            }}
+          >
+            <Settings className="w-4 h-4" />
+            Gerir assinatura
           </JogaButton>
         </div>
       </DialogContent>

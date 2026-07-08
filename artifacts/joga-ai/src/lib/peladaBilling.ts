@@ -7,6 +7,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import app, { isFirebaseConfigured } from "./firebase";
 import { toast } from "@/hooks/use-toast";
 import { callableErrorMessage } from "./callableError";
+import { openStripeUrl } from "./billing";
 
 /** Organizador: liga (ou retoma) a conta Stripe Express */
 export async function startConnectOnboarding(): Promise<void> {
@@ -18,7 +19,7 @@ export async function startConnectOnboarding(): Promise<void> {
     );
     const result = await fn({ origin: window.location.origin });
     if (!result.data?.url) throw new Error("sem URL");
-    window.location.assign(result.data.url);
+    openStripeUrl(result.data.url);
   } catch (err) {
     console.warn("[peladaBilling] onboarding:", err);
     toast({
@@ -42,7 +43,7 @@ export async function payPelada(matchId: string): Promise<void> {
     >(getFunctions(app, "europe-west1"), "createPeladaCheckout");
     const result = await fn({ matchId, origin: window.location.origin });
     if (!result.data?.url) throw new Error("sem URL");
-    window.location.assign(result.data.url);
+    openStripeUrl(result.data.url);
   } catch (err: unknown) {
     console.warn("[peladaBilling] payPelada:", err);
     const message =

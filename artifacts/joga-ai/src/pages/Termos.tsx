@@ -96,7 +96,7 @@ export default function Termos() {
         <section>
           <h2 className="text-white font-bold text-base mb-2">8. Contacto</h2>
           <p>
-            <a href="mailto:suporte@jogaai.pt" className="text-emerald-400">suporte@jogaai.pt</a>
+            <a href="mailto:vitor@geniai.pt" className="text-emerald-400">vitor@geniai.pt</a>
           </p>
         </section>
 

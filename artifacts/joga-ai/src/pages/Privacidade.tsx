@@ -15,7 +15,7 @@ const SECTIONS = [
         </p>
         <p>
           Para questões sobre privacidade:{" "}
-          <a href="mailto:suporte@jogaai.pt" className="text-emerald-400">suporte@jogaai.pt</a>
+          <a href="mailto:vitor@geniai.pt" className="text-emerald-400">vitor@geniai.pt</a>
         </p>
       </>
     ),
@@ -127,7 +127,7 @@ const SECTIONS = [
         </ul>
         <p className="mt-2">
           Contacta{" "}
-          <a href="mailto:suporte@jogaai.pt" className="text-emerald-400">suporte@jogaai.pt</a>.
+          <a href="mailto:vitor@geniai.pt" className="text-emerald-400">vitor@geniai.pt</a>.
           Tens também o direito de reclamar junto da{" "}
           <a href="https://www.cnpd.pt" className="text-emerald-400" target="_blank" rel="noopener noreferrer">
             CNPD

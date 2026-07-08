@@ -1,13 +1,16 @@
 import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-react";
+import { useSearch } from "wouter";
 import { startCheckout, openBillingPortal, type BillingInterval } from "@/lib/billing";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { isProActive } from "@/lib/entitlements";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { monthlyEquivalentFromAnnual, PRICING } from "@/lib/entitlements";
 import type { EntitlementPlan } from "@/lib/entitlements";
+import { ProCheckoutSuccessDialog } from "@/components/ProCheckoutSuccessDialog";
+import { toast } from "@/hooks/use-toast";
 
 const benefits = [
   { icon: Star,     label: "Cartas Premium",       desc: "Skins exclusivas ouro, prata, diamante e élite" },
@@ -128,7 +131,8 @@ function PlanPricing({
 }
 
 export default function Premium() {
-  const { profile } = useUserProfile();
+  const search = useSearch();
+  const { profile, refresh } = useUserProfile();
   const pro = isProActive(profile?.entitlements);
   const proUntil = profile?.entitlements?.proUntil;
   const daysLeft = proUntil
@@ -136,7 +140,31 @@ export default function Premium() {
     : null;
   const planLabel = profile?.entitlements?.plan === "organizer_pro" ? "Clube PRO" : "PRO Jogador";
   const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successPlan, setSuccessPlan] = useState<EntitlementPlan | null>(null);
   useDocumentTitle("Premium");
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const status = params.get("checkout");
+    const planParam = params.get("plan");
+    if (status === "sucesso") {
+      const plan: EntitlementPlan =
+        planParam === "organizer_pro" ? "organizer_pro" : "player_pro";
+      setSuccessPlan(plan);
+      setSuccessOpen(true);
+      void refresh();
+      const timers = [2000, 5000, 10000].map((ms) =>
+        window.setTimeout(() => void refresh(), ms),
+      );
+      window.history.replaceState({}, "", "/premium");
+      return () => timers.forEach(clearTimeout);
+    }
+    if (status === "cancelado") {
+      toast({ title: "Checkout cancelado", description: "Não foste cobrado." });
+      window.history.replaceState({}, "", "/premium");
+    }
+  }, [search, refresh]);
 
   function runCheckout(plan: EntitlementPlan, interval: BillingInterval, key: string) {
     setCheckoutBusy(`${key}-${interval === "month" ? "month" : "year"}`);
@@ -144,6 +172,11 @@ export default function Premium() {
   }
   return (
     <JogaPage theme="dark" padded={false}>
+      <ProCheckoutSuccessDialog
+        open={successOpen}
+        onOpenChange={setSuccessOpen}
+        plan={successPlan}
+      />
 
       {/* ═══════════════════════════════
           HERO — arena dark
@@ -281,9 +314,9 @@ export default function Premium() {
                 </div>
                 <div
                   className="px-2.5 py-1 rounded-full text-[11px] font-bold"
-                  style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }}
+                  style={{ background: "rgba(251,191,36,0.15)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.3)" }}
                 >
-                  Brevemente
+                  9,99€/mês
                 </div>
               </div>
               <div className="space-y-2.5 mb-5">
@@ -302,9 +335,7 @@ export default function Premium() {
                 checkoutBusy={checkoutBusy}
                 busyKey="organizer"
                 variant="gold"
-                disabled
-                disabledLabel="Chega com os pagamentos de pelada"
-                onCheckout={() => {}}
+                onCheckout={(interval) => runCheckout("organizer_pro", interval, "organizer")}
               />
             </div>
           </div>

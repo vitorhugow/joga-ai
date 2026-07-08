@@ -12,6 +12,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import app, { isFirebaseConfigured } from "./firebase";
 import { toast } from "@/hooks/use-toast";
 import type { EntitlementPlan } from "./entitlements";
+import { callableErrorMessage } from "./callableError";
 
 export type BillingInterval = "month" | "year";
 
@@ -42,9 +43,9 @@ export async function startCheckout(
   } catch (err) {
     console.warn("[billing] startCheckout:", err);
     toast({
-      title: "Pagamentos em ativação",
-      description:
-        "O checkout ainda está a ser ligado. Tenta novamente em breve — ou fala connosco.",
+      title: "Não foi possível abrir o checkout",
+      description: callableErrorMessage(err, "Tenta novamente em breve."),
+      variant: "destructive",
     });
   }
 }
@@ -64,12 +65,13 @@ export async function openBillingPortal(): Promise<void> {
     const result = await createPortal({ origin: window.location.origin });
     const url = result.data?.url;
     if (!url) throw new Error("portal sem URL");
-    window.location.assign(url);
+    window.open(url, "_blank", "noopener,noreferrer");
   } catch (err) {
     console.warn("[billing] openBillingPortal:", err);
     toast({
-      title: "Gestão de assinatura em ativação",
-      description: "Esta área fica disponível com o checkout. Tenta em breve.",
+      title: "Não foi possível abrir a gestão",
+      description: callableErrorMessage(err, "Tenta novamente em breve."),
+      variant: "destructive",
     });
   }
 }

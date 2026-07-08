@@ -6,6 +6,7 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
 import app, { isFirebaseConfigured } from "./firebase";
 import { toast } from "@/hooks/use-toast";
+import { callableErrorMessage } from "./callableError";
 
 /** Organizador: liga (ou retoma) a conta Stripe Express */
 export async function startConnectOnboarding(): Promise<void> {
@@ -21,8 +22,12 @@ export async function startConnectOnboarding(): Promise<void> {
   } catch (err) {
     console.warn("[peladaBilling] onboarding:", err);
     toast({
-      title: "Pagamentos em ativação",
-      description: "A ligação de contas fica disponível em breve.",
+      title: "Ligação de pagamentos indisponível",
+      description: callableErrorMessage(
+        err,
+        "Completa a activação do Stripe Connect no Dashboard (modo Test) e tenta outra vez.",
+      ),
+      variant: "destructive",
     });
   }
 }

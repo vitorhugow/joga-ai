@@ -101,7 +101,7 @@ export const createCheckoutSession = onCall(
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: { metadata: { firebaseUid: uid, plan } },
       allow_promotion_codes: true,
-      success_url: `${origin}/premium?checkout=sucesso`,
+      success_url: `${origin}/premium?checkout=sucesso&plan=${plan}`,
       cancel_url: `${origin}/premium?checkout=cancelado`,
     });
 
@@ -240,13 +240,27 @@ export const createConnectOnboarding = onCall(
     let accountId = (await userRef.get()).data()?.stripeAccountId;
 
     if (typeof accountId !== "string" || !accountId.startsWith("acct_")) {
-      const account = await stripe.accounts.create({
-        type: "express",
-        country: "PT",
-        metadata: { firebaseUid: uid },
-      });
-      accountId = account.id;
-      await userRef.set({ stripeAccountId: accountId }, { merge: true });
+      try {
+        const account = await stripe.accounts.create({
+          type: "express",
+          country: "PT",
+          metadata: { firebaseUid: uid },
+        });
+        accountId = account.id;
+        await userRef.set({ stripeAccountId: accountId }, { merge: true });
+      } catch (err) {
+        const stripeMsg =
+          err && typeof err === "object" && "message" in err
+            ? String((err as { message?: string }).message ?? "")
+            : "";
+        if (stripeMsg.includes("signed up for Connect")) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Stripe Connect ainda não está activo. No Dashboard, activa Connect (modo Test) em dashboard.stripe.com/connect — escolhe Plataforma.",
+          );
+        }
+        throw err;
+      }
     }
 
     const origin = safeOrigin(request.data?.origin);

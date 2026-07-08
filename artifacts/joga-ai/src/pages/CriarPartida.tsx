@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
-import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock, Repeat } from "lucide-react";
+import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock, Repeat, CreditCard } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { isOrganizerPro } from "@/lib/entitlements";
-import { startConnectOnboarding } from "@/lib/peladaBilling";
-import { CreditCard } from "lucide-react";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { createMatch } from "@/lib/matchRepository";
@@ -15,6 +13,7 @@ import { calculateOverall } from "@/lib/cardUtils";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
@@ -115,6 +114,7 @@ export default function CriarPartida() {
   const { userId } = useAuth();
   const { requireLinked } = useAuthGate();
   const { profile, needsSetup, refresh } = useUserProfile();
+  useStripeConnectReturn(() => void refresh());
   const orgPro = isOrganizerPro(profile?.entitlements);
   const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
@@ -175,7 +175,7 @@ export default function CriarPartida() {
     }
 
     const priceEuro = parsePriceEuro(form.price);
-    const onlinePayments = paymentsEnabled && hasStripeAccount;
+    const onlinePayments = paymentsEnabled;
     if (onlinePayments) {
       if (priceEuro === null) {
         toast({
@@ -373,47 +373,45 @@ export default function CriarPartida() {
             <StyledInput type="number" min="4" max="22" value={form.maxPlayers} onChange={(e) => set("maxPlayers", e.target.value)} data-testid="input-max-players" />
           </Field>
           <Field label="Preço/Jogador" icon={<Euro className="w-3 h-3" />}>
-            <StyledInput type="text" placeholder={paymentsEnabled && hasStripeAccount ? "0,50€ a 5€" : "Grátis ou 10€"} value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" />
-            {paymentsEnabled && hasStripeAccount && (
-              <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>Com pagamentos na app: máx. 5€ por jogador</p>
+            <StyledInput type="text" placeholder={paymentsEnabled ? "0,50€ a 5€" : "Grátis ou 10€"} value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" />
+            {paymentsEnabled && (
+              <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>Com pagamentos online: máx. 5€ por jogador</p>
             )}
           </Field>
         </div>
 
-        {/* ── Pagamentos na app (opt-in por pelada) ── */}
+        {/* ── Caixa / pagamentos online (opt-in por pelada) ── */}
         <div className="rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
           <p className="text-white/50 text-[10px] font-black uppercase tracking-[0.18em] flex items-center gap-1.5">
-            <CreditCard className="w-3 h-3" /> Pagamentos na app
+            <CreditCard className="w-3 h-3" /> Caixa — pagamentos online
           </p>
-          {hasStripeAccount ? (
-            <button
-              type="button"
-              onClick={() => setPaymentsEnabled((v) => !v)}
-              className="mt-2 w-full rounded-xl py-2.5 text-xs font-black"
-              style={{
-                background: paymentsEnabled ? "rgba(74,222,128,0.16)" : "rgba(255,255,255,0.05)",
-                border: `1px solid ${paymentsEnabled ? "rgba(74,222,128,0.5)" : "rgba(255,255,255,0.12)"}`,
-                color: paymentsEnabled ? "#4ade80" : "rgba(255,255,255,0.6)",
-              }}
-              data-testid="button-toggle-payments"
-            >
-              {paymentsEnabled
-                ? "✓ Jogadores podem pagar pela app (recebes direto na tua conta)"
-                : "Ativar pagamentos nesta pelada"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void startConnectOnboarding()}
-              className="mt-2 w-full rounded-xl py-2.5 text-xs font-black text-white/70"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px dashed rgba(255,255,255,0.16)" }}
-              data-testid="button-connect-stripe"
-            >
-              Ligar conta de pagamentos (2 min) para receber pela app
-            </button>
+          <button
+            type="button"
+            onClick={() => setPaymentsEnabled((v) => !v)}
+            className="mt-2 w-full rounded-xl py-2.5 text-xs font-black"
+            style={{
+              background: paymentsEnabled ? "rgba(74,222,128,0.16)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${paymentsEnabled ? "rgba(74,222,128,0.5)" : "rgba(255,255,255,0.12)"}`,
+              color: paymentsEnabled ? "#4ade80" : "rgba(255,255,255,0.6)",
+            }}
+            data-testid="button-toggle-payments"
+          >
+            {paymentsEnabled
+              ? "✓ Jogadores podem pagar online nesta pelada"
+              : "Permitir pagamentos online nesta pelada"}
+          </button>
+          {paymentsEnabled && !hasStripeAccount && (
+            <p className="text-amber-200/55 text-[11px] mt-2 leading-relaxed">
+              Podes criar a pelada já — ligas a Caixa depois no Perfil ou no pré-jogo (~2 min).
+            </p>
           )}
-          <p className="text-white/30 text-[11px] mt-2">
-            Preço vai 100% para ti. O jogador paga +0,50€ de taxa de serviço em cada pagamento na app. Podes sempre marcar pagamentos manuais.
+          {paymentsEnabled && hasStripeAccount && (
+            <p className="text-emerald-300/50 text-[11px] mt-2">
+              Caixa ligada — pagamentos entram direto no teu IBAN.
+            </p>
+          )}
+          <p className="text-white/30 text-[11px] mt-2 leading-relaxed">
+            Preço vai 100% para ti; o jogador paga +0,50€ de taxa. Sem Caixa, marca pagamentos manualmente na lista.
           </p>
         </div>
 

@@ -1,6 +1,5 @@
 /**
- * peladaBilling — cliente dos pagamentos de pelada (Stripe Connect).
- * Ambas as funções redirecionam para páginas do Stripe; erros mostram toast.
+ * peladaBilling — Caixa do organizador e pagamentos de pelada (Stripe Connect).
  */
 
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -9,31 +8,73 @@ import { toast } from "@/hooks/use-toast";
 import { callableErrorMessage } from "./callableError";
 import { openStripeUrl } from "./billing";
 
-/** Organizador: liga (ou retoma) a conta Stripe Express */
-export async function startConnectOnboarding(): Promise<void> {
+type ConnectIntent = "onboard" | "manage";
+
+type ConnectLinkInput = {
+  origin: string;
+  returnPath?: string;
+  intent?: ConnectIntent;
+};
+
+function currentReturnPath(): string {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+async function openConnectLink(options: {
+  returnPath?: string;
+  intent?: ConnectIntent;
+  toastOnOpen?: boolean;
+}): Promise<void> {
   if (!isFirebaseConfigured()) return;
+
+  const returnPath = options.returnPath ?? currentReturnPath();
+  const intent = options.intent ?? "onboard";
+
   try {
-    const fn = httpsCallable<{ origin: string }, { url: string }>(
+    const fn = httpsCallable<ConnectLinkInput, { url: string }>(
       getFunctions(app, "europe-west1"),
       "createConnectOnboarding",
     );
-    const result = await fn({ origin: window.location.origin });
+    const result = await fn({
+      origin: window.location.origin,
+      returnPath,
+      intent,
+    });
     if (!result.data?.url) throw new Error("sem URL");
+
+    if (options.toastOnOpen !== false && intent === "onboard") {
+      toast({
+        title: "Ligar Caixa",
+        description:
+          "Abre noutro separador. Escolhe «Pessoa individual» — configuras agora ou mais tarde.",
+      });
+    }
+
     openStripeUrl(result.data.url);
   } catch (err) {
-    console.warn("[peladaBilling] onboarding:", err);
+    console.warn("[peladaBilling] connect:", err);
     toast({
-      title: "Ligação de pagamentos indisponível",
-      description: callableErrorMessage(
-        err,
-        "Completa a activação do Stripe Connect no Dashboard (modo Test) e tenta outra vez.",
-      ),
+      title: intent === "manage" ? "Não foi possível abrir a Caixa" : "Caixa indisponível",
+      description: callableErrorMessage(err, "Tenta novamente em breve."),
       variant: "destructive",
     });
   }
 }
 
-/** Jogador: paga a pelada (preço → organizador; taxa → app, se aplicável) */
+/** Organizador: primeira ligação da Caixa */
+export function startConnectOnboarding(returnPath?: string): Promise<void> {
+  return openConnectLink({ returnPath, intent: "onboard" });
+}
+
+/** Organizador: painel Stripe — IBAN, dados, histórico */
+export function openOrganizerCaixa(returnPath?: string): Promise<void> {
+  return openConnectLink({ returnPath, intent: "manage", toastOnOpen: false });
+}
+
+/** @deprecated use openOrganizerCaixa */
+export const openOrganizerPayouts = openOrganizerCaixa;
+
+/** Jogador: paga a pelada */
 export async function payPelada(matchId: string): Promise<void> {
   if (!isFirebaseConfigured()) return;
   try {
@@ -46,9 +87,13 @@ export async function payPelada(matchId: string): Promise<void> {
     openStripeUrl(result.data.url);
   } catch (err: unknown) {
     console.warn("[peladaBilling] payPelada:", err);
-    const message =
-      (err as { message?: string })?.message ??
-      "Tenta novamente ou combina com o organizador.";
-    toast({ title: "Não foi possível abrir o pagamento", description: message });
+    toast({
+      title: "Não foi possível abrir o pagamento",
+      description: callableErrorMessage(
+        err,
+        "Tenta novamente ou combina com o organizador.",
+      ),
+      variant: "destructive",
+    });
   }
 }

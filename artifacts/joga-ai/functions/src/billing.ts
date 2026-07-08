@@ -72,6 +72,59 @@ function safeOrigin(origin: unknown): string {
     : "https://jogaai.pt";
 }
 
+const ALLOWED_RETURN_PREFIXES = ["/perfil", "/criar-partida", "/partida/", "/premium", "/jogos"];
+
+function safeReturnPath(path: unknown): string {
+  if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//")) {
+    return "/perfil";
+  }
+  if (path.length > 220) return "/perfil";
+  if (!ALLOWED_RETURN_PREFIXES.some((p) => path === p || path.startsWith(p))) {
+    return "/perfil";
+  }
+  return path;
+}
+
+function stripeConnectReturnUrl(
+  origin: string,
+  returnPath: string,
+  status: "ligado" | "recomecar",
+): string {
+  const sep = returnPath.includes("?") ? "&" : "?";
+  return `${origin}${returnPath}${sep}stripe=${status}`;
+}
+
+function stripeErrorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message?: string }).message ?? "");
+  }
+  return "";
+}
+
+/** Erros de configuração Connect → mensagem legível (evita INTERNAL no cliente). */
+function throwStripeConnectError(err: unknown): never {
+  const stripeMsg = stripeErrorMessage(err);
+  if (stripeMsg.includes("signed up for Connect")) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Stripe Connect ainda não está activo. No Dashboard (modo Test), abre dashboard.stripe.com/test/connect, clica «Continuar configuração», escolhe Plataforma e completa o guia até ao fim.",
+    );
+  }
+  if (
+    stripeMsg.includes("platform-profile") ||
+    stripeMsg.includes("managing losses")
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Falta aceitar perdas no Modo de teste NORMAL (não na área restrita). No seletor de contas escolhe a conta principal → Modo de teste → dashboard.stripe.com/test/settings/connect/platform-profile → confirma e guarda.",
+    );
+  }
+  if (stripeMsg) {
+    throw new HttpsError("failed-precondition", stripeMsg.slice(0, 280));
+  }
+  throw err;
+}
+
 export const createCheckoutSession = onCall(
   { region: REGION, secrets: [stripeSecretKey] },
   async (request) => {
@@ -227,50 +280,131 @@ function parsePriceCents(price: unknown): number | null {
   return cents >= 50 && cents <= MAX_PELADA_PRICE_CENTS ? cents : null;
 }
 
-/** Onboarding Stripe Connect Express do organizador */
+/** Nome da carta → primeiro/último para pré-preencher o Stripe */
+function splitDisplayName(displayName: string): { first_name?: string; last_name?: string } {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return {};
+  if (parts.length === 1) return { first_name: parts[0] };
+  return { first_name: parts[0], last_name: parts.slice(1).join(" ") };
+}
+
+/** Conta Express mínima: organizador = pessoa, não empresa */
+function organizerAccountParams(
+  uid: string,
+  user: Record<string, unknown>,
+  email?: string,
+): Stripe.AccountCreateParams {
+  const displayName = String(user.displayName ?? "").trim();
+  const individual = splitDisplayName(displayName);
+
+  return {
+    type: "express",
+    country: "PT",
+    email: email || undefined,
+    business_type: "individual",
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    business_profile: {
+      mcc: "7941",
+      product_description: "Organização de peladas de futebol amador",
+      url: "https://jogaai.pt",
+    },
+    individual: {
+      email: email || undefined,
+      ...individual,
+    },
+    metadata: { firebaseUid: uid, role: "organizer" },
+  };
+}
+
+async function syncOrganizerAccountPrefill(
+  stripe: Stripe,
+  accountId: string,
+  uid: string,
+  user: Record<string, unknown>,
+  email?: string,
+): Promise<void> {
+  const account = await stripe.accounts.retrieve(accountId);
+  if (account.details_submitted) return;
+
+  const params = organizerAccountParams(uid, user, email);
+  await stripe.accounts.update(accountId, {
+    email: params.email,
+    business_type: params.business_type,
+    business_profile: params.business_profile,
+    individual: params.individual,
+  });
+}
+
+/** Onboarding ou gestão Stripe Connect Express do organizador */
 export const createConnectOnboarding = onCall(
   { region: REGION, secrets: [stripeSecretKey] },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
 
+    const intent = request.data?.intent === "manage" ? "manage" : "onboard";
+    const returnPath = safeReturnPath(request.data?.returnPath);
+
     const stripe = new Stripe(stripeSecretKey.value());
     const db = getFirestore();
     const userRef = db.doc(`users/${uid}`);
-    let accountId = (await userRef.get()).data()?.stripeAccountId;
+    const userSnap = await userRef.get();
+    const user = userSnap.data() ?? {};
+    const email =
+      (typeof request.auth?.token?.email === "string" && request.auth.token.email) ||
+      (typeof user.email === "string" ? user.email : undefined);
+
+    let accountId = user.stripeAccountId;
 
     if (typeof accountId !== "string" || !accountId.startsWith("acct_")) {
+      if (intent === "manage") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Ainda não ligaste uma conta de recebimentos.",
+        );
+      }
       try {
-        const account = await stripe.accounts.create({
-          type: "express",
-          country: "PT",
-          metadata: { firebaseUid: uid },
-        });
+        const account = await stripe.accounts.create(
+          organizerAccountParams(uid, user, email),
+        );
         accountId = account.id;
         await userRef.set({ stripeAccountId: accountId }, { merge: true });
       } catch (err) {
-        const stripeMsg =
-          err && typeof err === "object" && "message" in err
-            ? String((err as { message?: string }).message ?? "")
-            : "";
-        if (stripeMsg.includes("signed up for Connect")) {
-          throw new HttpsError(
-            "failed-precondition",
-            "Stripe Connect ainda não está activo. No Dashboard (modo Test), abre dashboard.stripe.com/test/connect, clica «Continuar configuração», escolhe Plataforma e completa o guia até ao fim.",
-          );
-        }
-        throw err;
+        throwStripeConnectError(err);
+      }
+    } else {
+      try {
+        await syncOrganizerAccountPrefill(stripe, accountId, uid, user, email);
+      } catch (err) {
+        console.warn("[createConnectOnboarding] prefill:", err);
       }
     }
 
     const origin = safeOrigin(request.data?.origin);
-    const link = await stripe.accountLinks.create({
-      account: accountId,
-      type: "account_onboarding",
-      refresh_url: `${origin}/perfil?stripe=recomecar`,
-      return_url: `${origin}/perfil?stripe=ligado`,
-    });
-    return { url: link.url };
+
+    try {
+      const account = await stripe.accounts.retrieve(accountId);
+
+      if (intent === "manage" && account.charges_enabled) {
+        const login = await stripe.accounts.createLoginLink(accountId);
+        return { url: login.url };
+      }
+
+      const linkType = account.details_submitted ? "account_update" : "account_onboarding";
+      const link = await stripe.accountLinks.create({
+        account: accountId,
+        type: linkType,
+        refresh_url: stripeConnectReturnUrl(origin, returnPath, "recomecar"),
+        return_url: stripeConnectReturnUrl(origin, returnPath, "ligado"),
+        collection_options: { fields: "currently_due" },
+      });
+      return { url: link.url };
+    } catch (err) {
+      throwStripeConnectError(err);
+    }
   },
 );
 
@@ -316,7 +450,7 @@ export const createPeladaCheckout = onCall(
     const org = orgSnap.data() ?? {};
     const accountId = org.stripeAccountId;
     if (typeof accountId !== "string") {
-      throw new HttpsError("failed-precondition", "O organizador ainda não ligou a conta de pagamentos.");
+      throw new HttpsError("failed-precondition", "O organizador ainda não ligou a Caixa.");
     }
 
     const stripe = new Stripe(stripeSecretKey.value());

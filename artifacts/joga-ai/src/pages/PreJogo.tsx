@@ -21,7 +21,8 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
-import { payPelada } from "@/lib/peladaBilling";
+import { payPelada, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
+import { createIncompleteSeedProfile, loadUserProfile } from "@/lib/userRepository";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import {
@@ -35,6 +36,7 @@ import {
 import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
 import { calculateOverall } from "@/lib/cardUtils";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -320,10 +322,12 @@ export default function PreJogo() {
   const { confirm, ConfirmDialog } = useJogaConfirm();
   const { userId, isLinked } = useAuth();
   const { requireLinked } = useAuthGate();
-  const { profile } = useUserProfile();
+  const { profile, refresh } = useUserProfile();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/partida/:id/pre-jogo");
   const matchId = resolveMatchId({ routeMatchId: params?.id });
+  const preJogoPath = `/partida/${matchId}/pre-jogo`;
+  useStripeConnectReturn(() => void refresh());
   useMatchPhaseGuard(matchId, "pre-jogo");
   const returnTo = new URLSearchParams(window.location.search).get("from") || "/jogos";
   const [matchDetails, setMatchDetails] = useState<MatchDetails | null>(null);
@@ -339,6 +343,7 @@ export default function PreJogo() {
   const [rsvpGuestName, setRsvpGuestName] = useState("");
   const [matchStatus, setMatchStatus] = useState<string>("configurando");
   const [paymentsOn, setPaymentsOn] = useState(false);
+  const [organizerCaixaReady, setOrganizerCaixaReady] = useState(false);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
@@ -1174,6 +1179,29 @@ export default function PreJogo() {
   const myWaitlistIndex = userId ? waitlist.findIndex((w) => w.userId === userId) : -1;
   const isInMatch = myPlayerIndex >= 0;
   const isOnWaitlist = myWaitlistIndex >= 0;
+  const myPlayer = myPlayerIndex >= 0 ? players[myPlayerIndex] : null;
+
+  useEffect(() => {
+    const orgId = resolvedOrganizerId;
+    if (!orgId || !paymentsOn) {
+      setOrganizerCaixaReady(false);
+      return;
+    }
+    if (userId === orgId) {
+      setOrganizerCaixaReady(Boolean(profile?.stripeAccountId));
+      return;
+    }
+    let cancelled = false;
+    void loadUserProfile(orgId, createIncompleteSeedProfile(orgId, false), {
+      preferRemote: true,
+    }).then((p) => {
+      if (!cancelled) setOrganizerCaixaReady(Boolean(p?.stripeAccountId));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedOrganizerId, paymentsOn, userId, profile?.stripeAccountId]);
+
   const showRsvpBanner = Boolean(
     !isOrganizer && rosterHydrated && canConfirmPresence(matchStatus),
   );
@@ -1254,6 +1282,11 @@ export default function PreJogo() {
                   {matchDetails.price}{matchDetails.price.toLowerCase().includes("grát") ? "" : "/jogador"}
                 </span>
               )}
+              {paymentsOn && (
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24" }}>
+                  💳 Caixa online
+                </span>
+              )}
               {matchDetails.spotsRemaining && (
                 <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(251,191,36,0.1)", color: "#fbbf24" }}>
                   {matchDetails.spotsRemaining}
@@ -1288,22 +1321,6 @@ export default function PreJogo() {
             ))}
           </div>
 
-          {paymentsOn && userId && (() => {
-            const me = players.find((p) => p.userId === userId);
-            if (!me || me.paid) return null;
-            return (
-              <button
-                type="button"
-                onClick={() => void payPelada(matchId)}
-                className="mt-4 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-                style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
-                data-testid="button-pay-pelada"
-              >
-                💳 Pagar {matchDetails?.price ?? "a pelada"} pela app
-              </button>
-            );
-          })()}
-
           {teamsWithPlayers === 0 && players.length > 0 && (
             <p className="mt-3 text-center text-[11px] font-bold text-white/40">
               {canManageMatch ? (
@@ -1326,6 +1343,27 @@ export default function PreJogo() {
             {isInMatch ? (
               <>
                 <p className="text-blue-200 text-sm font-bold">Estás confirmado nesta pelada.</p>
+
+                {paymentsOn && !isOrganizer && myPlayer && !myPlayer.paid && (
+                  <div className="mt-3">
+                    {organizerCaixaReady ? (
+                      <button
+                        type="button"
+                        onClick={() => void payPelada(matchId)}
+                        className="w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+                        style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
+                        data-testid="button-pay-pelada"
+                      >
+                        💳 Pagar {matchDetails?.price ?? "a pelada"} pela Caixa
+                      </button>
+                    ) : (
+                      <p className="text-amber-200/80 text-xs leading-relaxed rounded-xl px-3 py-2.5" style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.22)" }}>
+                        Pagamento online em breve — o organizador ainda está a ligar a Caixa. Por agora combina pagamento manual com ele.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <JogaButton
                   variant="ghost"
                   size="sm"
@@ -1376,6 +1414,58 @@ export default function PreJogo() {
                 >
                   Confirmar presença
                 </JogaButton>
+              </>
+            )}
+          </section>
+        )}
+
+        {isOrganizer && paymentsOn && (
+          <section
+            className="rounded-2xl p-4"
+            style={{
+              background: organizerCaixaReady
+                ? "rgba(74,222,128,0.08)"
+                : "rgba(251,191,36,0.08)",
+              border: `1px solid ${organizerCaixaReady ? "rgba(74,222,128,0.28)" : "rgba(251,191,36,0.28)"}`,
+            }}
+            data-testid="organizer-caixa-setup"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45 flex items-center gap-1.5">
+              <CreditCard className="w-3 h-3" />
+              Caixa da pelada
+            </p>
+            {organizerCaixaReady ? (
+              <>
+                <p className="text-white text-sm font-bold mt-2">Caixa ligada ✓</p>
+                <p className="text-white/45 text-xs mt-1">
+                  Os jogadores confirmados já podem pagar online nesta pelada.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void openOrganizerCaixa(preJogoPath)}
+                  className="mt-3 w-full rounded-xl py-2.5 text-xs font-black text-white/80"
+                  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}
+                >
+                  Gerir Caixa (IBAN, dados)
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-white/70 text-sm mt-2 leading-relaxed">
+                  Esta pelada aceita pagamento online. Liga a tua Caixa para os jogadores pagarem (~2 min).
+                </p>
+                <p className="text-white/35 text-[11px] mt-2 leading-relaxed">
+                  Enquanto não ligas, eles só podem combinar contigo — marca «pago» manualmente na lista.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void startConnectOnboarding(preJogoPath)}
+                  className="mt-3 w-full rounded-xl py-3 font-black text-sm text-amber-950"
+                  style={{ background: "linear-gradient(135deg, #fbbf24, #f59e0b)" }}
+                  data-testid="button-setup-caixa-prejogo"
+                >
+                  Ligar Caixa
+                </button>
               </>
             )}
           </section>

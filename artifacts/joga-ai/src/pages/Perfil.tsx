@@ -8,6 +8,7 @@ import { SkinPicker } from "@/components/SkinPicker";
 import { hasPlayerPro, isOrganizerPro, isProActive } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProfileSubscriptionCard } from "@/components/ProfileSubscriptionCard";
+import { ProfileCaixaCard } from "@/components/ProfileCaixaCard";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
@@ -16,6 +17,7 @@ import { calculateOverall } from "@/lib/cardUtils";
 import { useUserId, useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
 import { ProfileEditDialog } from "@/components/profile/ProfileEditDialog";
@@ -173,6 +175,7 @@ export default function Perfil() {
     "/comunidades";
 
   const { profile, refresh, loading: ownProfileLoading } = useUserProfile();
+  useStripeConnectReturn(() => void refresh());
   const [viewedProfile, setViewedProfile] = useState<UserProfile | null>(null);
   const [viewLoading, setViewLoading] = useState(Boolean(viewUserId));
 
@@ -603,6 +606,10 @@ export default function Perfil() {
 
         {!isViewingOther && (
           <ProfileSubscriptionCard profile={activeProfile} />
+        )}
+
+        {!isViewingOther && (
+          <ProfileCaixaCard profile={activeProfile} />
         )}
 
         <JogaCard variant="arena" className="flex items-center gap-4">

@@ -23,7 +23,8 @@ import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
 import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
-import { payPelada, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
+import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
+import { formatCentsEuro, peladaCheckoutTotalCents } from "@/lib/peladaWallet";
 import { createIncompleteSeedProfile, loadUserProfile } from "@/lib/userRepository";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
@@ -820,7 +821,7 @@ export default function PreJogo() {
       const ok = await confirm({
         title: "Sair da pelada?",
         description:
-          "O teu pagamento online não é reembolsável. O valor fica registado — créditos para jogos futuros estão a chegar.",
+          "O pagamento não é reembolsável em dinheiro. O valor passa para o teu saldo Joga AI para usares noutras peladas.",
         confirmLabel: "Sair mesmo assim",
         destructive: true,
       });
@@ -829,7 +830,14 @@ export default function PreJogo() {
 
     setRsvpBusy(true);
     try {
-      await leaveMatch(matchId, userId);
+      let creditedCents = 0;
+      if (myPlayer?.paid && paymentsOn) {
+        const result = await leavePeladaMatch(matchId);
+        creditedCents = result.creditedCents;
+        void refresh();
+      } else {
+        await leaveMatch(matchId, userId);
+      }
       const merged = await loadMatchFromFirestore(matchId);
       if (merged?.waitlist) setWaitlist(merged.waitlist);
       if (merged?.players) {
@@ -848,7 +856,13 @@ export default function PreJogo() {
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setPlayerTeams(merged.playerTeams ?? {});
       }
-      toast({ title: "Saíste da pelada" });
+      toast({
+        title: "Saíste da pelada",
+        description:
+          creditedCents > 0
+            ? `${formatCentsEuro(creditedCents)} adicionados ao teu saldo.`
+            : undefined,
+      });
     } catch (err) {
       toast({
         title: "Erro ao sair",
@@ -1252,7 +1266,18 @@ export default function PreJogo() {
   const isOnWaitlist = myWaitlistIndex >= 0;
   const myPlayer = myPlayerIndex >= 0 ? players[myPlayerIndex] : null;
 
-  function handleJoinClick() {
+  const peladaTotalCents = useMemo(
+    () => peladaCheckoutTotalCents(matchDetails?.price),
+    [matchDetails?.price],
+  );
+  const peladaSaldoCents = profile.peladaBalanceCents ?? 0;
+  const canPayWithSaldo = Boolean(
+    paymentsOn &&
+      peladaTotalCents &&
+      peladaSaldoCents >= peladaTotalCents,
+  );
+
+  async function handleJoinClick() {
     if (!requireLinked({
       mode: "register",
       title: "Cria conta para confirmar presença",
@@ -1261,7 +1286,33 @@ export default function PreJogo() {
       return;
     }
     if (paymentsOn && !isOrganizer && organizerCaixaReady) {
-      void payPelada(matchId);
+      setRsvpBusy(true);
+      try {
+        const result = await payPelada(matchId);
+        if (result === "balance") {
+          void refresh();
+          const merged = await loadMatchFromFirestore(matchId);
+          if (merged?.waitlist) setWaitlist(merged.waitlist);
+          if (merged?.players && userId) {
+            const mapped = merged.players.map((p) => ({
+              id: p.id,
+              name: p.name,
+              position: p.position,
+              overall: p.overall,
+              paid: p.paid ?? false,
+              isMe: p.userId === userId,
+              manual: p.manual,
+              userId: p.userId,
+              guestId: p.guestId,
+              loanCard: p.loanCard,
+            }));
+            setPlayers(linkPlayersInRoster(mapped, userId));
+            setPlayerTeams(merged.playerTeams ?? {});
+          }
+        }
+      } finally {
+        setRsvpBusy(false);
+      }
       return;
     }
     if (needsProfileName && !showRsvpNameForm) {
@@ -1402,7 +1453,7 @@ export default function PreJogo() {
 
           {paymentsOn && (
             <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
-              Pagamentos online não são reembolsáveis se saíres da pelada. Se o organizador cancelar a partida, os valores pagos são devolvidos automaticamente.
+              Pagamentos online não são reembolsáveis em dinheiro se saíres — o valor fica no teu saldo para outras peladas. Se o organizador cancelar, os valores pagos são devolvidos automaticamente.
             </p>
           )}
 
@@ -1477,6 +1528,14 @@ export default function PreJogo() {
             ) : (
               <>
                 <p className="text-white font-bold text-sm">Queres jogar nesta pelada?</p>
+                {paymentsOn && peladaSaldoCents > 0 && (
+                  <p className="text-emerald-200/90 text-xs mt-2 leading-relaxed">
+                    💰 Tens {formatCentsEuro(peladaSaldoCents)} de saldo
+                    {canPayWithSaldo
+                      ? " — vamos usar automaticamente nesta pelada."
+                      : " — podes usar parte ao pagar outras peladas."}
+                  </p>
+                )}
                 {paymentsOn && !organizerCaixaReady && (
                   <p className="text-amber-200/80 text-xs mt-2 leading-relaxed">
                     Pagamento online em breve — o organizador ainda está a ligar a Caixa.
@@ -1503,7 +1562,9 @@ export default function PreJogo() {
                   data-testid={paymentsOn ? "button-pay-pelada" : "button-confirm-rsvp"}
                 >
                   {paymentsOn
-                    ? `💳 Pagar ${formatMatchPriceAmount(matchDetails?.price) ?? ""} e confirmar presença`
+                    ? canPayWithSaldo
+                      ? `💰 Usar saldo (${formatCentsEuro(peladaTotalCents ?? 0)}) e confirmar presença`
+                      : `💳 Pagar ${formatMatchPriceAmount(matchDetails?.price) ?? ""} e confirmar presença`
                     : "Confirmar presença"}
                 </JogaButton>
               </>

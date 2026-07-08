@@ -9,6 +9,7 @@ import { hasPlayerPro, isOrganizerPro, isProActive } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProfileSubscriptionCard } from "@/components/ProfileSubscriptionCard";
 import { ProfileCaixaCard } from "@/components/ProfileCaixaCard";
+import { ProfilePeladaSaldoCard } from "@/components/ProfilePeladaSaldoCard";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
@@ -606,6 +607,10 @@ export default function Perfil() {
 
         {!isViewingOther && (
           <ProfileSubscriptionCard profile={activeProfile} />
+        )}
+
+        {!isViewingOther && (
+          <ProfilePeladaSaldoCard profile={activeProfile} />
         )}
 
         {!isViewingOther && (

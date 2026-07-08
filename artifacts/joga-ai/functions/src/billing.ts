@@ -14,6 +14,7 @@
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import type { Transaction, DocumentSnapshot, DocumentReference, Firestore, DocumentData } from "firebase-admin/firestore";
 import Stripe from "stripe";
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
@@ -527,6 +528,174 @@ export const createPeladaCheckout = onCall(
 );
 
 /** Marca o jogador como pago e confirma presença automaticamente */
+type PeladaPayInput = {
+  sessionId: string;
+  paymentIntentId: string;
+  amountCents: number;
+  paidVia: "app" | "balance";
+};
+
+function applyPeladaPlayerPaidInTx(
+  tx: Transaction,
+  ref: DocumentReference,
+  snap: DocumentSnapshot,
+  uid: string,
+  user: Record<string, unknown>,
+  payment: PeladaPayInput,
+): void {
+  if (!snap.exists) return;
+  const data = snap.data() ?? {};
+  const players: Array<Record<string, unknown>> = Array.isArray(data.players)
+    ? [...(data.players as Array<Record<string, unknown>>)]
+    : [];
+  const peladaPayments: Array<Record<string, unknown>> = Array.isArray(data.peladaPayments)
+    ? [...(data.peladaPayments as Array<Record<string, unknown>>)]
+    : [];
+
+  if (
+    payment.paymentIntentId &&
+    !peladaPayments.some((p) => p.paymentIntentId === payment.paymentIntentId)
+  ) {
+    peladaPayments.push({
+      userId: uid,
+      sessionId: payment.sessionId,
+      paymentIntentId: payment.paymentIntentId,
+      amountCents: payment.amountCents,
+      paidAt: new Date().toISOString(),
+      paidVia: payment.paidVia,
+    });
+  }
+
+  const paidAt = new Date().toISOString();
+  const idx = players.findIndex((pl) => pl.userId === uid);
+  if (idx >= 0) {
+    players[idx] = {
+      ...players[idx],
+      paid: true,
+      paidVia: payment.paidVia,
+      paidAt,
+    };
+    tx.update(ref, { players, peladaPayments, savedAt: FieldValue.serverTimestamp() });
+    return;
+  }
+
+  const maxPlayers = Math.max(4, Number(data.maxPlayers) || 14);
+  if (players.length >= maxPlayers) {
+    const paidUserIds: string[] = Array.isArray(data.paidUserIds)
+      ? [...(data.paidUserIds as string[])]
+      : [];
+    if (!paidUserIds.includes(uid)) paidUserIds.push(uid);
+    tx.update(ref, { paidUserIds, peladaPayments, savedAt: FieldValue.serverTimestamp() });
+    return;
+  }
+
+  const newPlayer = {
+    id: uid,
+    userId: uid,
+    name: String(user.displayName ?? "Jogador").trim() || "Jogador",
+    position: String(user.position ?? "MEI"),
+    overall: Number(user.overall ?? 50) || 50,
+    paid: true,
+    paidVia: payment.paidVia,
+    paidAt,
+    isMe: false,
+  };
+  const playerTeams = {
+    ...(typeof data.playerTeams === "object" && data.playerTeams
+      ? (data.playerTeams as Record<string, unknown>)
+      : {}),
+    [uid]: "BENCH",
+  };
+  const participantUserIds = Array.from(
+    new Set([
+      ...(Array.isArray(data.participantUserIds) ? (data.participantUserIds as string[]) : []),
+      uid,
+    ]),
+  );
+  const paidUserIds = (Array.isArray(data.paidUserIds) ? (data.paidUserIds as string[]) : [])
+    .filter((id) => id !== uid);
+
+  tx.update(ref, {
+    players: [...players, newPlayer],
+    playerTeams,
+    participantUserIds,
+    paidUserIds,
+    peladaPayments,
+    savedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+async function promoteWaitlistAfterLeave(db: Firestore, matchId: string): Promise<void> {
+  await db.runTransaction(async (tx) => {
+    const ref = db.doc(`matches/${matchId}`);
+    const snap = await tx.get(ref);
+    if (!snap.exists) return;
+    const data = snap.data() ?? {};
+    const waitlist: Array<Record<string, unknown>> = Array.isArray(data.waitlist)
+      ? [...(data.waitlist as Array<Record<string, unknown>>)]
+      : [];
+    if (!waitlist.length) return;
+
+    const maxPlayers = Math.max(4, Number(data.maxPlayers) || 14);
+    const players: Array<Record<string, unknown>> = Array.isArray(data.players)
+      ? [...(data.players as Array<Record<string, unknown>>)]
+      : [];
+    if (players.length >= maxPlayers) return;
+
+    const promoted = waitlist.shift()!;
+    const uid = String(promoted.userId ?? "");
+    if (!uid) return;
+
+    const playerTeams = {
+      ...(typeof data.playerTeams === "object" && data.playerTeams
+        ? (data.playerTeams as Record<string, unknown>)
+        : {}),
+      [uid]: "BENCH",
+    };
+    const newPlayer = {
+      id: uid,
+      userId: uid,
+      name: String(promoted.name ?? "Jogador"),
+      position: String(promoted.position ?? "MEI"),
+      overall: Number(promoted.overall ?? 50) || 50,
+      paid: false,
+    };
+
+    tx.update(ref, {
+      players: [...players, newPlayer],
+      waitlist,
+      playerTeams,
+      savedAt: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+function assertPeladaPayable(
+  match: DocumentData,
+  uid: string,
+): { priceCents: number; totalCents: number } {
+  if (match.paymentsEnabled !== true) {
+    throw new HttpsError("failed-precondition", "Esta pelada não aceita pagamentos na app.");
+  }
+  const players: Array<{ userId?: string; paid?: boolean }> = Array.isArray(match.players)
+    ? match.players
+    : [];
+  const paidUserIds: string[] = Array.isArray(match.paidUserIds) ? match.paidUserIds : [];
+  if (players.find((pl) => pl.userId === uid)?.paid === true || paidUserIds.includes(uid)) {
+    throw new HttpsError("already-exists", "Já está pago. ✅");
+  }
+
+  const priceCents = parsePriceCents(match.price);
+  if (!priceCents) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Preço inválido — define entre 0,50€ e 5€ por jogador.",
+    );
+  }
+
+  return { priceCents, totalCents: priceCents + PLAYER_FEE_CENTS };
+}
+
 export async function markPlayerPaidFromSession(
   session: Stripe.Checkout.Session,
 ): Promise<void> {
@@ -546,88 +715,179 @@ export async function markPlayerPaidFromSession(
   await db.runTransaction(async (tx) => {
     const ref = db.doc(`matches/${matchId}`);
     const snap = await tx.get(ref);
-    if (!snap.exists) return;
-    const data = snap.data() ?? {};
-    const players: Array<Record<string, unknown>> = Array.isArray(data.players)
-      ? [...(data.players as Array<Record<string, unknown>>)]
-      : [];
-    const peladaPayments: Array<Record<string, unknown>> = Array.isArray(data.peladaPayments)
-      ? [...(data.peladaPayments as Array<Record<string, unknown>>)]
-      : [];
-
-    if (
-      paymentIntentId &&
-      !peladaPayments.some((p) => p.paymentIntentId === paymentIntentId)
-    ) {
-      peladaPayments.push({
-        userId: uid,
-        sessionId: session.id,
-        paymentIntentId,
-        amountCents,
-        paidAt: new Date().toISOString(),
-      });
-    }
-
-    const paidAt = new Date().toISOString();
-    const idx = players.findIndex((pl) => pl.userId === uid);
-    if (idx >= 0) {
-      players[idx] = {
-        ...players[idx],
-        paid: true,
-        paidVia: "app",
-        paidAt,
-      };
-      tx.update(ref, { players, peladaPayments, savedAt: FieldValue.serverTimestamp() });
-      return;
-    }
-
-    const maxPlayers = Math.max(4, Number(data.maxPlayers) || 14);
-    if (players.length >= maxPlayers) {
-      const paidUserIds: string[] = Array.isArray(data.paidUserIds)
-        ? [...(data.paidUserIds as string[])]
-        : [];
-      if (!paidUserIds.includes(uid)) paidUserIds.push(uid);
-      tx.update(ref, { paidUserIds, peladaPayments, savedAt: FieldValue.serverTimestamp() });
-      return;
-    }
-
-    const newPlayer = {
-      id: uid,
-      userId: uid,
-      name: String(user.displayName ?? "Jogador").trim() || "Jogador",
-      position: String(user.position ?? "MEI"),
-      overall: Number(user.overall ?? 50) || 50,
-      paid: true,
+    applyPeladaPlayerPaidInTx(tx, ref, snap, uid, user, {
+      sessionId: session.id,
+      paymentIntentId,
+      amountCents,
       paidVia: "app",
-      paidAt,
-      isMe: false,
-    };
-    const playerTeams = {
-      ...(typeof data.playerTeams === "object" && data.playerTeams
-        ? (data.playerTeams as Record<string, unknown>)
-        : {}),
-      [uid]: "BENCH",
-    };
-    const participantUserIds = Array.from(
-      new Set([
-        ...(Array.isArray(data.participantUserIds) ? (data.participantUserIds as string[]) : []),
-        uid,
-      ]),
-    );
-    const paidUserIds = (Array.isArray(data.paidUserIds) ? (data.paidUserIds as string[]) : [])
-      .filter((id) => id !== uid);
-
-    tx.update(ref, {
-      players: [...players, newPlayer],
-      playerTeams,
-      participantUserIds,
-      paidUserIds,
-      peladaPayments,
-      savedAt: FieldValue.serverTimestamp(),
     });
   });
   console.log(`[stripeWebhook] pelada ${matchId}: ${uid} pago e confirmado.`);
 }
+
+/** Paga pelada com saldo interno (sem Stripe) */
+export const payPeladaWithBalance = onCall(
+  { region: REGION },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    const matchId = String(request.data?.matchId ?? "");
+    if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
+
+    const db = getFirestore();
+    let balanceUsedCents = 0;
+    let remainingBalanceCents = 0;
+
+    await db.runTransaction(async (tx) => {
+      const matchRef = db.doc(`matches/${matchId}`);
+      const userRef = db.doc(`users/${uid}`);
+      const [matchSnap, userSnap] = await Promise.all([tx.get(matchRef), tx.get(userRef)]);
+      const match = matchSnap.data();
+      if (!match) throw new HttpsError("not-found", "Pelada não encontrada.");
+
+      const { totalCents } = assertPeladaPayable(match, uid);
+      const balance = Number(userSnap.data()?.peladaBalanceCents) || 0;
+      if (balance < totalCents) {
+        throw new HttpsError("failed-precondition", "Saldo insuficiente.", {
+          reason: "INSUFFICIENT_BALANCE",
+        });
+      }
+
+      balanceUsedCents = totalCents;
+      remainingBalanceCents = balance - totalCents;
+      tx.update(userRef, {
+        peladaBalanceCents: remainingBalanceCents,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      const paymentIntentId = `balance_${uid}_${Date.now()}`;
+      applyPeladaPlayerPaidInTx(tx, matchRef, matchSnap, uid, userSnap.data() ?? {}, {
+        sessionId: "",
+        paymentIntentId,
+        amountCents: totalCents,
+        paidVia: "balance",
+      });
+    });
+
+    console.log(`[payPeladaWithBalance] ${matchId}: ${uid} usou ${balanceUsedCents}c de saldo.`);
+    return { paid: true, balanceUsedCents, remainingBalanceCents };
+  },
+);
+
+/** Sai da pelada e credita pagamento ao saldo (sem reembolso Stripe) */
+export const leavePeladaWithBalanceCredit = onCall(
+  { region: REGION },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    const matchId = String(request.data?.matchId ?? "");
+    if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
+
+    const db = getFirestore();
+    let creditedCents = 0;
+    let shouldPromote = false;
+
+    await db.runTransaction(async (tx) => {
+      const matchRef = db.doc(`matches/${matchId}`);
+      const userRef = db.doc(`users/${uid}`);
+      const [matchSnap, userSnap] = await Promise.all([tx.get(matchRef), tx.get(userRef)]);
+      const data = matchSnap.data();
+      if (!data) throw new HttpsError("not-found", "Pelada não encontrada.");
+      if (String(data.organizerId ?? "") === uid) {
+        throw new HttpsError("permission-denied", "O organizador não pode sair da própria pelada.");
+      }
+
+      let players: Array<Record<string, unknown>> = Array.isArray(data.players)
+        ? [...(data.players as Array<Record<string, unknown>>)]
+        : [];
+      let waitlist: Array<Record<string, unknown>> = Array.isArray(data.waitlist)
+        ? [...(data.waitlist as Array<Record<string, unknown>>)]
+        : [];
+      const playerTeams = {
+        ...(typeof data.playerTeams === "object" && data.playerTeams
+          ? (data.playerTeams as Record<string, unknown>)
+          : {}),
+      };
+      const assignments = {
+        ...(typeof data.assignments === "object" && data.assignments
+          ? (data.assignments as Record<string, unknown>)
+          : {}),
+      };
+      let paidUserIds: string[] = Array.isArray(data.paidUserIds)
+        ? [...(data.paidUserIds as string[])]
+        : [];
+      let peladaPayments: Array<Record<string, unknown>> = Array.isArray(data.peladaPayments)
+        ? [...(data.peladaPayments as Array<Record<string, unknown>>)]
+        : [];
+
+      const wlIdx = waitlist.findIndex((w) => w.userId === uid);
+      if (wlIdx >= 0) {
+        waitlist.splice(wlIdx, 1);
+        tx.update(matchRef, { waitlist, savedAt: FieldValue.serverTimestamp() });
+        return;
+      }
+
+      const pIdx = players.findIndex((pl) => pl.userId === uid || pl.id === uid);
+      const wasOnPaidList = paidUserIds.includes(uid);
+      if (pIdx < 0 && !wasOnPaidList) return;
+
+      if (pIdx >= 0) {
+        const removedId = String(players[pIdx].id ?? uid);
+        players = players.filter((_, i) => i !== pIdx);
+        delete playerTeams[removedId];
+        for (const key of Object.keys(assignments)) {
+          if (assignments[key] === removedId) assignments[key] = null;
+        }
+        shouldPromote = true;
+      }
+
+      paidUserIds = paidUserIds.filter((id) => id !== uid);
+
+      const payIdx = peladaPayments.findIndex(
+        (p) =>
+          p.userId === uid &&
+          p.creditedToBalance !== true &&
+          p.refunded !== true,
+      );
+      if (payIdx >= 0) {
+        creditedCents = Number(peladaPayments[payIdx].amountCents) || 0;
+        peladaPayments[payIdx] = {
+          ...peladaPayments[payIdx],
+          creditedToBalance: true,
+        };
+        if (creditedCents > 0) {
+          const currentBalance = Number(userSnap.data()?.peladaBalanceCents) || 0;
+          tx.update(userRef, {
+            peladaBalanceCents: currentBalance + creditedCents,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      const participantUserIds = (Array.isArray(data.participantUserIds)
+        ? (data.participantUserIds as string[])
+        : []
+      ).filter((id) => id !== uid);
+
+      tx.update(matchRef, {
+        players,
+        waitlist,
+        playerTeams,
+        assignments,
+        paidUserIds,
+        peladaPayments,
+        participantUserIds,
+        savedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    if (shouldPromote) {
+      await promoteWaitlistAfterLeave(db, matchId);
+    }
+
+    return { creditedCents };
+  },
+);
 
 /** Cancela pelada e reembolsa pagamentos online */
 export const cancelPeladaWithRefunds = onCall(
@@ -659,6 +919,22 @@ export const cancelPeladaWithRefunds = onCall(
 
     for (const payment of payments) {
       if (payment.refunded === true) continue;
+      const paidVia = String(payment.paidVia ?? "app");
+      const payerId = String(payment.userId ?? "");
+      const amountCents = Number(payment.amountCents) || 0;
+
+      if (paidVia === "balance" && payerId && amountCents > 0) {
+        const userRef = db.doc(`users/${payerId}`);
+        const userSnap = await userRef.get();
+        const bal = Number(userSnap.data()?.peladaBalanceCents) || 0;
+        await userRef.set(
+          { peladaBalanceCents: bal + amountCents, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        );
+        payment.refunded = true;
+        continue;
+      }
+
       const paymentIntentId = String(payment.paymentIntentId ?? "");
       if (!paymentIntentId.startsWith("pi_")) continue;
       try {

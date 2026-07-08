@@ -14,6 +14,8 @@ export type PeladaPayment = {
   amountCents: number;
   paidAt: string;
   refunded?: boolean;
+  creditedToBalance?: boolean;
+  paidVia?: "app" | "balance";
 };
 
 export type SavedPostMatch = {

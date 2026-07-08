@@ -20,6 +20,15 @@ function currentReturnPath(): string {
   return `${window.location.pathname}${window.location.search}`;
 }
 
+function isInsufficientBalance(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { details?: { reason?: string } | string };
+  if (typeof e.details === "object" && e.details?.reason === "INSUFFICIENT_BALANCE") {
+    return true;
+  }
+  return false;
+}
+
 async function openConnectLink(options: {
   returnPath?: string;
   intent?: ConnectIntent;
@@ -85,9 +94,48 @@ export async function cancelPeladaWithRefunds(matchId: string): Promise<number> 
   return result.data?.refunded ?? 0;
 }
 
-/** Jogador: paga a pelada */
-export async function payPelada(matchId: string): Promise<void> {
-  if (!isFirebaseConfigured()) return;
+/** Sai da pelada e credita pagamento ao saldo interno */
+export async function leavePeladaMatch(matchId: string): Promise<{ creditedCents: number }> {
+  if (!isFirebaseConfigured()) return { creditedCents: 0 };
+  const fn = httpsCallable<{ matchId: string }, { creditedCents: number }>(
+    getFunctions(app, "europe-west1"),
+    "leavePeladaWithBalanceCredit",
+  );
+  const result = await fn({ matchId });
+  return { creditedCents: result.data?.creditedCents ?? 0 };
+}
+
+export type PayPeladaResult = "balance" | "stripe" | "error";
+
+/** Jogador: paga a pelada (saldo primeiro, depois Stripe) */
+export async function payPelada(matchId: string): Promise<PayPeladaResult> {
+  if (!isFirebaseConfigured()) return "error";
+
+  try {
+    const balanceFn = httpsCallable<{ matchId: string }, { paid: boolean }>(
+      getFunctions(app, "europe-west1"),
+      "payPeladaWithBalance",
+    );
+    const balanceResult = await balanceFn({ matchId });
+    if (balanceResult.data?.paid) {
+      toast({
+        title: "Pago com saldo ✓",
+        description: "Presença confirmada nesta pelada.",
+      });
+      return "balance";
+    }
+  } catch (err: unknown) {
+    if (!isInsufficientBalance(err)) {
+      console.warn("[peladaBilling] payPeladaWithBalance:", err);
+      toast({
+        title: "Não foi possível usar o saldo",
+        description: callableErrorMessage(err, "Tenta novamente."),
+        variant: "destructive",
+      });
+      return "error";
+    }
+  }
+
   try {
     const fn = httpsCallable<
       { matchId: string; origin: string },
@@ -96,6 +144,7 @@ export async function payPelada(matchId: string): Promise<void> {
     const result = await fn({ matchId, origin: window.location.origin });
     if (!result.data?.url) throw new Error("sem URL");
     openStripeUrl(result.data.url);
+    return "stripe";
   } catch (err: unknown) {
     console.warn("[peladaBilling] payPelada:", err);
     toast({
@@ -106,5 +155,6 @@ export async function payPelada(matchId: string): Promise<void> {
       ),
       variant: "destructive",
     });
+    return "error";
   }
 }

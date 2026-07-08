@@ -136,12 +136,12 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isSignedIn();
       // entitlements (PRO) é concedido por Cloud Functions (Stripe) ou admin da app.
       allow create: if isOwner(userId)
-        && !request.resource.data.keys().hasAny(['entitlements']);
+        && !request.resource.data.keys().hasAny(['entitlements', 'peladaBalanceCents']);
       // Revert de evolução: só o organizador da partida, só os campos do revert,
       // e apenas se o user realmente participou dessa partida (tem matchHistory dela).
       allow update: if (
         isOwner(userId)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['entitlements'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['entitlements', 'peladaBalanceCents'])
       ) || isAdminUserMaintenanceUpdate() || (
         isSignedIn()
         && request.resource.data.keys().hasAll(['_revertForMatchId'])

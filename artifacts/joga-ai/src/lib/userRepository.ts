@@ -93,6 +93,8 @@ export type UserProfile = {
   entitlements?: import("./entitlements").Entitlements;
   /** Conta Stripe Connect do organizador — escrito só por Functions */
   stripeAccountId?: string;
+  /** Saldo em cêntimos para pagar peladas futuras — escrito só por Functions */
+  peladaBalanceCents?: number;
   updatedAt?: string;
 };
 
@@ -289,6 +291,9 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
       ? (data.entitlements as UserProfile["entitlements"])
       : undefined,
     stripeAccountId: data.stripeAccountId ? String(data.stripeAccountId) : undefined,
+    peladaBalanceCents: Number.isFinite(Number(data.peladaBalanceCents))
+      ? Number(data.peladaBalanceCents)
+      : undefined,
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }
@@ -355,7 +360,7 @@ function profileForFirestore(profile: UserProfile) {
   // Nunca escrever entitlements a partir do cliente (bloqueado pelas rules;
   // concedido apenas por Functions via Stripe).
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { entitlements: _entitlements, ...clientProfile } = profile;
+  const { entitlements: _entitlements, peladaBalanceCents: _balance, stripeAccountId: _stripe, ...clientProfile } = profile;
   profile = clientProfile as UserProfile;
   const { uid: _uid, ...rest } = profile;
   return rest;

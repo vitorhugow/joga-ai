@@ -10,6 +10,6 @@ import { initializeApp } from "firebase-admin/app";
 
 initializeApp();
 
-export { createCheckoutSession, createPortalSession, stripeWebhook, createConnectOnboarding, createPeladaCheckout, cancelPeladaWithRefunds } from "./billing";
+export { createCheckoutSession, createPortalSession, stripeWebhook, createConnectOnboarding, createPeladaCheckout, cancelPeladaWithRefunds, payPeladaWithBalance, leavePeladaWithBalanceCredit } from "./billing";
 export { closeExpiredMatches } from "./closeExpiredMatches";
 export { paymentReminders } from "./paymentReminders";

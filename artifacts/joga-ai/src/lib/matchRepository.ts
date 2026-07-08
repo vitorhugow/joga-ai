@@ -889,6 +889,13 @@ function mergeMatchSources(
     title: base?.title,
     communityId: base?.communityId,
     organizerId: base?.organizerId,
+    paymentsEnabled:
+      remoteValid?.paymentsEnabled ??
+      localValid?.paymentsEnabled ??
+      loadMatchDetails(matchId)?.paymentsEnabled ??
+      false,
+    proBadge: remoteValid?.proBadge ?? localValid?.proBadge ?? false,
+    openToExternal: remoteValid?.openToExternal ?? localValid?.openToExternal,
   };
 }
 

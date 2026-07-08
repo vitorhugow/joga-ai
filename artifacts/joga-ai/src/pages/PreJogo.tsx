@@ -21,6 +21,7 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
+import { formatMatchPricePerPlayer } from "@/lib/formatMatchPrice";
 import { payPelada, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
 import { createIncompleteSeedProfile, loadUserProfile } from "@/lib/userRepository";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
@@ -354,6 +355,7 @@ export default function PreJogo() {
     setMatchDetails(details);
     if (details?.communityId) setMatchCommunityId(details.communityId);
     if (details?.organizerId) setOrganizerId(details.organizerId);
+    if (details?.paymentsEnabled) setPaymentsOn(true);
   }, [matchId]);
 
   useEffect(() => {
@@ -372,7 +374,17 @@ export default function PreJogo() {
       }
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
       setMatchStatus(merged?.status ?? "configurando");
-      setPaymentsOn(merged?.paymentsEnabled ?? false);
+      const details = loadMatchDetails(matchId);
+      const payments =
+        merged?.paymentsEnabled ?? details?.paymentsEnabled ?? false;
+      setPaymentsOn(payments);
+      if (details || merged?.paymentsEnabled) {
+        setMatchDetails((prev) => {
+          const base = prev ?? details;
+          if (!base) return prev;
+          return { ...base, paymentsEnabled: payments };
+        });
+      }
 
       if (cancelled) return;
 
@@ -1279,7 +1291,7 @@ export default function PreJogo() {
               </span>
               {matchDetails.price && (
                 <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(96,165,250,0.1)", color: "#60a5fa" }}>
-                  {matchDetails.price}{matchDetails.price.toLowerCase().includes("grát") ? "" : "/jogador"}
+                  💰 {formatMatchPricePerPlayer(matchDetails.price) ?? matchDetails.price}
                 </span>
               )}
               {paymentsOn && (
@@ -1334,6 +1346,52 @@ export default function PreJogo() {
       </div>
 
       <div className="px-4 space-y-5 pt-5">
+        {rosterHydrated && paymentsOn && !isOrganizer && (
+          <section
+            className="rounded-2xl p-4"
+            style={{
+              background: myPlayer?.paid
+                ? "rgba(16,185,129,0.1)"
+                : "rgba(251,191,36,0.1)",
+              border: `1px solid ${myPlayer?.paid ? "rgba(16,185,129,0.28)" : "rgba(251,191,36,0.28)"}`,
+            }}
+            data-testid="player-payment-section"
+          >
+            <p className="text-sm font-black text-white flex items-center gap-2">
+              💳 Caixa online
+              {myPlayer?.paid && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.2)", color: "#34d399" }}>
+                  ✓ Pago
+                </span>
+              )}
+            </p>
+
+            {myPlayer?.paid ? (
+              <p className="text-emerald-200/80 text-xs mt-2 leading-relaxed">
+                O teu pagamento está confirmado. Boa pelada!
+              </p>
+            ) : !isInMatch ? (
+              <p className="text-amber-200/80 text-xs mt-2 leading-relaxed">
+                Confirma a tua presença abaixo para poderes pagar {formatMatchPricePerPlayer(matchDetails?.price) ?? "a pelada"} pela Caixa.
+              </p>
+            ) : organizerCaixaReady ? (
+              <button
+                type="button"
+                onClick={() => void payPelada(matchId)}
+                className="mt-3 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+                style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
+                data-testid="button-pay-pelada"
+              >
+                💳 Pagar {formatMatchPricePerPlayer(matchDetails?.price) ?? matchDetails?.price ?? "a pelada"}
+              </button>
+            ) : (
+              <p className="text-amber-200/80 text-xs mt-2 leading-relaxed rounded-xl px-3 py-2.5" style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.22)" }}>
+                Pagamento online em breve — o organizador ainda está a ligar a Caixa. Por agora combina pagamento manual com ele.
+              </p>
+            )}
+          </section>
+        )}
+
         {showRsvpBanner && (
           <section
             className="rounded-2xl p-4"
@@ -1343,26 +1401,6 @@ export default function PreJogo() {
             {isInMatch ? (
               <>
                 <p className="text-blue-200 text-sm font-bold">Estás confirmado nesta pelada.</p>
-
-                {paymentsOn && !isOrganizer && myPlayer && !myPlayer.paid && (
-                  <div className="mt-3">
-                    {organizerCaixaReady ? (
-                      <button
-                        type="button"
-                        onClick={() => void payPelada(matchId)}
-                        className="w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-                        style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
-                        data-testid="button-pay-pelada"
-                      >
-                        💳 Pagar {matchDetails?.price ?? "a pelada"} pela Caixa
-                      </button>
-                    ) : (
-                      <p className="text-amber-200/80 text-xs leading-relaxed rounded-xl px-3 py-2.5" style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.22)" }}>
-                        Pagamento online em breve — o organizador ainda está a ligar a Caixa. Por agora combina pagamento manual com ele.
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 <JogaButton
                   variant="ghost"

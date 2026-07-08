@@ -877,6 +877,7 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
     status: data.status ? String(data.status) : undefined,
     proBadge: data.proBadge === true,
     openToExternal: data.openToExternal === true,
+    paymentsEnabled: data.paymentsEnabled === true,
   };
 }
 

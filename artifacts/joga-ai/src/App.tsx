@@ -10,30 +10,32 @@ import { AuthGateProvider } from "@/contexts/AuthGateContext";
 import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
 import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { lazyRoute } from "@/lib/lazyRoute";
 
 // Code splitting: cada página vira um chunk próprio, carregado sob demanda.
-const Perfil = lazy(() => import("@/pages/Perfil"));
-const Comunidades = lazy(() => import("@/pages/Comunidades"));
-const ComunidadePage = lazy(() => import("@/pages/ComunidadePage"));
-const CriarPartida = lazy(() => import("@/pages/CriarPartida"));
-const PreJogo = lazy(() => import("@/pages/PreJogo"));
-const AoVivo = lazy(() => import("@/pages/AoVivo"));
-const PosJogo = lazy(() => import("@/pages/PosJogo"));
-const Jogos = lazy(() => import("@/pages/Jogos"));
-const Premium = lazy(() => import("@/pages/Premium"));
-const Campos = lazy(() => import("@/pages/Campos"));
-const Evolucao = lazy(() => import("@/pages/Evolucao"));
-const Ranking = lazy(() => import("@/pages/Ranking"));
-const Login = lazy(() => import("@/pages/Login"));
-const ComunidadeConfiguracoes = lazy(() => import("@/pages/ComunidadeConfiguracoes"));
-const CriarComunidade = lazy(() => import("@/pages/CriarComunidade"));
-const Privacidade = lazy(() => import("@/pages/Privacidade"));
-const Termos = lazy(() => import("@/pages/Termos"));
-const DemoCarta = lazy(() => import("@/pages/DemoCarta"));
-const Admin = lazy(() => import("@/pages/Admin"));
+const Perfil = lazyRoute(() => import("@/pages/Perfil"));
+const Comunidades = lazyRoute(() => import("@/pages/Comunidades"));
+const ComunidadePage = lazyRoute(() => import("@/pages/ComunidadePage"));
+const CriarPartida = lazyRoute(() => import("@/pages/CriarPartida"));
+const PreJogo = lazyRoute(() => import("@/pages/PreJogo"));
+const AoVivo = lazyRoute(() => import("@/pages/AoVivo"));
+const PosJogo = lazyRoute(() => import("@/pages/PosJogo"));
+const Jogos = lazyRoute(() => import("@/pages/Jogos"));
+const Premium = lazyRoute(() => import("@/pages/Premium"));
+const Campos = lazyRoute(() => import("@/pages/Campos"));
+const Evolucao = lazyRoute(() => import("@/pages/Evolucao"));
+const Ranking = lazyRoute(() => import("@/pages/Ranking"));
+const Login = lazyRoute(() => import("@/pages/Login"));
+const ComunidadeConfiguracoes = lazyRoute(() => import("@/pages/ComunidadeConfiguracoes"));
+const CriarComunidade = lazyRoute(() => import("@/pages/CriarComunidade"));
+const Privacidade = lazyRoute(() => import("@/pages/Privacidade"));
+const Termos = lazyRoute(() => import("@/pages/Termos"));
+const DemoCarta = lazyRoute(() => import("@/pages/DemoCarta"));
+const Admin = lazyRoute(() => import("@/pages/Admin"));
 
 function PageFallback() {
   return (
@@ -55,8 +57,9 @@ function AnimatedRoutes() {
     <>
       <AnimatePresence mode="wait">
         <motion.div key={location} {...pageTransition}>
-          <Suspense fallback={<PageFallback />}>
-            <Switch location={location}>
+          <RouteErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <Switch location={location}>
             <Route path="/" component={Home} />
             <Route path="/perfil/evolucao" component={Evolucao} />
             <Route path="/perfil/:viewId" component={Perfil} />
@@ -81,7 +84,8 @@ function AnimatedRoutes() {
             <Route path="/ranking" component={Ranking} />
               <Route component={NotFound} />
             </Switch>
-          </Suspense>
+            </Suspense>
+          </RouteErrorBoundary>
         </motion.div>
       </AnimatePresence>
       {!hideNav && <BottomNavigation />}

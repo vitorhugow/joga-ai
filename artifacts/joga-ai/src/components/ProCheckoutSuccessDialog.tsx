@@ -1,5 +1,5 @@
 import { Crown, Sparkles } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { JogaButton } from "@/components/joga";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import type { EntitlementPlan } from "@/lib/entitlements";
@@ -35,6 +35,7 @@ export function ProCheckoutSuccessDialog({ open, onOpenChange, plan }: ProChecko
         className="max-w-sm border-emerald-400/35 text-white p-0 overflow-hidden"
         style={{ background: "#0f172a" }}
       >
+        <DialogTitle className="sr-only">{copy.title}</DialogTitle>
         <div
           className="p-6 pb-4 text-center"
           style={{ background: "linear-gradient(160deg, rgba(74,222,128,0.16), rgba(15,23,42,0))" }}

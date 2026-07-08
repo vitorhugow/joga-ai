@@ -1,9 +1,8 @@
 import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-react";
-import { useSearch } from "wouter";
 import { startCheckout, openBillingPortal, type BillingInterval } from "@/lib/billing";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { isProActive } from "@/lib/entitlements";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -131,7 +130,6 @@ function PlanPricing({
 }
 
 export default function Premium() {
-  const search = useSearch();
   const { profile, refresh } = useUserProfile();
   const pro = isProActive(profile?.entitlements);
   const proUntil = profile?.entitlements?.proUntil;
@@ -142,12 +140,19 @@ export default function Premium() {
   const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [successPlan, setSuccessPlan] = useState<EntitlementPlan | null>(null);
+  const checkoutHandled = useRef(false);
   useDocumentTitle("Premium");
 
   useEffect(() => {
-    const params = new URLSearchParams(search);
+    if (checkoutHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
     const status = params.get("checkout");
     const planParam = params.get("plan");
+    if (!status) return;
+
+    checkoutHandled.current = true;
+    window.history.replaceState({}, "", "/premium");
+
     if (status === "sucesso") {
       const plan: EntitlementPlan =
         planParam === "organizer_pro" ? "organizer_pro" : "player_pro";
@@ -157,14 +162,12 @@ export default function Premium() {
       const timers = [2000, 5000, 10000].map((ms) =>
         window.setTimeout(() => void refresh(), ms),
       );
-      window.history.replaceState({}, "", "/premium");
       return () => timers.forEach(clearTimeout);
     }
     if (status === "cancelado") {
       toast({ title: "Checkout cancelado", description: "Não foste cobrado." });
-      window.history.replaceState({}, "", "/premium");
     }
-  }, [search, refresh]);
+  }, [refresh]);
 
   function runCheckout(plan: EntitlementPlan, interval: BillingInterval, key: string) {
     setCheckoutBusy(`${key}-${interval === "month" ? "month" : "year"}`);

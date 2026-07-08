@@ -8,6 +8,8 @@ export type PostMatchTeamKey = LiveTeamKey;
 export type PostMatchEventType = "golo" | "assistencia" | "defesa" | "cartao_amarelo" | "falta";
 
 export type SavedPostMatch = {
+  /** Pagamentos in-app ativos nesta pelada (organizador opt-in) */
+  paymentsEnabled?: boolean;
   version: 1;
   matchId: string;
   status: "configurando" | "ao_vivo" | "aguardando_auditoria" | "auditada" | "concluida" | "expirada" | "cancelada";

@@ -1,0 +1,24 @@
+# Stripe — preenche e guarda como:
+#   private/stripe-setup.txt
+# (esta pasta NÃO vai para o GitHub)
+#
+# Quando estiver pronto, diz no chat: "stripe setup preenchido"
+# O agente lê o ficheiro localmente e configura tudo.
+
+# === MODO ===
+# test | live
+STRIPE_MODE=test
+
+# === CHAVES (Dashboard Stripe → Developers → API keys) ===
+STRIPE_SECRET_KEY=sk_test_COLOCA_AQUI
+STRIPE_WEBHOOK_SECRET=whsec_COLOCA_AQUI
+
+# === PRICE IDs (Dashboard → Products → cada preço) ===
+PLAYER_MONTHLY=price_
+PLAYER_YEARLY=price_
+ORGANIZER_MONTHLY=price_
+ORGANIZER_YEARLY=price_
+
+# === WEBHOOK (já criado no Stripe?) ===
+# URL: https://europe-west1-joga-ai-f7622.cloudfunctions.net/stripeWebhook
+# Eventos: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted

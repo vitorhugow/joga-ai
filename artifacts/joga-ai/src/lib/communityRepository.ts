@@ -55,6 +55,7 @@ export type Community = {
 };
 
 export type MatchListing = {
+  paymentsEnabled?: boolean;
   id: string;
   title: string;
   city: string;

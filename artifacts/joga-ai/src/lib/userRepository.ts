@@ -91,6 +91,8 @@ export type UserProfile = {
   email?: string;
   /** PRO — leitura no cliente; escrito por Stripe (Functions) ou admin */
   entitlements?: import("./entitlements").Entitlements;
+  /** Conta Stripe Connect do organizador — escrito só por Functions */
+  stripeAccountId?: string;
   updatedAt?: string;
 };
 
@@ -286,6 +288,7 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
     entitlements: data.entitlements
       ? (data.entitlements as UserProfile["entitlements"])
       : undefined,
+    stripeAccountId: data.stripeAccountId ? String(data.stripeAccountId) : undefined,
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }

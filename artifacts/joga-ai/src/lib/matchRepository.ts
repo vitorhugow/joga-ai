@@ -52,6 +52,7 @@ export type CreateMatchInput = {
   time: string;
   maxPlayers: number;
   price: string;
+  paymentsEnabled?: boolean;
   openToExternal: boolean;
   notes: string;
   organizerId: string;
@@ -76,6 +77,7 @@ export type MatchDetails = {
   scheduledTime?: string;
   spotsRemaining: string;
   price: string;
+  paymentsEnabled?: boolean;
   maxPlayers?: number;
   notes?: string;
   openToExternal?: boolean;
@@ -215,6 +217,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     title: input.title.trim() || "Nova partida",
     communityId: input.communityId,
     organizerId: input.organizerId,
+    paymentsEnabled: input.paymentsEnabled ?? false,
   };
 
   const preMatch: SavedPreMatch = {
@@ -242,6 +245,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     date: formatMatchDate(input.date, input.time),
     spotsRemaining: spotsLeft > 0 ? `${spotsLeft} vagas` : "Lotado",
     price: input.price.trim() || "Grátis",
+    paymentsEnabled: input.paymentsEnabled ?? false,
     communityId: input.communityId,
     status: "configurando",
   };
@@ -279,6 +283,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
         communityId: input.communityId ?? null,
         scheduledDate: input.date,
         scheduledTime: input.time,
+        paymentsEnabled: input.paymentsEnabled ?? false,
         savedAt: serverTimestamp(),
       });
     } catch (err) {
@@ -597,6 +602,7 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     expiresAt: data.expiresAt,
     votedUserIds: data.votedUserIds ?? [],
     waitlist: data.waitlist ?? [],
+    paymentsEnabled: data.paymentsEnabled ?? false,
     title: data.title ?? null,
     communityId: data.communityId ?? null,
     organizerId: data.organizerId ?? null,
@@ -777,6 +783,7 @@ export async function loadMatchFromFirestore(
       title: remote.title,
       communityId: remote.communityId,
       organizerId: remote.organizerId,
+      paymentsEnabled: remote.paymentsEnabled ?? false,
     };
 
     const merged = mergeMatchSources(matchId, remoteMatch, local, pre);

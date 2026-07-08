@@ -42,7 +42,7 @@ export default defineConfig({
       workbox: {
         // SPA: qualquer rota (/admin, /premium, …) serve index.html
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/\.well-known\//],
         // Novo deploy substitui o SW de imediato (evita router antigo em cache)
         skipWaiting: true,
         clientsClaim: true,

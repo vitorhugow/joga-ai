@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { isOrganizerPro } from "@/lib/entitlements";
+import { startConnectOnboarding } from "@/lib/peladaBilling";
+import { CreditCard } from "lucide-react";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { createMatch } from "@/lib/matchRepository";
@@ -105,6 +107,8 @@ export default function CriarPartida() {
   const { profile, needsSetup, refresh } = useUserProfile();
   const orgPro = isOrganizerPro(profile?.entitlements);
   const [repeatWeeks, setRepeatWeeks] = useState(1);
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const hasStripeAccount = Boolean(profile?.stripeAccountId);
   const [showProRepeatDialog, setShowProRepeatDialog] = useState(false);
 
   function addDaysIso(dateIso: string, days: number): string {
@@ -168,6 +172,7 @@ export default function CriarPartida() {
         time: form.time,
         maxPlayers: Number(form.maxPlayers) || 14,
         price: form.price,
+        paymentsEnabled: paymentsEnabled && hasStripeAccount,
         openToExternal: form.openToExternal,
         notes: form.notes,
         organizerId: userId,
@@ -190,6 +195,7 @@ export default function CriarPartida() {
               time: form.time,
               maxPlayers: Number(form.maxPlayers) || 14,
               price: form.price,
+        paymentsEnabled: paymentsEnabled && hasStripeAccount,
               openToExternal: form.openToExternal,
               notes: form.notes,
               organizerId: userId,
@@ -318,6 +324,43 @@ export default function CriarPartida() {
           <Field label="Preço/Jogador" icon={<Euro className="w-3 h-3" />}>
             <StyledInput type="text" placeholder="Grátis ou 5€" value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" />
           </Field>
+        </div>
+
+        {/* ── Pagamentos na app (opt-in por pelada) ── */}
+        <div className="rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <p className="text-white/50 text-[10px] font-black uppercase tracking-[0.18em] flex items-center gap-1.5">
+            <CreditCard className="w-3 h-3" /> Pagamentos na app
+          </p>
+          {hasStripeAccount ? (
+            <button
+              type="button"
+              onClick={() => setPaymentsEnabled((v) => !v)}
+              className="mt-2 w-full rounded-xl py-2.5 text-xs font-black"
+              style={{
+                background: paymentsEnabled ? "rgba(74,222,128,0.16)" : "rgba(255,255,255,0.05)",
+                border: `1px solid ${paymentsEnabled ? "rgba(74,222,128,0.5)" : "rgba(255,255,255,0.12)"}`,
+                color: paymentsEnabled ? "#4ade80" : "rgba(255,255,255,0.6)",
+              }}
+              data-testid="button-toggle-payments"
+            >
+              {paymentsEnabled
+                ? "✓ Jogadores podem pagar pela app (recebes direto na tua conta)"
+                : "Ativar pagamentos nesta pelada"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void startConnectOnboarding()}
+              className="mt-2 w-full rounded-xl py-2.5 text-xs font-black text-white/70"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px dashed rgba(255,255,255,0.16)" }}
+              data-testid="button-connect-stripe"
+            >
+              Ligar conta de pagamentos (2 min) para receber pela app
+            </button>
+          )}
+          <p className="text-white/30 text-[11px] mt-2">
+            Preço vai 100% para ti. O jogador paga +0,50€ de taxa — grátis para os teus jogadores se fores PRO Organizador. Podes sempre marcar pagamentos manuais.
+          </p>
         </div>
 
         <div className="flex items-center justify-between px-4 py-4 rounded-2xl" style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)" }}>

@@ -21,6 +21,7 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
+import { payPelada } from "@/lib/peladaBilling";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import {
@@ -337,6 +338,7 @@ export default function PreJogo() {
   const [showRsvpNameForm, setShowRsvpNameForm] = useState(false);
   const [rsvpGuestName, setRsvpGuestName] = useState("");
   const [matchStatus, setMatchStatus] = useState<string>("configurando");
+  const [paymentsOn, setPaymentsOn] = useState(false);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
@@ -365,6 +367,7 @@ export default function PreJogo() {
       }
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
       setMatchStatus(merged?.status ?? "configurando");
+      setPaymentsOn(merged?.paymentsEnabled ?? false);
 
       if (cancelled) return;
 
@@ -1284,6 +1287,22 @@ export default function PreJogo() {
               </div>
             ))}
           </div>
+
+          {paymentsOn && userId && (() => {
+            const me = players.find((p) => p.userId === userId);
+            if (!me || me.paid) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => void payPelada(matchId)}
+                className="mt-4 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+                style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
+                data-testid="button-pay-pelada"
+              >
+                💳 Pagar {matchDetails?.price ?? "a pelada"} pela app
+              </button>
+            );
+          })()}
 
           {teamsWithPlayers === 0 && players.length > 0 && (
             <p className="mt-3 text-center text-[11px] font-bold text-white/40">

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Trophy, ChevronRight, Euro } from "lucide-react";
+import { Bell, Trophy, ChevronRight, Euro } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { JogaButton } from "@/components/joga";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,12 +12,37 @@ import {
 } from "@/lib/notificationsRepository";
 import { loadMatchFromFirestore } from "@/lib/matchRepository";
 
+type PopupKind = "vote" | "pay" | "generic";
+
+function isPopupNotification(n: AppNotification): boolean {
+  return (
+    n.priority === "popup" ||
+    n.id.startsWith("vote-") ||
+    n.id.startsWith("pay-")
+  );
+}
+
+function popupKind(n: AppNotification): PopupKind {
+  if (n.id.startsWith("vote-")) return "vote";
+  if (n.id.startsWith("pay-")) return "pay";
+  return "generic";
+}
+
+function popupLabel(kind: PopupKind): string {
+  if (kind === "vote") return "Pelada terminada";
+  if (kind === "pay") return "Pagamento pendente";
+  return "Aviso importante";
+}
+
+function popupCta(kind: PopupKind): string {
+  if (kind === "vote") return "Votar agora";
+  if (kind === "pay") return "Ver a pelada";
+  return "Ver detalhes";
+}
+
 /**
- * Pop-up global: sempre que uma pelada terminar (entra em votação), todos os
- * jogadores ligados recebem uma notificação `vote-{matchId}` em tempo real
- * (Firestore onSnapshot). Este componente fica montado em toda a app e, assim
- * que essa notificação chega, mostra logo um pop-up bem visível — não fica à
- * espera que a pessoa abra o sino de notificações.
+ * Pop-up global: notificações com priority "popup" (e legado vote-/pay-)
+ * aparecem em tempo real sem abrir o sino.
  */
 export function MatchVoteReminderModal() {
   const { userId, isLinked } = useAuth();
@@ -28,24 +53,16 @@ export function MatchVoteReminderModal() {
   useEffect(() => {
     if (!isLinked || !userId) return;
 
-    // Garante que peladas antigas que terminaram sem gerar notificação (ex:
-    // falha pontual de rede) também acabam por aparecer aqui.
     void processPendingNotifications(userId);
 
     const unsub = subscribeToNotifications(userId, (items) => {
       const pending = items.filter(
-        (n) =>
-          (n.id.startsWith("vote-") || n.id.startsWith("pay-")) &&
-          !n.read &&
-          !shownRef.current.has(n.id),
+        (n) => isPopupNotification(n) && !n.read && !shownRef.current.has(n.id),
       );
       if (pending.length === 0) return;
 
       pending.forEach((n) => shownRef.current.add(n.id));
 
-      // Confirma que a pelada ainda está mesmo em votação antes de incomodar
-      // — se entretanto foi finalizada sem o voto desta pessoa (ou expirou),
-      // não faz sentido mostrar um pop-up para uma votação que já fechou.
       void Promise.all(
         pending.map(async (n) => {
           if (!n.id.startsWith("vote-")) return n;
@@ -71,13 +88,13 @@ export function MatchVoteReminderModal() {
   }, [isLinked, userId]);
 
   const current = queue[0] ?? null;
-  const isPayment = current?.id.startsWith("pay-") ?? false;
+  const kind = current ? popupKind(current) : "generic";
 
   function dismiss() {
     setQueue((q) => q.slice(1));
   }
 
-  function handleVoteNow() {
+  function handleAction() {
     if (!current) return;
     const link = current.link || "/jogos";
     if (userId) void markNotificationRead(userId, current.id);
@@ -105,26 +122,28 @@ export function MatchVoteReminderModal() {
             className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center"
             style={{ background: "rgba(250,204,21,0.15)", border: "1px solid rgba(250,204,21,0.3)" }}
           >
-            {isPayment ? (
+            {kind === "pay" ? (
               <Euro className="w-7 h-7 text-amber-300" />
-            ) : (
+            ) : kind === "vote" ? (
               <Trophy className="w-7 h-7 text-amber-300" />
+            ) : (
+              <Bell className="w-7 h-7 text-amber-300" />
             )}
           </div>
           <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.22em]">
-            {isPayment ? "Pagamento pendente" : "Pelada terminada"}
+            {popupLabel(kind)}
           </p>
           <h2 className="font-display font-black text-white text-2xl mt-1">
-            {isPayment ? (current?.title ?? "Tens uma pelada por pagar") : "A tua pelada já acabou!"}
+            {current.title}
           </h2>
           <p className="text-white/60 text-sm mt-2">
-            {current.body || "Falta só a tua nota para fechar a votação."}
+            {current.body || "Tens um aviso novo na app."}
           </p>
         </div>
 
         <div className="px-6 pb-6 space-y-2">
-          <JogaButton variant="gold" size="lg" className="w-full gap-2" onClick={handleVoteNow}>
-            {isPayment ? "Ver a pelada" : "Votar agora"}
+          <JogaButton variant="gold" size="lg" className="w-full gap-2" onClick={handleAction}>
+            {popupCta(kind)}
             <ChevronRight className="w-4 h-4" />
           </JogaButton>
           <JogaButton variant="ghost" size="md" className="w-full" onClick={handleLater}>

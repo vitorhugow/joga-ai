@@ -21,4 +21,4 @@ ORGANIZER_YEARLY=price_
 
 # === WEBHOOK (já criado no Stripe?) ===
 # URL: https://europe-west1-joga-ai-f7622.cloudfunctions.net/stripeWebhook
-# Eventos: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted
+# Eventos: checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed, invoice.payment_failed, customer.subscription.updated, customer.subscription.deleted

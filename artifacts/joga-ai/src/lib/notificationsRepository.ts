@@ -24,6 +24,8 @@ import { loadMatchFromFirestore } from "./matchRepository";
 import { loadUserMatchHistory } from "./matchHistoryRepository";
 import { collectLinkedPlayerUserIds } from "./evolutionUtils";
 
+export type NotificationPriority = "popup" | "center";
+
 export type AppNotification = {
   id: string;
   title: string;
@@ -32,9 +34,11 @@ export type AppNotification = {
   createdAt: string;
   type?: "match" | "community" | "system";
   link?: string;
+  priority?: NotificationPriority;
 };
 
 const LOCAL_KEY = "joga-ai-notifications-v1";
+const NOTIFICATIONS_LIMIT = 30;
 
 function localKey(userId: string) {
   return `${LOCAL_KEY}-${userId}`;
@@ -50,11 +54,25 @@ function readLocal(userId: string): AppNotification[] {
 }
 
 function writeLocal(userId: string, items: AppNotification[]) {
-  localStorage.setItem(localKey(userId), JSON.stringify(items.slice(0, 30)));
+  localStorage.setItem(localKey(userId), JSON.stringify(items.slice(0, NOTIFICATIONS_LIMIT)));
 }
 
 function hasNotificationId(items: AppNotification[], id: string): boolean {
   return items.some((n) => n.id === id);
+}
+
+function mapNotificationDoc(d: { id: string; data: () => Record<string, unknown> }): AppNotification {
+  const data = d.data();
+  return {
+    id: d.id,
+    title: String(data.title ?? ""),
+    body: String(data.body ?? ""),
+    read: Boolean(data.read),
+    createdAt: (data.createdAt as { toDate?: () => Date })?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+    type: data.type as AppNotification["type"],
+    link: typeof data.link === "string" ? data.link : undefined,
+    priority: data.priority === "popup" || data.priority === "center" ? data.priority : undefined,
+  };
 }
 
 export async function loadNotifications(userId: string): Promise<AppNotification[]> {
@@ -66,20 +84,12 @@ export async function loadNotifications(userId: string): Promise<AppNotification
       query(
         collection(db, "users", userId, "notifications"),
         orderBy("createdAt", "desc"),
-        limit(20),
+        limit(NOTIFICATIONS_LIMIT),
       ),
     );
     if (snap.empty) return local;
 
-    const remote = snap.docs.map((d) => ({
-      id: d.id,
-      title: String(d.data().title ?? ""),
-      body: String(d.data().body ?? ""),
-      read: Boolean(d.data().read),
-      createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
-      type: d.data().type,
-      link: d.data().link,
-    }));
+    const remote = snap.docs.map(mapNotificationDoc);
 
     writeLocal(userId, remote);
     return remote;
@@ -102,21 +112,13 @@ export function subscribeToNotifications(
   const q = query(
     collection(db, "users", userId, "notifications"),
     orderBy("createdAt", "desc"),
-    limit(20),
+    limit(NOTIFICATIONS_LIMIT),
   );
 
   return onSnapshot(
     q,
     (snap) => {
-      const items: AppNotification[] = snap.docs.map((d) => ({
-        id: d.id,
-        title: String(d.data().title ?? ""),
-        body: String(d.data().body ?? ""),
-        read: Boolean(d.data().read),
-        createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
-        type: d.data().type,
-        link: d.data().link,
-      }));
+      const items: AppNotification[] = snap.docs.map(mapNotificationDoc);
       writeLocal(userId, items);
       callback(items, items.filter((n) => !n.read).length);
     },
@@ -138,6 +140,7 @@ export async function addNotification(
     body: notif.body,
     type: notif.type,
     link: notif.link,
+    priority: notif.priority,
     id,
     read: false,
     createdAt: new Date().toISOString(),
@@ -158,6 +161,7 @@ export async function addNotification(
         body: entry.body,
         type: entry.type,
         link: entry.link,
+        ...(entry.priority ? { priority: entry.priority } : {}),
         read: false,
         createdAt: serverTimestamp(),
       },

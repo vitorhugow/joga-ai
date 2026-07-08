@@ -299,8 +299,12 @@ export async function promoteFromWaitlist(matchId: string): Promise<WaitlistEntr
 
   await addNotification(promoted.userId, {
     id: `promoted-${matchId}-${promoted.userId}`,
+    priority: "popup",
     title: "Entraste na pelada!",
-    body: `Saiu uma vaga em «${match.title ?? "pelada"}» — estás confirmado.`,
+    body:
+      match.paymentsEnabled && match.price
+        ? `Estás confirmado em «${match.title ?? "pelada"}» — falta pagar ${match.price} para garantir.`
+        : `Saiu uma vaga em «${match.title ?? "pelada"}» — estás confirmado.`,
     type: "match",
     link: `/partida/${matchId}/pre-jogo`,
   });

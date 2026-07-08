@@ -83,16 +83,19 @@ export function openOrganizerCaixa(returnPath?: string): Promise<void> {
 /** @deprecated use openOrganizerCaixa */
 export const openOrganizerPayouts = openOrganizerCaixa;
 
-/** Cancela pelada com reembolsos automáticos */
-export async function cancelPeladaWithRefunds(matchId: string): Promise<number> {
+/** Cancela pelada — credita pagamentos ao saldo dos jogadores */
+export async function cancelPeladaWithBalanceCredits(matchId: string): Promise<number> {
   if (!isFirebaseConfigured()) return 0;
-  const fn = httpsCallable<{ matchId: string }, { refunded: number }>(
+  const fn = httpsCallable<{ matchId: string }, { credited: number }>(
     getFunctions(app, "europe-west1"),
-    "cancelPeladaWithRefunds",
+    "cancelPeladaWithBalanceCredits",
   );
   const result = await fn({ matchId });
-  return result.data?.refunded ?? 0;
+  return result.data?.credited ?? 0;
 }
+
+/** @deprecated use cancelPeladaWithBalanceCredits */
+export const cancelPeladaWithRefunds = cancelPeladaWithBalanceCredits;
 
 /** Sai da pelada e credita pagamento ao saldo interno */
 export async function leavePeladaMatch(matchId: string): Promise<{ creditedCents: number }> {

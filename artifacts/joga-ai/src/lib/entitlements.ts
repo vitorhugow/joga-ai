@@ -9,16 +9,27 @@
 
 export type EntitlementPlan = "player_pro" | "organizer_pro";
 
+export type PlanEntitlementSlot = {
+  active?: boolean;
+  proUntil?: string | null;
+  subscriptionId?: string | null;
+  proCommunityId?: string;
+};
+
 export type Entitlements = {
-  /** PRO ativo (fonte de verdade: webhook Stripe via Functions) */
+  /** PRO ativo (derivado: playerPro || organizerPro; retrocompat com campo legado) */
   pro?: boolean;
-  /** ISO date — fim do período pago atual */
+  /** ISO date — fim do período pago actual (plano principal) */
   proUntil?: string;
   plan?: EntitlementPlan;
   /** Clube PRO activo nesta comunidade (última subscrição organizador) */
   proCommunityId?: string;
   /** Mapa comunidade → validade (várias subs possíveis) */
   proCommunities?: Record<string, { proUntil?: string; subscriptionId?: string }>;
+  /** Subscrição Jogador PRO (independente) */
+  playerPro?: PlanEntitlementSlot;
+  /** Subscrição Organizador PRO (independente) */
+  organizerPro?: PlanEntitlementSlot;
 };
 
 /** Preços fechados (Sprint alinhado a 04/07/2026) */
@@ -27,8 +38,6 @@ export const PRICING = {
   playerProAnnual: 49.9,
   organizerProMonthly: 9.99,
   organizerProAnnual: 99.9,
-  /** Pagamentos/mês isentos de taxa no plano organizador */
-  organizerNoFeeCap: 50,
   /** Taxa de conveniência por pagamento de pelada (Sprint 3) */
   playerFeePerPayment: 0.5,
 } as const;
@@ -38,14 +47,29 @@ export function monthlyEquivalentFromAnnual(annualTotal: number): string {
   return (annualTotal / 12).toFixed(2).replace(".", ",");
 }
 
-/** PRO ativo neste momento? (valida também a data de expiração) */
-export function isProActive(entitlements?: Entitlements | null): boolean {
-  if (!entitlements?.pro) return false;
+function slotActive(slot?: PlanEntitlementSlot | null): boolean {
+  if (!slot?.active) return false;
+  if (!slot.proUntil) return true;
+  return Date.now() < new Date(slot.proUntil).getTime();
+}
+
+function legacyProActive(entitlements?: Entitlements | null): boolean {
+  if (!entitlements) return false;
+  if (entitlements.playerPro || entitlements.organizerPro) {
+    return slotActive(entitlements.playerPro) || slotActive(entitlements.organizerPro);
+  }
+  if (!entitlements.pro) return false;
   if (!entitlements.proUntil) return true;
   return Date.now() < new Date(entitlements.proUntil).getTime();
 }
 
+/** PRO ativo neste momento? (valida também a data de expiração) */
+export function isProActive(entitlements?: Entitlements | null): boolean {
+  return legacyProActive(entitlements);
+}
+
 export function isOrganizerPro(entitlements?: Entitlements | null): boolean {
+  if (entitlements?.organizerPro) return slotActive(entitlements.organizerPro);
   return isProActive(entitlements) && entitlements?.plan === "organizer_pro";
 }
 
@@ -60,10 +84,15 @@ export function isOrganizerProForCommunity(
   if (club?.proUntil) {
     return Date.now() < new Date(club.proUntil).getTime();
   }
-  return entitlements?.proCommunityId === communityId;
+  const orgCommunity =
+    entitlements?.organizerPro?.proCommunityId ?? entitlements?.proCommunityId;
+  return orgCommunity === communityId;
 }
 
 /** PRO Jogador (inclui quem tem PRO Organizador — tem tudo do jogador). */
 export function hasPlayerPro(entitlements?: Entitlements | null): boolean {
+  if (entitlements?.playerPro || entitlements?.organizerPro) {
+    return slotActive(entitlements.playerPro) || slotActive(entitlements.organizerPro);
+  }
   return isProActive(entitlements);
 }

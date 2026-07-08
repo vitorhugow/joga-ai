@@ -1502,7 +1502,7 @@ export default function PreJogo() {
 
           {paymentsOn && (
             <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
-              Pagamentos online não são reembolsáveis em dinheiro se saíres — o preço da pelada fica no teu saldo (a taxa de 0,50€ não). O organizador só recebe na Caixa quando a pelada termina. Se o organizador cancelar, os valores pagos são devolvidos.
+              Pagamentos online não são devolvidos em dinheiro se saíres — o preço da pelada fica no teu saldo Joga AI (a taxa de 0,50€ não). O organizador só recebe na Caixa quando a pelada termina. Se o organizador cancelar, os valores pagos são creditados em saldo.
             </p>
           )}
 
@@ -2108,6 +2108,9 @@ export default function PreJogo() {
             <AlertDialogTitle className="font-display">Cancelar partida?</AlertDialogTitle>
             <AlertDialogDescription className="text-white/50">
               A partida deixa de aparecer em Jogos. Esta acção não pode ser desfeita.
+              {paymentsOn
+                ? " Pagamentos online serão creditados em saldo Joga AI aos jogadores (sem a taxa de 0,50€)."
+                : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

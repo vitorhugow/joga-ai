@@ -42,6 +42,27 @@ service cloud.firestore {
           .hasOnly(['entitlements', 'unlockedSkins', 'updatedAt']);
     }
 
+    function validNotificationCreate() {
+      return request.resource.data.keys().hasOnly(
+          ['title', 'body', 'type', 'link', 'read', 'createdAt', 'priority']
+        )
+        && request.resource.data.read == false
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 240
+        && (!('type' in request.resource.data)
+          || request.resource.data.type in ['match', 'community', 'system'])
+        && (!('priority' in request.resource.data)
+          || request.resource.data.priority in ['popup', 'center']);
+    }
+
+    function canCreateClientNotification(ownerId, notifId) {
+      return isOwner(ownerId)
+        || notifId.matches('^vote-.+')
+        || notifId.matches('^promoted-.+');
+    }
+
     // Collection-group queries (loadMyCommunities, pedidos pendentes)
     // Apenas leitura: este wildcard existe para as collection-group queries.
     // Criação/remoção de membros acontece SÓ no bloco communities/{id}/members.
@@ -186,9 +207,9 @@ service cloud.firestore {
 
       match /notifications/{notifId} {
         allow read, update, delete: if isOwner(userId);
-        // Notificações (ex: "a tua nota saiu", convites, lembretes) são
-        // criadas por outros participantes/organizador em nome do dono.
-        allow create: if isSignedIn();
+        allow create: if isSignedIn()
+          && validNotificationCreate()
+          && canCreateClientNotification(userId, notifId);
       }
     }
 

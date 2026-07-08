@@ -17,9 +17,23 @@ import { defineSecret } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import type { Transaction, DocumentSnapshot, DocumentReference, Firestore, DocumentData } from "firebase-admin/firestore";
 import Stripe from "stripe";
+import {
+  formatEuroCents,
+  loadUserDisplayName,
+  notifyOrganizerPaymentReceived,
+  notifyPromotedFromWaitlist,
+  notifyUser,
+} from "./notify";
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
+
+/** Versão pinada pelo stripe@17 (ver LatestApiVersion em node_modules/stripe/types) — NÃO atualizar o package stripe para v18+ sem rever applySubscription (current_period_end migrou para subscription items na API 2025+). */
+const STRIPE_API_VERSION = "2025-02-24.acacia" as const;
+
+function createStripeClient(secretKey: string): Stripe {
+  return new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
+}
 
 const REGION = "europe-west1";
 const ALLOWED_ORIGINS = new Set([
@@ -151,7 +165,7 @@ export const createCheckoutSession = onCall(
       throw new HttpsError("invalid-argument", "Intervalo inválido.");
     }
 
-    const stripe = new Stripe(stripeSecretKey.value());
+    const stripe = createStripeClient(stripeSecretKey.value());
     const origin = safeOrigin(request.data?.origin);
     const [priceId, customerId] = await Promise.all([
       loadPriceId(plan, interval),
@@ -192,7 +206,7 @@ export const createPortalSession = onCall(
       throw new HttpsError("failed-precondition", "Sem assinatura associada a esta conta.");
     }
 
-    const stripe = new Stripe(stripeSecretKey.value());
+    const stripe = createStripeClient(stripeSecretKey.value());
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${safeOrigin(request.data?.origin)}/premium`,
@@ -202,6 +216,47 @@ export const createPortalSession = onCall(
 );
 
 /** Concede/atualiza/revoga entitlements a partir da subscrição */
+type PlanEntitlementSlot = {
+  active: boolean;
+  proUntil: string | null;
+  subscriptionId: string | null;
+  proCommunityId?: string;
+};
+
+function isPlanSlotActive(slot: PlanEntitlementSlot): boolean {
+  if (!slot.active) return false;
+  if (!slot.proUntil) return true;
+  return Date.now() < new Date(slot.proUntil).getTime();
+}
+
+function readPlanSlotFromFirestore(
+  current: Record<string, unknown>,
+  slotKey: "playerPro" | "organizerPro",
+  legacyPlan: Plan,
+): PlanEntitlementSlot {
+  const raw = current[slotKey];
+  if (raw && typeof raw === "object") {
+    const s = raw as Record<string, unknown>;
+    return {
+      active: s.active === true,
+      proUntil: typeof s.proUntil === "string" ? s.proUntil : null,
+      subscriptionId: typeof s.subscriptionId === "string" ? s.subscriptionId : null,
+      ...(typeof s.proCommunityId === "string" ? { proCommunityId: s.proCommunityId } : {}),
+    };
+  }
+  if (current.plan === legacyPlan && current.pro === true) {
+    return {
+      active: true,
+      proUntil: typeof current.proUntil === "string" ? current.proUntil : null,
+      subscriptionId: null,
+      ...(legacyPlan === "organizer_pro" && typeof current.proCommunityId === "string"
+        ? { proCommunityId: current.proCommunityId }
+        : {}),
+    };
+  }
+  return { active: false, proUntil: null, subscriptionId: null };
+}
+
 async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   const uid = sub.metadata?.firebaseUid;
   if (!uid) {
@@ -216,18 +271,58 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   const periodEnd = sub.current_period_end ?? null;
   const proUntil = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
 
-  const userRef = getFirestore().doc(`users/${uid}`);
+  const db = getFirestore();
+  const userRef = db.doc(`users/${uid}`);
+  const userSnap = await userRef.get();
+  const current = (userSnap.data()?.entitlements ?? {}) as Record<string, unknown>;
+
+  const previousSlot =
+    plan === "organizer_pro"
+      ? readPlanSlotFromFirestore(current, "organizerPro", "organizer_pro")
+      : readPlanSlotFromFirestore(current, "playerPro", "player_pro");
+  const wasActive = isPlanSlotActive(previousSlot);
+
+  const updatedSlot: PlanEntitlementSlot = {
+    active,
+    proUntil,
+    subscriptionId: active ? sub.id : null,
+    ...(plan === "organizer_pro" && communityId && active ? { proCommunityId: communityId } : {}),
+  };
+
+  const playerPro =
+    plan === "player_pro"
+      ? updatedSlot
+      : readPlanSlotFromFirestore(current, "playerPro", "player_pro");
+  const organizerPro =
+    plan === "organizer_pro"
+      ? updatedSlot
+      : readPlanSlotFromFirestore(current, "organizerPro", "organizer_pro");
+
+  const proActive = isPlanSlotActive(playerPro) || isPlanSlotActive(organizerPro);
+  const primaryPlan: Plan | undefined = isPlanSlotActive(organizerPro)
+    ? "organizer_pro"
+    : isPlanSlotActive(playerPro)
+      ? "player_pro"
+      : undefined;
+  const derivedProUntil = isPlanSlotActive(organizerPro)
+    ? organizerPro.proUntil
+    : isPlanSlotActive(playerPro)
+      ? playerPro.proUntil
+      : null;
+
+  const entitlements: Record<string, unknown> = {
+    pro: proActive,
+    playerPro,
+    organizerPro,
+  };
+  if (primaryPlan) entitlements.plan = primaryPlan;
+  if (derivedProUntil) entitlements.proUntil = derivedProUntil;
+  if (isPlanSlotActive(organizerPro) && organizerPro.proCommunityId) {
+    entitlements.proCommunityId = organizerPro.proCommunityId;
+  }
+
   const patch: Record<string, unknown> = {
-    entitlements: active
-      ? {
-          pro: true,
-          plan,
-          proUntil,
-          ...(plan === "organizer_pro" && communityId
-            ? { proCommunityId: communityId }
-            : {}),
-        }
-      : { pro: false },
+    entitlements,
     stripeSubscriptionId: sub.id,
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -237,11 +332,20 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
       ? { proUntil, subscriptionId: sub.id }
       : FieldValue.delete();
     if (active) {
-      await getFirestore().doc(`communities/${communityId}`).set(
+      await db.doc(`communities/${communityId}`).set(
         {
           proActive: true,
           proUntil,
           proOrganizerId: uid,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } else {
+      await db.doc(`communities/${communityId}`).set(
+        {
+          proActive: false,
+          proUntil: null,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -251,12 +355,35 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
 
   await userRef.set(patch, { merge: true });
   console.log(`[stripeWebhook] entitlements ${active ? "ativos" : "revogados"} para ${uid} (${plan}${communityId ? ` @ ${communityId}` : ""})`);
+
+  if (active && !wasActive) {
+    await notifyUser(uid, {
+      id: `pro-on-${plan}`,
+      priority: "popup",
+      type: "system",
+      title: plan === "player_pro" ? "PRO Jogador ativo! 🔥" : "Clube PRO ativo! 🏆",
+      body:
+        plan === "player_pro"
+          ? "Evolução ilimitada, estatísticas avançadas e distintivos exclusivos."
+          : "Gestão do clube, lembretes de pagamento e badge PRO na comunidade.",
+      link: "/premium",
+    });
+  } else if (!active && wasActive) {
+    await notifyUser(uid, {
+      id: `pro-off-${sub.id}`,
+      priority: "center",
+      type: "system",
+      title: "PRO terminado",
+      body: "A tua subscrição terminou. Podes reativar quando quiseres.",
+      link: "/premium",
+    });
+  }
 }
 
 export const stripeWebhook = onRequest(
   { region: REGION, secrets: [stripeSecretKey, stripeWebhookSecret] },
   async (req, res) => {
-    const stripe = new Stripe(stripeSecretKey.value());
+    const stripe = createStripeClient(stripeSecretKey.value());
     const signature = req.headers["stripe-signature"];
 
     let event: Stripe.Event;
@@ -277,13 +404,80 @@ export const stripeWebhook = onRequest(
         case "checkout.session.completed": {
           const session = event.data.object as Stripe.Checkout.Session;
           if (session.mode === "payment" && session.metadata?.kind === "pelada") {
-            await markPlayerPaidFromSession(session);
+            await handlePeladaCheckoutSession(session);
           }
           if (session.mode === "subscription" && session.subscription) {
             const sub = await stripe.subscriptions.retrieve(
               session.subscription as string,
             );
             await applySubscription(sub);
+          }
+          break;
+        }
+        case "checkout.session.async_payment_succeeded": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          if (session.mode === "payment" && session.metadata?.kind === "pelada") {
+            await handlePeladaCheckoutSession(session);
+            const { matchId, uid } = (session.metadata ?? {}) as Record<string, string>;
+            if (matchId && uid) {
+              const matchSnap = await getFirestore().doc(`matches/${matchId}`).get();
+              const title = String(matchSnap.data()?.title ?? "pelada");
+              await notifyUser(uid, {
+                id: `payok-${matchId}-${uid}`,
+                priority: "popup",
+                type: "match",
+                title: "Pagamento confirmado ✅",
+                body: `Presença garantida em «${title}».`,
+                link: `/partida/${matchId}/pre-jogo`,
+              });
+            }
+          }
+          break;
+        }
+        case "checkout.session.async_payment_failed": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          if (session.mode === "payment" && session.metadata?.kind === "pelada") {
+            const { matchId, uid } = (session.metadata ?? {}) as Record<string, string>;
+            console.log(
+              "[stripeWebhook] pagamento assíncrono falhou:",
+              session.id,
+              "matchId=",
+              matchId ?? "?",
+              "uid=",
+              uid ?? "?",
+            );
+            if (matchId && uid) {
+              const matchSnap = await getFirestore().doc(`matches/${matchId}`).get();
+              const title = String(matchSnap.data()?.title ?? "pelada");
+              await notifyUser(uid, {
+                id: `payfail-${matchId}-${uid}`,
+                priority: "popup",
+                type: "match",
+                title: "Pagamento falhou",
+                body: `O pagamento de «${title}» não foi concluído — tenta novamente para garantir a vaga.`,
+                link: `/partida/${matchId}/pre-jogo`,
+              });
+            }
+          }
+          break;
+        }
+        case "invoice.payment_failed": {
+          const invoice = event.data.object as Stripe.Invoice;
+          const subRef = invoice.subscription;
+          const subId = typeof subRef === "string" ? subRef : subRef?.id;
+          if (subId) {
+            const sub = await stripe.subscriptions.retrieve(subId);
+            const firebaseUid = sub.metadata?.firebaseUid;
+            if (firebaseUid) {
+              await notifyUser(firebaseUid, {
+                id: `pro-payfail-${subId}`,
+                priority: "popup",
+                type: "system",
+                title: "Pagamento do PRO falhou",
+                body: "Atualiza o método de pagamento para não perder as vantagens PRO.",
+                link: "/premium",
+              });
+            }
           }
           break;
         }
@@ -385,7 +579,7 @@ export const createConnectOnboarding = onCall(
     const intent = request.data?.intent === "manage" ? "manage" : "onboard";
     const returnPath = safeReturnPath(request.data?.returnPath);
 
-    const stripe = new Stripe(stripeSecretKey.value());
+    const stripe = createStripeClient(stripeSecretKey.value());
     const db = getFirestore();
     const userRef = db.doc(`users/${uid}`);
     const userSnap = await userRef.get();
@@ -485,7 +679,7 @@ export const createPeladaCheckout = onCall(
       throw new HttpsError("failed-precondition", "O organizador ainda não ligou a Caixa.");
     }
 
-    const stripe = new Stripe(stripeSecretKey.value());
+    const stripe = createStripeClient(stripeSecretKey.value());
     const account = await stripe.accounts.retrieve(accountId);
     if (!account.charges_enabled) {
       throw new HttpsError("failed-precondition", "A conta do organizador ainda está em verificação no Stripe.");
@@ -507,7 +701,8 @@ export const createPeladaCheckout = onCall(
             unit_amount: totalCents,
             product_data: {
               name: `Pelada — ${String(match.title ?? "Joga AI").slice(0, 60)}`,
-              description: "Inclui 0,50€ de taxa de serviço",
+              description:
+                "Inclui 0,50€ de taxa de serviço não reembolsável. Cancelamentos são creditados como saldo Joga AI.",
             },
           },
         },
@@ -645,7 +840,12 @@ function applyPeladaPlayerPaidInTx(
   });
 }
 
-async function promoteWaitlistAfterLeave(db: Firestore, matchId: string): Promise<void> {
+async function promoteWaitlistAfterLeave(
+  db: Firestore,
+  matchId: string,
+): Promise<{ uid: string } | null> {
+  let promotedUid: string | null = null;
+
   await db.runTransaction(async (tx) => {
     const ref = db.doc(`matches/${matchId}`);
     const snap = await tx.get(ref);
@@ -665,6 +865,7 @@ async function promoteWaitlistAfterLeave(db: Firestore, matchId: string): Promis
     const promoted = waitlist.shift()!;
     const uid = String(promoted.userId ?? "");
     if (!uid) return;
+    promotedUid = uid;
 
     const playerTeams = {
       ...(typeof data.playerTeams === "object" && data.playerTeams
@@ -688,6 +889,17 @@ async function promoteWaitlistAfterLeave(db: Firestore, matchId: string): Promis
       savedAt: FieldValue.serverTimestamp(),
     });
   });
+
+  if (promotedUid) {
+    const matchSnap = await db.doc(`matches/${matchId}`).get();
+    const match = matchSnap.data();
+    if (match) {
+      await notifyPromotedFromWaitlist(matchId, promotedUid, match);
+    }
+    return { uid: promotedUid };
+  }
+
+  return null;
 }
 
 function assertPeladaPayable(
@@ -756,10 +968,12 @@ async function transferPeladaPriceToOrganizer(
     matchId: string;
     uid: string;
     organizerId: string;
+    paymentIntentId: string;
     kind?: "rel" | "bal";
   },
 ): Promise<string> {
-  const idempotencyKey = `pel_${opts.kind ?? "rel"}_${opts.matchId}_${opts.uid}`.slice(0, 255);
+  const idempotencyKey =
+    `pel_${opts.kind ?? "rel"}_${opts.matchId}_${opts.uid}_${opts.paymentIntentId}`.slice(0, 255);
   const transfer = await stripe.transfers.create(
     {
       amount: opts.priceCents,
@@ -835,6 +1049,7 @@ export async function releaseHeldPeladaPayments(
     : [];
 
   let released = 0;
+  let totalReleasedCents = 0;
   for (let i = 0; i < payments.length; i++) {
     const payment = payments[i];
     if (
@@ -850,6 +1065,7 @@ export async function releaseHeldPeladaPayments(
     if (!payerId || priceCents <= 0) continue;
 
     const destAccount = String(payment.organizerAccountId ?? accountId);
+    const paymentIntentId = String(payment.paymentIntentId ?? `bal_${payerId}_${i}`);
     try {
       const transferId = await transferPeladaPriceToOrganizer(stripe, {
         accountId: destAccount,
@@ -857,6 +1073,7 @@ export async function releaseHeldPeladaPayments(
         matchId,
         uid: payerId,
         organizerId,
+        paymentIntentId,
         kind: "rel",
       });
       payments[i] = {
@@ -867,6 +1084,7 @@ export async function releaseHeldPeladaPayments(
         releasedAt: new Date().toISOString(),
       };
       released += 1;
+      totalReleasedCents += priceCents;
     } catch (err) {
       console.warn("[releaseHeldPeladaPayments] transfer:", matchId, payerId, err);
     }
@@ -878,6 +1096,16 @@ export async function releaseHeldPeladaPayments(
       { merge: true },
     );
     console.log(`[releaseHeldPeladaPayments] ${matchId}: ${released} pagamento(s) libertados.`);
+
+    const title = String(match.title ?? "pelada");
+    await notifyUser(organizerId, {
+      id: `released-${matchId}`,
+      priority: "center",
+      type: "match",
+      title: "Dinheiro na Caixa",
+      body: `«${title}» concluída — ${formatEuroCents(totalReleasedCents)} enviados para a tua Caixa (${released} pagamentos).`,
+      link: "/perfil",
+    });
   }
 
   return released;
@@ -895,14 +1123,11 @@ export const releasePeladaPaymentsOnMatchComplete = onDocumentUpdated(
     if (!before || !after || before.status === after.status) return;
     if (after.status !== "concluida" || after.paymentsEnabled !== true) return;
 
-    const stripe = new Stripe(stripeSecretKey.value());
+    const stripe = createStripeClient(stripeSecretKey.value());
     const db = getFirestore();
     await releaseHeldPeladaPayments(stripe, db, event.params.matchId);
   },
 );
-
-/** @deprecated use releasePeladaPaymentsOnMatchComplete */
-export const releasePeladaPaymentsOnMatchLive = releasePeladaPaymentsOnMatchComplete;
 
 export async function markPlayerPaidFromSession(
   session: Stripe.Checkout.Session,
@@ -935,7 +1160,30 @@ export async function markPlayerPaidFromSession(
     });
   });
   console.log(`[stripeWebhook] pelada ${matchId}: ${uid} pago e confirmado.`);
+  await notifyOrganizerPaymentReceived(matchId, uid);
 }
+
+async function handlePeladaCheckoutSession(session: Stripe.Checkout.Session): Promise<void> {
+  if (session.mode !== "payment" || session.metadata?.kind !== "pelada") return;
+  if (session.payment_status !== "paid") {
+    const { matchId, uid } = (session.metadata ?? {}) as Record<string, string>;
+    console.log(
+      "[stripeWebhook] pelada checkout pendente (pagamento assíncrono):",
+      session.id,
+      "matchId=",
+      matchId ?? "?",
+      "uid=",
+      uid ?? "?",
+      "status=",
+      session.payment_status,
+    );
+    return;
+  }
+  await markPlayerPaidFromSession(session);
+}
+
+/** @deprecated use releasePeladaPaymentsOnMatchComplete */
+export const releasePeladaPaymentsOnMatchLive = releasePeladaPaymentsOnMatchComplete;
 
 /** Paga pelada com saldo — valor retido até a pelada ser concluída */
 export const payPeladaWithBalance = onCall(
@@ -956,7 +1204,7 @@ export const payPeladaWithBalance = onCall(
     const { priceCents } = assertPeladaPayable(match, uid);
     const organizerId = String(match.organizerId ?? "");
     const accountId = await loadOrganizerStripeAccount(db, organizerId);
-    const stripe = new Stripe(stripeSecretKey.value());
+    const stripe = createStripeClient(stripeSecretKey.value());
     await assertOrganizerChargesEnabled(stripe, accountId);
 
     let balanceUsedCents = 0;
@@ -998,6 +1246,7 @@ export const payPeladaWithBalance = onCall(
     });
 
     console.log(`[payPeladaWithBalance] ${matchId}: ${uid} usou ${balanceUsedCents}c (retido até concluída).`);
+    await notifyOrganizerPaymentReceived(matchId, uid);
     return { paid: true, balanceUsedCents, remainingBalanceCents };
   },
 );
@@ -1032,8 +1281,10 @@ export const leavePeladaWithBalanceCredit = onCall(
     );
     const payment = payIdx >= 0 ? peladaPayments[payIdx] : null;
 
+    let reversalForReconciliation: { transferId: string; amountCents: number } | null = null;
+
     if (payment && priceCents > 0 && paymentWasReleasedToOrganizer(payment)) {
-      const stripe = new Stripe(stripeSecretKey.value());
+      const stripe = createStripeClient(stripeSecretKey.value());
       const paidVia = String(payment.paidVia ?? "app");
       try {
         let transferId = String(payment.stripeTransferId ?? "");
@@ -1050,6 +1301,7 @@ export const leavePeladaWithBalanceCredit = onCall(
             priceCents,
             paidVia === "balance" ? "player_left_balance" : "player_left_credit",
           );
+          reversalForReconciliation = { transferId, amountCents: priceCents };
         }
       } catch (err) {
         const msg = stripeErrorMessage(err);
@@ -1064,7 +1316,8 @@ export const leavePeladaWithBalanceCredit = onCall(
     let creditedCents = 0;
     let shouldPromote = false;
 
-    await db.runTransaction(async (tx) => {
+    try {
+      await db.runTransaction(async (tx) => {
       const userRef = db.doc(`users/${uid}`);
       const [freshMatchSnap, userSnap] = await Promise.all([tx.get(matchRef), tx.get(userRef)]);
       const freshData = freshMatchSnap.data();
@@ -1127,6 +1380,7 @@ export const leavePeladaWithBalanceCredit = onCall(
         payments[freshPayIdx] = {
           ...payments[freshPayIdx],
           creditedToBalance: true,
+          creditedAt: new Date().toISOString(),
         };
         const currentBalance = Number(userSnap.data()?.peladaBalanceCents) || 0;
         tx.update(userRef, {
@@ -1150,114 +1404,184 @@ export const leavePeladaWithBalanceCredit = onCall(
         participantUserIds,
         savedAt: FieldValue.serverTimestamp(),
       });
-    });
+      });
+    } catch (err) {
+      if (reversalForReconciliation) {
+        await db.collection("billingReconciliation").add({
+          matchId,
+          uid,
+          transferId: reversalForReconciliation.transferId,
+          amountCents: reversalForReconciliation.amountCents,
+          reason: "reversal_ok_tx_failed",
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        console.error("[leavePeladaWithBalanceCredit] reversal ok, tx failed:", err);
+      }
+      throw err;
+    }
 
     if (shouldPromote) {
       await promoteWaitlistAfterLeave(db, matchId);
+    }
+
+    const organizerId = String(data.organizerId ?? "");
+    const matchTitle = String(data.title ?? "pelada");
+    const hadActivePayment =
+      payment != null &&
+      priceCents > 0 &&
+      (payment.creditedToBalance !== true && payment.refunded !== true);
+    if (organizerId && hadActivePayment) {
+      const playerName = await loadUserDisplayName(uid);
+      let body = `${playerName} saiu de «${matchTitle}» — vaga aberta.`;
+      if (reversalForReconciliation) {
+        body += " O valor voltou da tua Caixa para a plataforma.";
+      }
+      await notifyUser(organizerId, {
+        id: `left-${matchId}-${uid}`,
+        priority: "center",
+        type: "match",
+        title: "Jogador saiu",
+        body,
+        link: `/partida/${matchId}/pre-jogo`,
+      });
     }
 
     return { creditedCents };
   },
 );
 
-/** Cancela pelada e reembolsa pagamentos online */
+/** Cancela pelada — credita pagamentos ao saldo interno dos jogadores */
+async function cancelPeladaWithBalanceCreditsHandler(
+  request: { auth?: { uid?: string }; data?: { matchId?: string } },
+): Promise<{ credited: number; refunded: number }> {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+  const matchId = String(request.data?.matchId ?? "");
+  if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
+
+  const db = getFirestore();
+  const ref = db.doc(`matches/${matchId}`);
+  const snap = await ref.get();
+  const match = snap.data();
+  if (!match) throw new HttpsError("not-found", "Pelada não encontrada.");
+  if (String(match.organizerId ?? "") !== uid) {
+    throw new HttpsError("permission-denied", "Só o organizador pode cancelar.");
+  }
+
+  const status = String(match.status ?? "configurando");
+  if (status !== "configurando" && status !== "ao_vivo") {
+    throw new HttpsError("failed-precondition", "Só podes cancelar em preparação ou ao vivo.");
+  }
+
+  const stripe = createStripeClient(stripeSecretKey.value());
+  const payments: Array<Record<string, unknown>> = Array.isArray(match.peladaPayments)
+    ? [...(match.peladaPayments as Array<Record<string, unknown>>)]
+    : [];
+
+  let credited = 0;
+  const creditedByPayer = new Map<string, number>();
+
+  for (let i = 0; i < payments.length; i++) {
+    const payment = payments[i];
+    if (payment.refunded === true || payment.creditedToBalance === true) continue;
+
+    const payerId = String(payment.userId ?? "");
+    const priceCents = peladaPriceFromPayment(payment, match.price);
+    if (!payerId || priceCents <= 0) continue;
+
+    if (paymentWasReleasedToOrganizer(payment)) {
+      let transferId = String(payment.stripeTransferId ?? "");
+      if (!transferId.startsWith("tr_") && String(payment.paidVia ?? "app") === "app") {
+        const piId = String(payment.paymentIntentId ?? "");
+        if (piId.startsWith("pi_")) {
+          try {
+            transferId = (await getChargeTransferId(stripe, piId)) ?? "";
+          } catch (err) {
+            console.warn("[cancelPeladaWithBalanceCredits] resolve transfer:", piId, err);
+          }
+        }
+      }
+      if (transferId.startsWith("tr_")) {
+        try {
+          await reverseOrganizerPeladaTransfer(
+            stripe,
+            transferId,
+            priceCents,
+            "organizer_cancel",
+          );
+        } catch (err) {
+          console.warn("[cancelPeladaWithBalanceCredits] reversal:", transferId, err);
+        }
+      }
+    }
+
+    await db.runTransaction(async (tx) => {
+      const userRef = db.doc(`users/${payerId}`);
+      const userSnap = await tx.get(userRef);
+      const bal = Number(userSnap.data()?.peladaBalanceCents) || 0;
+      tx.update(userRef, {
+        peladaBalanceCents: bal + priceCents,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    payments[i] = {
+      ...payment,
+      creditedToBalance: true,
+      creditedAt: new Date().toISOString(),
+    };
+    credited += 1;
+    creditedByPayer.set(payerId, (creditedByPayer.get(payerId) ?? 0) + priceCents);
+  }
+
+  await ref.set(
+    {
+      status: "cancelada",
+      peladaPayments: payments,
+      savedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  const matchTitle = String(match.title ?? "pelada");
+  const organizerId = String(match.organizerId ?? "");
+  const notifyTargets = new Set<string>();
+  const participantUserIds: string[] = Array.isArray(match.participantUserIds)
+    ? match.participantUserIds
+    : [];
+  const paidUserIds: string[] = Array.isArray(match.paidUserIds) ? match.paidUserIds : [];
+  for (const id of [...participantUserIds, ...paidUserIds]) {
+    if (id && id !== organizerId) notifyTargets.add(id);
+  }
+
+  await Promise.allSettled(
+    [...notifyTargets].map(async (playerId) => {
+      const creditCents = creditedByPayer.get(playerId) ?? 0;
+      let body = `«${matchTitle}» foi cancelada.`;
+      if (creditCents > 0) {
+        body += ` ${formatEuroCents(creditCents)} creditados ao teu saldo para o próximo jogo.`;
+      }
+      await notifyUser(playerId, {
+        id: `cancel-${matchId}`,
+        priority: "popup",
+        type: "match",
+        title: "Pelada cancelada",
+        body,
+        link: "/jogos",
+      });
+    }),
+  );
+
+  return { credited, refunded: credited };
+}
+
+export const cancelPeladaWithBalanceCredits = onCall(
+  { region: REGION, secrets: [stripeSecretKey] },
+  cancelPeladaWithBalanceCreditsHandler,
+);
+
+/** @deprecated use cancelPeladaWithBalanceCredits */
 export const cancelPeladaWithRefunds = onCall(
   { region: REGION, secrets: [stripeSecretKey] },
-  async (request) => {
-    const uid = request.auth?.uid;
-    if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
-    const matchId = String(request.data?.matchId ?? "");
-    if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
-
-    const db = getFirestore();
-    const ref = db.doc(`matches/${matchId}`);
-    const snap = await ref.get();
-    const match = snap.data();
-    if (!match) throw new HttpsError("not-found", "Pelada não encontrada.");
-    if (String(match.organizerId ?? "") !== uid) {
-      throw new HttpsError("permission-denied", "Só o organizador pode cancelar.");
-    }
-
-    const status = String(match.status ?? "configurando");
-    if (status !== "configurando" && status !== "ao_vivo") {
-      throw new HttpsError("failed-precondition", "Só podes cancelar em preparação ou ao vivo.");
-    }
-
-    const stripe = new Stripe(stripeSecretKey.value());
-    const payments: Array<Record<string, unknown>> = Array.isArray(match.peladaPayments)
-      ? [...(match.peladaPayments as Array<Record<string, unknown>>)]
-      : [];
-
-    for (const payment of payments) {
-      if (payment.refunded === true) continue;
-      const paidVia = String(payment.paidVia ?? "app");
-      const payerId = String(payment.userId ?? "");
-      const priceCents = peladaPriceFromPayment(payment, match.price);
-      const released = paymentWasReleasedToOrganizer(payment);
-
-      if (paidVia === "balance" && payerId && priceCents > 0) {
-        if (released) {
-          const transferId = String(payment.stripeTransferId ?? "");
-          if (transferId.startsWith("tr_")) {
-            try {
-              await reverseOrganizerPeladaTransfer(
-                stripe,
-                transferId,
-                priceCents,
-                "organizer_cancel_balance",
-              );
-            } catch (err) {
-              console.warn("[cancelPeladaWithRefunds] reversal:", transferId, err);
-            }
-          }
-        }
-        const userRef = db.doc(`users/${payerId}`);
-        const userSnap = await userRef.get();
-        const bal = Number(userSnap.data()?.peladaBalanceCents) || 0;
-        await userRef.set(
-          { peladaBalanceCents: bal + priceCents, updatedAt: FieldValue.serverTimestamp() },
-          { merge: true },
-        );
-        payment.refunded = true;
-        continue;
-      }
-
-      const paymentIntentId = String(payment.paymentIntentId ?? "");
-      if (!paymentIntentId.startsWith("pi_")) continue;
-
-      if (released) {
-        const transferId = String(payment.stripeTransferId ?? "");
-        if (transferId.startsWith("tr_")) {
-          try {
-            await reverseOrganizerPeladaTransfer(
-              stripe,
-              transferId,
-              priceCents,
-              "organizer_cancel_released",
-            );
-          } catch (err) {
-            console.warn("[cancelPeladaWithRefunds] reversal released:", transferId, err);
-          }
-        }
-      }
-
-      try {
-        await stripe.refunds.create({ payment_intent: paymentIntentId });
-        payment.refunded = true;
-      } catch (err) {
-        console.warn("[cancelPeladaWithRefunds] refund:", paymentIntentId, err);
-      }
-    }
-
-    await ref.set(
-      {
-        status: "cancelada",
-        peladaPayments: payments,
-        savedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    return { refunded: payments.filter((p) => p.refunded === true).length };
-  },
+  cancelPeladaWithBalanceCreditsHandler,
 );

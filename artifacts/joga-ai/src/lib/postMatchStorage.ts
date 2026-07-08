@@ -15,6 +15,7 @@ export type PeladaPayment = {
   paidAt: string;
   refunded?: boolean;
   creditedToBalance?: boolean;
+  creditedAt?: string;
   paidVia?: "app" | "balance";
   /** Transferência Stripe Connect ao organizador (pagamentos com saldo) */
   stripeTransferId?: string;

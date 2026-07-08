@@ -447,8 +447,8 @@ export async function cancelMatch(matchId: string): Promise<void> {
   }
 
   if (isFirebaseConfigured()) {
-    const { cancelPeladaWithRefunds } = await import("./peladaBilling");
-    await cancelPeladaWithRefunds(matchId);
+    const { cancelPeladaWithBalanceCredits } = await import("./peladaBilling");
+    await cancelPeladaWithBalanceCredits(matchId);
   }
 
   await updateMatchStatus(matchId, "cancelada");

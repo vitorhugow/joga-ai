@@ -31,8 +31,8 @@ const premiumSkins = [
 
 const planFeatures = {
   organizador: [
-    "Clube PRO activo só na comunidade que escolheres",
-    "Selo ✦ Clube PRO nas peladas desse clube",
+    "Mensalistas: define o teu preço mensal e gere quem está em dia",
+    "Selo ✦ Clube PRO nas tuas peladas + destaque no Encontrar Jogos",
     "Marca do clube na convocatória e na imagem de resultado",
     "Painel do clube: pagamentos, presenças e estatísticas da época",
     "Recorrentes, lembretes automáticos e histórico ilimitado",
@@ -410,7 +410,7 @@ export default function Premium() {
                 ))}
               </div>
               <p className="text-white/45 text-xs mb-3 leading-relaxed">
-                Cada assinatura activa o PRO num clube. Tens vários clubes? Subscreve um de cada vez.
+                Cada assinatura activa o PRO num clube.
               </p>
               <select
                 value={organizerCommunityId}

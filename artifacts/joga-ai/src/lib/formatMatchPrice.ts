@@ -1,21 +1,25 @@
-/** Formata preço por jogador com símbolo € (ex: "5" → "5€/jogador"). */
-export function formatMatchPricePerPlayer(price?: string | null): string | null {
+/** Valor curto para cards — ex: "5" → "5€" */
+export function formatMatchPriceAmount(price?: string | null): string | null {
   if (!price || price === "—" || !price.trim()) return null;
   const t = price.trim();
   if (/grátis/i.test(t)) return "Grátis";
   if (/€/.test(t)) {
-    if (/\/\s*jogador/i.test(t)) return t;
-    return `${t}/jogador`;
+    return t.replace(/\/\s*jogador/gi, "").trim();
   }
   const cleaned = t.replace(/[^\d.,]/g, "");
-  if (cleaned) return `${cleaned}€/jogador`;
-  return `${t}€/jogador`;
+  if (cleaned) return `${cleaned}€`;
+  return `${t}€`;
 }
 
-/** Versão curta para chips (ex: "💰 5€/jog"). */
+/** @deprecated prefer formatMatchPriceAmount — mantido para textos longos */
+export function formatMatchPricePerPlayer(price?: string | null): string | null {
+  return formatMatchPriceAmount(price);
+}
+
+/** Versão curta para chips nos cards (ex: "💰 5€"). */
 export function formatMatchPriceChip(price?: string | null): string | null {
-  const full = formatMatchPricePerPlayer(price);
-  if (!full) return null;
-  if (/grátis/i.test(full)) return "🎁 Grátis";
-  return `💰 ${full}`;
+  const amount = formatMatchPriceAmount(price);
+  if (!amount) return null;
+  if (/grátis/i.test(amount)) return "🎁 Grátis";
+  return `💰 ${amount}`;
 }

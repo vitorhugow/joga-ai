@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useRoute, Link } from "wouter";
 import {
   AlertTriangle,
   CheckCircle,
@@ -21,7 +21,7 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
-import { formatMatchPricePerPlayer } from "@/lib/formatMatchPrice";
+import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
 import { createIncompleteSeedProfile, loadUserProfile } from "@/lib/userRepository";
@@ -815,6 +815,18 @@ export default function PreJogo() {
       return;
     }
     if (!userId) return;
+
+    if (myPlayer?.paid && paymentsOn) {
+      const ok = await confirm({
+        title: "Sair da pelada?",
+        description:
+          "O teu pagamento online não é reembolsável. O valor fica registado — créditos para jogos futuros estão a chegar.",
+        confirmLabel: "Sair mesmo assim",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+
     setRsvpBusy(true);
     try {
       await leaveMatch(matchId, userId);
@@ -1349,7 +1361,7 @@ export default function PreJogo() {
               </span>
               {matchDetails.price && (
                 <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(96,165,250,0.1)", color: "#60a5fa" }}>
-                  💰 {formatMatchPricePerPlayer(matchDetails.price) ?? matchDetails.price}
+                  💰 {formatMatchPriceAmount(matchDetails.price) ?? matchDetails.price}
                 </span>
               )}
               {paymentsOn && (
@@ -1367,7 +1379,17 @@ export default function PreJogo() {
 
           {matchDetails?.organizerName && (
             <p className="text-white/40 text-xs mt-2">
-              Organizador: <span className="text-white font-semibold">{matchDetails.organizerName}</span>
+              Organizador:{" "}
+              {resolvedOrganizerId ? (
+                <Link
+                  href={`/perfil/${resolvedOrganizerId}`}
+                  className="text-white font-semibold underline underline-offset-2 hover:text-emerald-300 transition-colors"
+                >
+                  {matchDetails.organizerName}
+                </Link>
+              ) : (
+                <span className="text-white font-semibold">{matchDetails.organizerName}</span>
+              )}
               {matchDetails && (
                 <> · {accessModeLabel(resolveAccessMode({
                   accessMode: matchDetails.accessMode,
@@ -1375,6 +1397,12 @@ export default function PreJogo() {
                   communityId: matchDetails.communityId,
                 }))}</>
               )}
+            </p>
+          )}
+
+          {paymentsOn && (
+            <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
+              Pagamentos online não são reembolsáveis se saíres da pelada. Se o organizador cancelar a partida, os valores pagos são devolvidos automaticamente.
             </p>
           )}
 
@@ -1475,7 +1503,7 @@ export default function PreJogo() {
                   data-testid={paymentsOn ? "button-pay-pelada" : "button-confirm-rsvp"}
                 >
                   {paymentsOn
-                    ? `💳 Paga ${formatMatchPricePerPlayer(matchDetails?.price) ?? matchDetails?.price ?? ""} e confirma a tua presença`
+                    ? `💳 Pagar ${formatMatchPriceAmount(matchDetails?.price) ?? ""} e confirmar presença`
                     : "Confirmar presença"}
                 </JogaButton>
               </>

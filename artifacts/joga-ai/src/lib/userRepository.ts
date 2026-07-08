@@ -157,6 +157,12 @@ export function formatWhatsappDisplay(number: string): string {
   return `+${digits}`;
 }
 
+/** Organizadores precisam de WhatsApp válido (mín. 9 dígitos) para criar peladas. */
+export function hasOrganizerWhatsapp(profile?: UserProfile | null): boolean {
+  const digits = profile?.whatsapp?.replace(/\D/g, "") ?? "";
+  return digits.length >= 9;
+}
+
 export function getVisibleSocialLinks(profile: UserProfile): VisibleSocialLinks | null {
   const links: VisibleSocialLinks = {};
 

@@ -14,6 +14,8 @@ import type { MatchAccessMode } from "@/lib/matchAccess";
 import { openToExternalFromAccessMode } from "@/lib/matchAccess";
 import { calculateOverall } from "@/lib/cardUtils";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
+import { ProfileEditDialog } from "@/components/profile/ProfileEditDialog";
+import { hasOrganizerWhatsapp } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
@@ -146,6 +148,7 @@ export default function CriarPartida() {
     return d.toISOString().slice(0, 10);
   }
   const [showSetup, setShowSetup] = useState(false);
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -190,6 +193,16 @@ export default function CriarPartida() {
     }
     if (needsSetup || !profile.profileComplete) {
       setShowSetup(true);
+      return;
+    }
+
+    if (!hasOrganizerWhatsapp(profile)) {
+      toast({
+        title: "WhatsApp obrigatório",
+        description: "Adiciona o teu WhatsApp no perfil — os jogadores precisam de falar contigo.",
+        variant: "destructive",
+      });
+      setShowProfileEdit(true);
       return;
     }
 
@@ -321,6 +334,14 @@ export default function CriarPartida() {
         onOpenChange={setShowSetup}
         dismissible
         onComplete={() => void refresh()}
+      />
+      <ProfileEditDialog
+        open={showProfileEdit}
+        onOpenChange={(open) => {
+          setShowProfileEdit(open);
+          if (!open) void refresh();
+        }}
+        profile={profile}
       />
 
       <div className="relative overflow-hidden" style={{ background: "linear-gradient(155deg, #031408 0%, #052010 28%, #0a5a1e 65%, #0d6826 100%)" }}>

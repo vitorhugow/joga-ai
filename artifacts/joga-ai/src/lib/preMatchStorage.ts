@@ -7,6 +7,7 @@ export type LivePlayer = {
   position: string;
   overall: number;
   paid?: boolean;
+  paidVia?: "app" | "balance";
   isMe?: boolean;
   manual?: boolean;
   userId?: string;

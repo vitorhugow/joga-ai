@@ -495,7 +495,7 @@ export const createPeladaCheckout = onCall(
 
     const origin = safeOrigin(request.data?.origin);
     // Cobrança na plataforma (separate charge) — transferência ao organizador só quando
-    // a pelada passa a ao_vivo, para o org não levantar antes de um jogador poder sair.
+    // a pelada é concluída, para o org não levantar antes do jogo acabar.
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       client_reference_id: uid,
@@ -790,7 +790,7 @@ async function reverseOrganizerPeladaTransfer(
   });
 }
 
-/** Pagamentos antigos (destination charge) já tinham ido para o org; novos ficam retidos até ao_vivo */
+/** Pagamentos antigos (destination charge) já tinham ido para o org; novos ficam retidos até concluída */
 function paymentWasReleasedToOrganizer(payment: Record<string, unknown>): boolean {
   if (payment.releasedToOrganizer === false) return false;
   if (payment.releasedToOrganizer === true) return true;
@@ -809,7 +809,7 @@ function peladaPriceFromPayment(
   return parsePriceCents(matchPrice) ?? 0;
 }
 
-/** Liberta pagamentos retidos → Caixa do organizador (só após ao_vivo) */
+/** Liberta pagamentos retidos → Caixa do organizador (só após concluída) */
 export async function releaseHeldPeladaPayments(
   stripe: Stripe,
   db: Firestore,
@@ -883,7 +883,7 @@ export async function releaseHeldPeladaPayments(
   return released;
 }
 
-export const releasePeladaPaymentsOnMatchLive = onDocumentUpdated(
+export const releasePeladaPaymentsOnMatchComplete = onDocumentUpdated(
   {
     document: "matches/{matchId}",
     region: REGION,
@@ -893,13 +893,16 @@ export const releasePeladaPaymentsOnMatchLive = onDocumentUpdated(
     const before = event.data?.before.data();
     const after = event.data?.after.data();
     if (!before || !after || before.status === after.status) return;
-    if (after.status !== "ao_vivo" || after.paymentsEnabled !== true) return;
+    if (after.status !== "concluida" || after.paymentsEnabled !== true) return;
 
     const stripe = new Stripe(stripeSecretKey.value());
     const db = getFirestore();
     await releaseHeldPeladaPayments(stripe, db, event.params.matchId);
   },
 );
+
+/** @deprecated use releasePeladaPaymentsOnMatchComplete */
+export const releasePeladaPaymentsOnMatchLive = releasePeladaPaymentsOnMatchComplete;
 
 export async function markPlayerPaidFromSession(
   session: Stripe.Checkout.Session,
@@ -934,7 +937,7 @@ export async function markPlayerPaidFromSession(
   console.log(`[stripeWebhook] pelada ${matchId}: ${uid} pago e confirmado.`);
 }
 
-/** Paga pelada com saldo — valor retido até ao_vivo (como cartão) */
+/** Paga pelada com saldo — valor retido até a pelada ser concluída */
 export const payPeladaWithBalance = onCall(
   { region: REGION, secrets: [stripeSecretKey] },
   async (request) => {
@@ -994,7 +997,7 @@ export const payPeladaWithBalance = onCall(
       });
     });
 
-    console.log(`[payPeladaWithBalance] ${matchId}: ${uid} usou ${balanceUsedCents}c (retido até ao_vivo).`);
+    console.log(`[payPeladaWithBalance] ${matchId}: ${uid} usou ${balanceUsedCents}c (retido até concluída).`);
     return { paid: true, balanceUsedCents, remainingBalanceCents };
   },
 );

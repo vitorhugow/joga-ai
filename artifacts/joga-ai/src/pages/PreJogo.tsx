@@ -13,6 +13,7 @@ import {
   X,
   Share2,
   Link as LinkIcon,
+  MessageCircle,
   UserPlus,
 } from "lucide-react";
 import { loadMatchFromFirestore, saveMatchRoster, cancelMatch, startMatchLive } from "@/lib/matchRepository";
@@ -25,7 +26,7 @@ import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
 import { formatCentsEuro, peladaCheckoutTotalCents, peladaPriceCents } from "@/lib/peladaWallet";
-import { createIncompleteSeedProfile, loadUserProfile } from "@/lib/userRepository";
+import { createIncompleteSeedProfile, getWhatsappUrl, loadUserProfile } from "@/lib/userRepository";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import {
@@ -82,12 +83,43 @@ type Player = {
   position: string;
   overall: number;
   paid: boolean;
+  paidVia?: "app" | "balance";
   isMe?: boolean;
   manual?: boolean;
   userId?: string;
   guestId?: string;
   loanCard?: boolean;
 };
+
+function toPreJogoPlayer(
+  p: {
+    id: string;
+    name: string;
+    position: string;
+    overall: number;
+    paid?: boolean;
+    paidVia?: string;
+    manual?: boolean;
+    userId?: string;
+    guestId?: string;
+    loanCard?: boolean;
+  },
+  uid?: string | null,
+): Player {
+  return {
+    id: p.id,
+    name: p.name,
+    position: p.position,
+    overall: p.overall,
+    paid: p.paid ?? false,
+    paidVia: p.paidVia === "app" || p.paidVia === "balance" ? p.paidVia : undefined,
+    isMe: p.userId === uid,
+    manual: p.manual,
+    userId: p.userId,
+    guestId: p.guestId,
+    loanCard: p.loanCard,
+  };
+}
 
 
 const teamNames: Record<TeamKey, string> = {
@@ -161,8 +193,15 @@ function getTeamSortRank(team?: PlayerStatus) {
   return order[team || "BENCH"];
 }
 
-function PlayerBadge({ player }: { player: Player }) {
+function PlayerBadge({
+  player,
+  showOnlinePaidBadge,
+}: {
+  player: Player;
+  showOnlinePaidBadge?: boolean;
+}) {
   const color = posColors[player.position] || "#9ca3af";
+  const paidOnline = player.paidVia === "app" || player.paidVia === "balance";
 
   return (
     <div className="flex items-center gap-2 min-w-0">
@@ -175,9 +214,14 @@ function PlayerBadge({ player }: { player: Player }) {
       </div>
 
       <div className="min-w-0">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           {!player.paid && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
           <p className="text-sm font-bold text-white/85 truncate">{player.name}</p>
+          {showOnlinePaidBadge && paidOnline && (
+            <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/40 shrink-0">
+              💳 ONLINE
+            </span>
+          )}
           {player.loanCard && (
             <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 shrink-0">
               VISITANTE
@@ -186,7 +230,13 @@ function PlayerBadge({ player }: { player: Player }) {
         </div>
 
         <p className={player.paid ? "text-[11px] font-bold text-emerald-300/80" : "text-[11px] font-black text-red-300"}>
-          {player.loanCard ? "Visitante" : player.paid ? "Pago" : "Pendente"}
+          {player.loanCard
+            ? "Visitante"
+            : paidOnline && showOnlinePaidBadge
+              ? "Pago online"
+              : player.paid
+                ? "Pago"
+                : "Pendente"}
         </p>
       </div>
     </div>
@@ -347,6 +397,7 @@ export default function PreJogo() {
   const [matchStatus, setMatchStatus] = useState<string>("configurando");
   const [paymentsOn, setPaymentsOn] = useState(false);
   const [organizerCaixaReady, setOrganizerCaixaReady] = useState(false);
+  const [organizerWhatsapp, setOrganizerWhatsapp] = useState<string | null>(null);
   const [paidUserIds, setPaidUserIds] = useState<string[]>([]);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
@@ -381,18 +432,7 @@ export default function PreJogo() {
       void loadMatchFromFirestore(matchId).then((merged) => {
         if (merged?.paidUserIds) setPaidUserIds(merged.paidUserIds);
         if (merged?.players && userId) {
-          const mapped = merged.players.map((p) => ({
-            id: p.id,
-            name: p.name,
-            position: p.position,
-            overall: p.overall,
-            paid: p.paid ?? false,
-            isMe: p.userId === userId,
-            manual: p.manual,
-            userId: p.userId,
-            guestId: p.guestId,
-            loanCard: p.loanCard,
-          }));
+          const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
           setPlayers(linkPlayersInRoster(mapped, userId));
           setPlayerTeams(merged.playerTeams ?? {});
         }
@@ -439,18 +479,7 @@ export default function PreJogo() {
       const source = merged ?? pre;
 
       if (source) {
-        const mapped = source.players.map((p) => ({
-          id: p.id,
-          name: p.name,
-          position: p.position,
-          overall: p.overall,
-          paid: p.paid ?? false,
-          isMe: p.isMe,
-          manual: p.manual,
-          userId: p.userId,
-          guestId: p.guestId,
-          loanCard: p.loanCard,
-        }));
+        const mapped = source.players.map((p) => toPreJogoPlayer(p, userId));
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setWaitlist(merged?.waitlist ?? []);
         setGameMode(source.gameMode ?? "fut5");
@@ -774,18 +803,7 @@ export default function PreJogo() {
       const merged = await loadMatchFromFirestore(matchId);
       if (merged?.waitlist) setWaitlist(merged.waitlist);
       if (merged?.players) {
-        const mapped = merged.players.map((p) => ({
-          id: p.id,
-          name: p.name,
-          position: p.position,
-          overall: p.overall,
-          paid: p.paid ?? false,
-          isMe: p.userId === uid,
-          manual: p.manual,
-          userId: p.userId,
-          guestId: p.guestId,
-          loanCard: p.loanCard,
-        }));
+        const mapped = merged.players.map((p) => toPreJogoPlayer(p, uid));
         setPlayers(linkPlayersInRoster(mapped, uid));
         setPlayerTeams(merged.playerTeams ?? {});
       }
@@ -841,18 +859,7 @@ export default function PreJogo() {
       const merged = await loadMatchFromFirestore(matchId);
       if (merged?.waitlist) setWaitlist(merged.waitlist);
       if (merged?.players) {
-        const mapped = merged.players.map((p) => ({
-          id: p.id,
-          name: p.name,
-          position: p.position,
-          overall: p.overall,
-          paid: p.paid ?? false,
-          isMe: p.userId === userId,
-          manual: p.manual,
-          userId: p.userId,
-          guestId: p.guestId,
-          loanCard: p.loanCard,
-        }));
+        const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setPlayerTeams(merged.playerTeams ?? {});
       }
@@ -1193,9 +1200,16 @@ export default function PreJogo() {
 
   function togglePaid(playerId: string) {
     setPlayers((current) =>
-      current.map((player) =>
-        player.id === playerId ? { ...player, paid: !player.paid } : player
-      )
+      current.map((player) => {
+        if (player.id !== playerId) return player;
+        const paid = !player.paid;
+        const paidOnline = player.paidVia === "app" || player.paidVia === "balance";
+        return {
+          ...player,
+          paid,
+          paidVia: paid && paidOnline ? player.paidVia : undefined,
+        };
+      }),
     );
   }
 
@@ -1298,18 +1312,7 @@ export default function PreJogo() {
           const merged = await loadMatchFromFirestore(matchId);
           if (merged?.waitlist) setWaitlist(merged.waitlist);
           if (merged?.players && userId) {
-            const mapped = merged.players.map((p) => ({
-              id: p.id,
-              name: p.name,
-              position: p.position,
-              overall: p.overall,
-              paid: p.paid ?? false,
-              isMe: p.userId === userId,
-              manual: p.manual,
-              userId: p.userId,
-              guestId: p.guestId,
-              loanCard: p.loanCard,
-            }));
+            const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
             setPlayers(linkPlayersInRoster(mapped, userId));
             setPlayerTeams(merged.playerTeams ?? {});
           }
@@ -1329,24 +1332,29 @@ export default function PreJogo() {
 
   useEffect(() => {
     const orgId = resolvedOrganizerId;
-    if (!orgId || !paymentsOn) {
+    if (!orgId) {
       setOrganizerCaixaReady(false);
+      setOrganizerWhatsapp(null);
       return;
     }
     if (userId === orgId) {
-      setOrganizerCaixaReady(Boolean(profile?.stripeAccountId));
+      setOrganizerCaixaReady(Boolean(paymentsOn && profile?.stripeAccountId));
+      setOrganizerWhatsapp(profile?.whatsapp ?? null);
       return;
     }
     let cancelled = false;
     void loadUserProfile(orgId, createIncompleteSeedProfile(orgId, false), {
       preferRemote: true,
     }).then((p) => {
-      if (!cancelled) setOrganizerCaixaReady(Boolean(p?.stripeAccountId));
+      if (!cancelled) {
+        setOrganizerCaixaReady(Boolean(paymentsOn && p?.stripeAccountId));
+        setOrganizerWhatsapp(p?.whatsapp ?? null);
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [resolvedOrganizerId, paymentsOn, userId, profile?.stripeAccountId]);
+  }, [resolvedOrganizerId, paymentsOn, userId, profile?.stripeAccountId, profile?.whatsapp]);
 
   const showRsvpBanner = Boolean(
     !isOrganizer && rosterHydrated && canConfirmPresence(matchStatus),
@@ -1455,9 +1463,22 @@ export default function PreJogo() {
             </p>
           )}
 
+          {!isOrganizer && organizerWhatsapp && getWhatsappUrl(organizerWhatsapp) && (
+            <a
+              href={getWhatsappUrl(organizerWhatsapp)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 mt-2 text-emerald-300 text-xs font-bold hover:text-emerald-200 transition-colors"
+              data-testid="link-organizer-whatsapp"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              Falar com o organizador no WhatsApp
+            </a>
+          )}
+
           {paymentsOn && (
             <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
-              Pagamentos online não são reembolsáveis em dinheiro se saíres — o preço da pelada fica no teu saldo (a taxa de 0,50€ não). O organizador só recebe na Caixa quando a pelada começa. Se o organizador cancelar, os valores pagos são devolvidos.
+              Pagamentos online não são reembolsáveis em dinheiro se saíres — o preço da pelada fica no teu saldo (a taxa de 0,50€ não). O organizador só recebe na Caixa quando a pelada termina. Se o organizador cancelar, os valores pagos são devolvidos.
             </p>
           )}
 
@@ -1595,7 +1616,7 @@ export default function PreJogo() {
               <>
                 <p className="text-white text-sm font-bold mt-2">Caixa ligada ✓</p>
                 <p className="text-white/45 text-xs mt-1">
-                  Os jogadores podem pagar online. O valor só entra na tua Caixa quando inicias a pelada (ao vivo).
+                  Os jogadores podem pagar online. O valor só entra na tua Caixa quando a pelada termina (concluída).
                 </p>
                 <button
                   type="button"
@@ -1884,7 +1905,7 @@ export default function PreJogo() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <PlayerBadge player={player} />
+                      <PlayerBadge player={player} showOnlinePaidBadge={canManageMatch && paymentsOn} />
                     </div>
 
                     <select

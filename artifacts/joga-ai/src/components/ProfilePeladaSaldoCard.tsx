@@ -33,8 +33,8 @@ export function ProfilePeladaSaldoCard({ profile }: Props) {
 
       <p className="text-white/45 text-xs mt-2 leading-relaxed">
         {hasSaldo
-          ? "Usa em peladas com pagamento online — o organizador recebe na Caixa quando a pelada começa."
-          : "Se saíres de uma pelada já paga, o preço fica aqui (a taxa de 0,50€ não). O dinheiro fica seguro na plataforma até o jogo começar."}
+          ? "Usa em peladas com pagamento online — o organizador recebe na Caixa quando a pelada termina."
+          : "Se saíres de uma pelada já paga, o preço fica aqui (a taxa de 0,50€ não). O dinheiro fica seguro até o jogo acabar."}
       </p>
     </div>
   );

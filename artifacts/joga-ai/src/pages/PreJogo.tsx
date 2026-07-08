@@ -1457,7 +1457,7 @@ export default function PreJogo() {
 
           {paymentsOn && (
             <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
-              Pagamentos online não são reembolsáveis em dinheiro se saíres — o preço da pelada fica no teu saldo (a taxa de 0,50€ não). Ao usar saldo, o organizador recebe na Caixa. Se o organizador cancelar, os valores pagos são devolvidos.
+              Pagamentos online não são reembolsáveis em dinheiro se saíres — o preço da pelada fica no teu saldo (a taxa de 0,50€ não). O organizador só recebe na Caixa quando a pelada começa. Se o organizador cancelar, os valores pagos são devolvidos.
             </p>
           )}
 
@@ -1595,7 +1595,7 @@ export default function PreJogo() {
               <>
                 <p className="text-white text-sm font-bold mt-2">Caixa ligada ✓</p>
                 <p className="text-white/45 text-xs mt-1">
-                  Os jogadores confirmados já podem pagar online nesta pelada.
+                  Os jogadores podem pagar online. O valor só entra na tua Caixa quando inicias a pelada (ao vivo).
                 </p>
                 <button
                   type="button"

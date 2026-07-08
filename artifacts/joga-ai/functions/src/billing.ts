@@ -12,6 +12,7 @@
  */
 
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import type { Transaction, DocumentSnapshot, DocumentReference, Firestore, DocumentData } from "firebase-admin/firestore";
@@ -490,12 +491,11 @@ export const createPeladaCheckout = onCall(
       throw new HttpsError("failed-precondition", "A conta do organizador ainda está em verificação no Stripe.");
     }
 
-    // Modelo final: taxa de 0,50€ SEMPRE (receita da plataforma em todas
-    // as peladas). O Clube PRO vende ferramentas e estatuto, não isenção.
     const totalCents = priceCents + PLAYER_FEE_CENTS;
-    const feeCents = PLAYER_FEE_CENTS;
 
     const origin = safeOrigin(request.data?.origin);
+    // Cobrança na plataforma (separate charge) — transferência ao organizador só quando
+    // a pelada passa a ao_vivo, para o org não levantar antes de um jogador poder sair.
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       client_reference_id: uid,
@@ -513,11 +513,21 @@ export const createPeladaCheckout = onCall(
         },
       ],
       payment_intent_data: {
-        application_fee_amount: feeCents,
-        transfer_data: { destination: accountId },
-        metadata: { kind: "pelada", matchId, uid, organizerId },
+        metadata: {
+          kind: "pelada",
+          matchId,
+          uid,
+          organizerId,
+          organizerAccountId: accountId,
+        },
       },
-      metadata: { kind: "pelada", matchId, uid, organizerId },
+      metadata: {
+        kind: "pelada",
+        matchId,
+        uid,
+        organizerId,
+        organizerAccountId: accountId,
+      },
       success_url: `${origin}/partida/${matchId}/pre-jogo?pagamento=sucesso`,
       cancel_url: `${origin}/partida/${matchId}/pre-jogo?pagamento=cancelado`,
     });
@@ -535,6 +545,8 @@ type PeladaPayInput = {
   paidVia: "app" | "balance";
   stripeTransferId?: string;
   organizerPriceCents?: number;
+  releasedToOrganizer?: boolean;
+  organizerAccountId?: string;
 };
 
 function applyPeladaPlayerPaidInTx(
@@ -569,6 +581,8 @@ function applyPeladaPlayerPaidInTx(
       ...(payment.organizerPriceCents != null
         ? { organizerPriceCents: payment.organizerPriceCents }
         : {}),
+      releasedToOrganizer: payment.releasedToOrganizer === true,
+      ...(payment.organizerAccountId ? { organizerAccountId: payment.organizerAccountId } : {}),
     });
   }
 
@@ -736,9 +750,16 @@ async function getChargeTransferId(stripe: Stripe, paymentIntentId: string): Pro
 /** Envia o preço da pelada para a Caixa do organizador (pagamento com saldo) */
 async function transferPeladaPriceToOrganizer(
   stripe: Stripe,
-  opts: { accountId: string; priceCents: number; matchId: string; uid: string; organizerId: string },
+  opts: {
+    accountId: string;
+    priceCents: number;
+    matchId: string;
+    uid: string;
+    organizerId: string;
+    kind?: "rel" | "bal";
+  },
 ): Promise<string> {
-  const idempotencyKey = `pel_bal_${opts.matchId}_${opts.uid}`.slice(0, 255);
+  const idempotencyKey = `pel_${opts.kind ?? "rel"}_${opts.matchId}_${opts.uid}`.slice(0, 255);
   const transfer = await stripe.transfers.create(
     {
       amount: opts.priceCents,
@@ -769,10 +790,121 @@ async function reverseOrganizerPeladaTransfer(
   });
 }
 
+/** Pagamentos antigos (destination charge) já tinham ido para o org; novos ficam retidos até ao_vivo */
+function paymentWasReleasedToOrganizer(payment: Record<string, unknown>): boolean {
+  if (payment.releasedToOrganizer === false) return false;
+  if (payment.releasedToOrganizer === true) return true;
+  return (
+    String(payment.paidVia ?? "app") === "app" &&
+    String(payment.paymentIntentId ?? "").startsWith("pi_")
+  );
+}
+
+function peladaPriceFromPayment(
+  payment: Record<string, unknown>,
+  matchPrice: unknown,
+): number {
+  const fromPayment = Number(payment.organizerPriceCents);
+  if (fromPayment > 0) return fromPayment;
+  return parsePriceCents(matchPrice) ?? 0;
+}
+
+/** Liberta pagamentos retidos → Caixa do organizador (só após ao_vivo) */
+export async function releaseHeldPeladaPayments(
+  stripe: Stripe,
+  db: Firestore,
+  matchId: string,
+): Promise<number> {
+  const ref = db.doc(`matches/${matchId}`);
+  const snap = await ref.get();
+  const match = snap.data();
+  if (!match || match.paymentsEnabled !== true) return 0;
+
+  const organizerId = String(match.organizerId ?? "");
+  let accountId = "";
+  try {
+    accountId = await loadOrganizerStripeAccount(db, organizerId);
+    await assertOrganizerChargesEnabled(stripe, accountId);
+  } catch (err) {
+    console.error("[releaseHeldPeladaPayments] org sem caixa:", matchId, err);
+    return 0;
+  }
+
+  const payments: Array<Record<string, unknown>> = Array.isArray(match.peladaPayments)
+    ? [...(match.peladaPayments as Array<Record<string, unknown>>)]
+    : [];
+
+  let released = 0;
+  for (let i = 0; i < payments.length; i++) {
+    const payment = payments[i];
+    if (
+      payment.refunded === true ||
+      payment.creditedToBalance === true ||
+      payment.releasedToOrganizer === true
+    ) {
+      continue;
+    }
+
+    const payerId = String(payment.userId ?? "");
+    const priceCents = peladaPriceFromPayment(payment, match.price);
+    if (!payerId || priceCents <= 0) continue;
+
+    const destAccount = String(payment.organizerAccountId ?? accountId);
+    try {
+      const transferId = await transferPeladaPriceToOrganizer(stripe, {
+        accountId: destAccount,
+        priceCents,
+        matchId,
+        uid: payerId,
+        organizerId,
+        kind: "rel",
+      });
+      payments[i] = {
+        ...payment,
+        releasedToOrganizer: true,
+        stripeTransferId: transferId,
+        organizerPriceCents: priceCents,
+        releasedAt: new Date().toISOString(),
+      };
+      released += 1;
+    } catch (err) {
+      console.warn("[releaseHeldPeladaPayments] transfer:", matchId, payerId, err);
+    }
+  }
+
+  if (released > 0) {
+    await ref.set(
+      { peladaPayments: payments, savedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+    console.log(`[releaseHeldPeladaPayments] ${matchId}: ${released} pagamento(s) libertados.`);
+  }
+
+  return released;
+}
+
+export const releasePeladaPaymentsOnMatchLive = onDocumentUpdated(
+  {
+    document: "matches/{matchId}",
+    region: REGION,
+    secrets: [stripeSecretKey],
+  },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after || before.status === after.status) return;
+    if (after.status !== "ao_vivo" || after.paymentsEnabled !== true) return;
+
+    const stripe = new Stripe(stripeSecretKey.value());
+    const db = getFirestore();
+    await releaseHeldPeladaPayments(stripe, db, event.params.matchId);
+  },
+);
+
 export async function markPlayerPaidFromSession(
   session: Stripe.Checkout.Session,
 ): Promise<void> {
-  const { matchId, uid } = (session.metadata ?? {}) as Record<string, string>;
+  const { matchId, uid, organizerAccountId } = (session.metadata ?? {}) as Record<string, string>;
   if (!matchId || !uid) return;
 
   const paymentIntentId =
@@ -780,6 +912,7 @@ export async function markPlayerPaidFromSession(
       ? session.payment_intent
       : session.payment_intent?.id ?? "";
   const amountCents = session.amount_total ?? 0;
+  const organizerPriceCents = Math.max(0, amountCents - PLAYER_FEE_CENTS);
 
   const db = getFirestore();
   const userSnap = await db.doc(`users/${uid}`).get();
@@ -793,12 +926,15 @@ export async function markPlayerPaidFromSession(
       paymentIntentId,
       amountCents,
       paidVia: "app",
+      organizerPriceCents,
+      releasedToOrganizer: false,
+      organizerAccountId: organizerAccountId || undefined,
     });
   });
   console.log(`[stripeWebhook] pelada ${matchId}: ${uid} pago e confirmado.`);
 }
 
-/** Paga pelada com saldo interno — transfere o preço para a Caixa do organizador via Stripe */
+/** Paga pelada com saldo — valor retido até ao_vivo (como cartão) */
 export const payPeladaWithBalance = onCall(
   { region: REGION, secrets: [stripeSecretKey] },
   async (request) => {
@@ -820,79 +956,45 @@ export const payPeladaWithBalance = onCall(
     const stripe = new Stripe(stripeSecretKey.value());
     await assertOrganizerChargesEnabled(stripe, accountId);
 
-    const userSnap = await userRef.get();
-    const balance = Number(userSnap.data()?.peladaBalanceCents) || 0;
-    if (balance < priceCents) {
-      throw new HttpsError("failed-precondition", "Saldo insuficiente.", {
-        reason: "INSUFFICIENT_BALANCE",
-      });
-    }
-
-    let transferId: string;
-    try {
-      transferId = await transferPeladaPriceToOrganizer(stripe, {
-        accountId,
-        priceCents,
-        matchId,
-        uid,
-        organizerId,
-      });
-    } catch (err) {
-      const msg = stripeErrorMessage(err);
-      throw new HttpsError(
-        "failed-precondition",
-        msg || "Não foi possível transferir para a Caixa do organizador.",
-      );
-    }
-
     let balanceUsedCents = 0;
     let remainingBalanceCents = 0;
-    try {
-      await db.runTransaction(async (tx) => {
-        const [freshMatchSnap, freshUserSnap] = await Promise.all([
-          tx.get(matchRef),
-          tx.get(userRef),
-        ]);
-        const freshMatch = freshMatchSnap.data();
-        if (!freshMatch) throw new HttpsError("not-found", "Pelada não encontrada.");
-        assertPeladaPayable(freshMatch, uid);
 
-        const freshBalance = Number(freshUserSnap.data()?.peladaBalanceCents) || 0;
-        if (freshBalance < priceCents) {
-          throw new HttpsError("failed-precondition", "Saldo insuficiente.", {
-            reason: "INSUFFICIENT_BALANCE",
-          });
-        }
+    await db.runTransaction(async (tx) => {
+      const [freshMatchSnap, freshUserSnap] = await Promise.all([
+        tx.get(matchRef),
+        tx.get(userRef),
+      ]);
+      const freshMatch = freshMatchSnap.data();
+      if (!freshMatch) throw new HttpsError("not-found", "Pelada não encontrada.");
+      assertPeladaPayable(freshMatch, uid);
 
-        balanceUsedCents = priceCents;
-        remainingBalanceCents = freshBalance - priceCents;
-        tx.update(userRef, {
-          peladaBalanceCents: remainingBalanceCents,
-          updatedAt: FieldValue.serverTimestamp(),
+      const freshBalance = Number(freshUserSnap.data()?.peladaBalanceCents) || 0;
+      if (freshBalance < priceCents) {
+        throw new HttpsError("failed-precondition", "Saldo insuficiente.", {
+          reason: "INSUFFICIENT_BALANCE",
         });
-
-        const paymentIntentId = `balance_${uid}_${Date.now()}`;
-        applyPeladaPlayerPaidInTx(tx, matchRef, freshMatchSnap, uid, freshUserSnap.data() ?? {}, {
-          sessionId: "",
-          paymentIntentId,
-          amountCents: priceCents,
-          paidVia: "balance",
-          stripeTransferId: transferId,
-          organizerPriceCents: priceCents,
-        });
-      });
-    } catch (err) {
-      try {
-        await reverseOrganizerPeladaTransfer(stripe, transferId, priceCents, "balance_pay_rollback");
-      } catch (reversalErr) {
-        console.error("[payPeladaWithBalance] rollback reversal failed:", transferId, reversalErr);
       }
-      throw err;
-    }
 
-    console.log(
-      `[payPeladaWithBalance] ${matchId}: ${uid} usou ${balanceUsedCents}c → org ${organizerId} (${transferId}).`,
-    );
+      balanceUsedCents = priceCents;
+      remainingBalanceCents = freshBalance - priceCents;
+      tx.update(userRef, {
+        peladaBalanceCents: remainingBalanceCents,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      const paymentIntentId = `balance_${uid}_${Date.now()}`;
+      applyPeladaPlayerPaidInTx(tx, matchRef, freshMatchSnap, uid, freshUserSnap.data() ?? {}, {
+        sessionId: "",
+        paymentIntentId,
+        amountCents: priceCents,
+        paidVia: "balance",
+        organizerPriceCents: priceCents,
+        releasedToOrganizer: false,
+        organizerAccountId: accountId,
+      });
+    });
+
+    console.log(`[payPeladaWithBalance] ${matchId}: ${uid} usou ${balanceUsedCents}c (retido até ao_vivo).`);
     return { paid: true, balanceUsedCents, remainingBalanceCents };
   },
 );
@@ -927,35 +1029,24 @@ export const leavePeladaWithBalanceCredit = onCall(
     );
     const payment = payIdx >= 0 ? peladaPayments[payIdx] : null;
 
-    if (payment && priceCents > 0) {
+    if (payment && priceCents > 0 && paymentWasReleasedToOrganizer(payment)) {
       const stripe = new Stripe(stripeSecretKey.value());
       const paidVia = String(payment.paidVia ?? "app");
       try {
-        if (paidVia === "balance") {
-          const transferId = String(payment.stripeTransferId ?? "");
-          if (transferId.startsWith("tr_")) {
-            await reverseOrganizerPeladaTransfer(
-              stripe,
-              transferId,
-              priceCents,
-              "player_left_balance",
-            );
-          }
-        } else {
+        let transferId = String(payment.stripeTransferId ?? "");
+        if (!transferId.startsWith("tr_") && paidVia === "app") {
           const piId = String(payment.paymentIntentId ?? "");
           if (piId.startsWith("pi_")) {
-            const transferId = await getChargeTransferId(stripe, piId);
-            if (transferId) {
-              await reverseOrganizerPeladaTransfer(
-                stripe,
-                transferId,
-                priceCents,
-                "player_left_credit",
-              );
-            } else {
-              console.warn("[leavePeladaWithBalanceCredit] sem transferência:", piId);
-            }
+            transferId = (await getChargeTransferId(stripe, piId)) ?? "";
           }
+        }
+        if (transferId.startsWith("tr_")) {
+          await reverseOrganizerPeladaTransfer(
+            stripe,
+            transferId,
+            priceCents,
+            paidVia === "balance" ? "player_left_balance" : "player_left_credit",
+          );
         }
       } catch (err) {
         const msg = stripeErrorMessage(err);
@@ -1098,21 +1189,23 @@ export const cancelPeladaWithRefunds = onCall(
       if (payment.refunded === true) continue;
       const paidVia = String(payment.paidVia ?? "app");
       const payerId = String(payment.userId ?? "");
-      const amountCents = Number(payment.amountCents) || 0;
+      const priceCents = peladaPriceFromPayment(payment, match.price);
+      const released = paymentWasReleasedToOrganizer(payment);
 
-      if (paidVia === "balance" && payerId && amountCents > 0) {
-        const priceCents = Number(payment.organizerPriceCents) || amountCents;
-        const transferId = String(payment.stripeTransferId ?? "");
-        if (transferId.startsWith("tr_")) {
-          try {
-            await reverseOrganizerPeladaTransfer(
-              stripe,
-              transferId,
-              priceCents,
-              "organizer_cancel_balance",
-            );
-          } catch (err) {
-            console.warn("[cancelPeladaWithRefunds] reversal:", transferId, err);
+      if (paidVia === "balance" && payerId && priceCents > 0) {
+        if (released) {
+          const transferId = String(payment.stripeTransferId ?? "");
+          if (transferId.startsWith("tr_")) {
+            try {
+              await reverseOrganizerPeladaTransfer(
+                stripe,
+                transferId,
+                priceCents,
+                "organizer_cancel_balance",
+              );
+            } catch (err) {
+              console.warn("[cancelPeladaWithRefunds] reversal:", transferId, err);
+            }
           }
         }
         const userRef = db.doc(`users/${payerId}`);
@@ -1128,6 +1221,23 @@ export const cancelPeladaWithRefunds = onCall(
 
       const paymentIntentId = String(payment.paymentIntentId ?? "");
       if (!paymentIntentId.startsWith("pi_")) continue;
+
+      if (released) {
+        const transferId = String(payment.stripeTransferId ?? "");
+        if (transferId.startsWith("tr_")) {
+          try {
+            await reverseOrganizerPeladaTransfer(
+              stripe,
+              transferId,
+              priceCents,
+              "organizer_cancel_released",
+            );
+          } catch (err) {
+            console.warn("[cancelPeladaWithRefunds] reversal released:", transferId, err);
+          }
+        }
+      }
+
       try {
         await stripe.refunds.create({ payment_intent: paymentIntentId });
         payment.refunded = true;

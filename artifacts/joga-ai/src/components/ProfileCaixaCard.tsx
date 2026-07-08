@@ -32,7 +32,7 @@ export function ProfileCaixaCard({ profile }: Props) {
         <>
           <p className="text-white font-bold text-sm mt-2">Caixa ligada ✓</p>
           <p className="text-white/45 text-xs mt-1 leading-relaxed">
-            Fica activa para todas as peladas com pagamento online. Altera IBAN ou dados no Stripe.
+            Fica activa para todas as peladas com pagamento online. Os pagamentos dos jogadores só chegam à Caixa quando inicias a pelada (ao vivo) — assim ninguém levanta antes de um jogador poder sair.
           </p>
           <JogaButton
             variant="ghost"

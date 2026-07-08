@@ -20,6 +20,10 @@ export type PeladaPayment = {
   stripeTransferId?: string;
   /** Valor que foi para o organizador (sem taxa) */
   organizerPriceCents?: number;
+  /** Só true depois da pelada passar a ao_vivo */
+  releasedToOrganizer?: boolean;
+  releasedAt?: string;
+  organizerAccountId?: string;
 };
 
 export type SavedPostMatch = {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock, Repeat } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -120,10 +120,11 @@ export default function CriarPartida() {
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const hasStripeAccount = Boolean(profile?.stripeAccountId);
   const [showProRepeatDialog, setShowProRepeatDialog] = useState(false);
-  const [showProOpenDialog, setShowProOpenDialog] = useState(false);
 
-  function addDaysIso(dateIso: string, days: number): string {
+  function addDaysIso(dateIso: string, days: number): string | null {
+    if (!dateIso.trim()) return null;
     const d = new Date(`${dateIso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return null;
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
   }
@@ -142,13 +143,6 @@ export default function CriarPartida() {
     openToExternal: communityId ? false : true,
     notes: "",
   });
-
-  useEffect(() => {
-    if (communityId) {
-      // Clube PRO pode abrir peladas da comunidade ao público
-      if (!orgPro) setForm((prev) => ({ ...prev, openToExternal: false }));
-    }
-  }, [communityId, orgPro]);
 
   function set(key: string, value: string | boolean) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -171,17 +165,18 @@ export default function CriarPartida() {
       setShowProRepeatDialog(true);
       return;
     }
-
-    const priceEuro = parsePriceEuro(form.price);
-    if (priceEuro !== null && priceEuro > MAX_PRICE_EURO) {
+    if (repeatWeeks > 1 && !form.date.trim()) {
       toast({
-        title: "Preço máximo 5€",
-        description: "O pagamento por jogador não pode passar de 5€.",
+        title: "Data obrigatória",
+        description: "Para repetir semanalmente, define a data da primeira pelada.",
         variant: "destructive",
       });
       return;
     }
-    if (paymentsEnabled && hasStripeAccount) {
+
+    const priceEuro = parsePriceEuro(form.price);
+    const onlinePayments = paymentsEnabled && hasStripeAccount;
+    if (onlinePayments) {
       if (priceEuro === null) {
         toast({
           title: "Preço obrigatório",
@@ -194,6 +189,14 @@ export default function CriarPartida() {
         toast({
           title: "Preço mínimo 0,50€",
           description: "Para pagamentos na app, o preço mínimo é 0,50€ por jogador.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (priceEuro > MAX_PRICE_EURO) {
+        toast({
+          title: "Preço máximo 5€",
+          description: "Com pagamentos na app, o máximo é 5€ por jogador.",
           variant: "destructive",
         });
         return;
@@ -212,7 +215,7 @@ export default function CriarPartida() {
         time: form.time,
         maxPlayers: Number(form.maxPlayers) || 14,
         price: form.price,
-        paymentsEnabled: paymentsEnabled && hasStripeAccount,
+        paymentsEnabled: onlinePayments,
         proBadge: orgPro,
         openToExternal: form.openToExternal,
         notes: form.notes,
@@ -224,7 +227,10 @@ export default function CriarPartida() {
       });
       // Clube PRO: cria as ocorrências seguintes (semanais)
       if (orgPro && repeatWeeks > 1) {
+        let created = 1;
         for (let week = 1; week < repeatWeeks; week++) {
+          const nextDate = addDaysIso(form.date, week * 7);
+          if (!nextDate) break;
           try {
             await createMatch({
               title: form.title,
@@ -232,12 +238,12 @@ export default function CriarPartida() {
               location: form.location,
               gameType: form.gameType,
               level: form.level,
-              date: addDaysIso(form.date, week * 7),
+              date: nextDate,
               time: form.time,
               maxPlayers: Number(form.maxPlayers) || 14,
               price: form.price,
-        paymentsEnabled: paymentsEnabled && hasStripeAccount,
-        proBadge: orgPro,
+              paymentsEnabled: onlinePayments,
+              proBadge: orgPro,
               openToExternal: form.openToExternal,
               notes: form.notes,
               organizerId: userId,
@@ -246,11 +252,14 @@ export default function CriarPartida() {
               organizerOverall: calculateOverall(profile.attributes),
               communityId,
             });
+            created++;
           } catch (err) {
             console.warn("[CriarPartida] ocorrência semanal", week, err);
           }
         }
-        toast({ title: `${repeatWeeks} peladas criadas 🔁`, description: "Uma por semana, mesmas definições." });
+        if (created > 1) {
+          toast({ title: `${created} peladas criadas 🔁`, description: "Uma por semana, mesmas definições." });
+        }
       }
       setLocation(`/partida/${matchId}/pre-jogo`);
     } catch (err) {
@@ -364,8 +373,10 @@ export default function CriarPartida() {
             <StyledInput type="number" min="4" max="22" value={form.maxPlayers} onChange={(e) => set("maxPlayers", e.target.value)} data-testid="input-max-players" />
           </Field>
           <Field label="Preço/Jogador" icon={<Euro className="w-3 h-3" />}>
-            <StyledInput type="text" placeholder="Grátis ou até 5€" value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" />
-            <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>Máximo 5€ por jogador</p>
+            <StyledInput type="text" placeholder={paymentsEnabled && hasStripeAccount ? "0,50€ a 5€" : "Grátis ou 10€"} value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" />
+            {paymentsEnabled && hasStripeAccount && (
+              <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>Com pagamentos na app: máx. 5€ por jogador</p>
+            )}
           </Field>
         </div>
 
@@ -414,29 +425,18 @@ export default function CriarPartida() {
             <div>
               <p className="text-sm font-bold text-white">Aberto a externos</p>
               <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                {communityId && !orgPro
-                  ? "Exclusivo Clube PRO"
-                  : form.openToExternal
-                    ? "Qualquer jogador pode entrar"
-                    : "Apenas da comunidade"}
+                {form.openToExternal ? "Qualquer jogador pode entrar" : "Apenas da comunidade"}
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => {
-              if (communityId && !orgPro) {
-                setShowProOpenDialog(true);
-                return;
-              }
-              set("openToExternal", !form.openToExternal);
-            }}
+            onClick={() => set("openToExternal", !form.openToExternal)}
             className="relative rounded-full transition-colors shrink-0"
             style={{
               background: form.openToExternal ? "#16a34a" : "rgba(255,255,255,0.12)",
               width: 48,
               height: 28,
-              opacity: communityId && !orgPro ? 0.5 : 1,
             }}
             data-testid="toggle-open-external"
           >
@@ -459,13 +459,6 @@ export default function CriarPartida() {
         tier="organizer"
         featureTitle="Peladas recorrentes"
         featureDescription="Cria até 4 semanas de peladas de uma vez, com a mesma hora e definições — exclusivo Clube PRO."
-      />
-      <ProUpgradeDialog
-        open={showProOpenDialog}
-        onOpenChange={setShowProOpenDialog}
-        tier="organizer"
-        featureTitle="Pelada aberta ao público"
-        featureDescription="Com Clube PRO, podes publicar peladas da tua comunidade no Encontrar Jogos para qualquer jogador entrar."
       />
     </JogaPage>
   );

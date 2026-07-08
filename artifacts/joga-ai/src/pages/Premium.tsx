@@ -29,7 +29,6 @@ const planFeatures = {
   organizador: [
     "Mensalistas: define o teu preço mensal e gere quem está em dia",
     "Selo ✦ Clube PRO nas tuas peladas + destaque no Encontrar Jogos",
-    "Peladas da comunidade abertas ao público (enche mais rápido)",
     "Marca do clube na convocatória e na imagem de resultado",
     "Painel do clube: pagamentos, presenças e estatísticas da época",
     "Recorrentes, lembretes automáticos e histórico ilimitado",

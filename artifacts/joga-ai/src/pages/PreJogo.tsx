@@ -24,7 +24,7 @@ import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
 import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
-import { formatCentsEuro, peladaCheckoutTotalCents } from "@/lib/peladaWallet";
+import { formatCentsEuro, peladaCheckoutTotalCents, peladaPriceCents } from "@/lib/peladaWallet";
 import { createIncompleteSeedProfile, loadUserProfile } from "@/lib/userRepository";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
@@ -821,7 +821,7 @@ export default function PreJogo() {
       const ok = await confirm({
         title: "Sair da pelada?",
         description:
-          "O pagamento não é reembolsável em dinheiro. O valor passa para o teu saldo Joga AI para usares noutras peladas.",
+          "O preço da pelada (sem a taxa de 0,50€) passa para o teu saldo Joga AI — podes usá-lo noutras peladas e o valor vai para o organizador.",
         confirmLabel: "Sair mesmo assim",
         destructive: true,
       });
@@ -1266,6 +1266,10 @@ export default function PreJogo() {
   const isOnWaitlist = myWaitlistIndex >= 0;
   const myPlayer = myPlayerIndex >= 0 ? players[myPlayerIndex] : null;
 
+  const peladaPriceOnlyCents = useMemo(
+    () => peladaPriceCents(matchDetails?.price),
+    [matchDetails?.price],
+  );
   const peladaTotalCents = useMemo(
     () => peladaCheckoutTotalCents(matchDetails?.price),
     [matchDetails?.price],
@@ -1273,8 +1277,8 @@ export default function PreJogo() {
   const peladaSaldoCents = profile.peladaBalanceCents ?? 0;
   const canPayWithSaldo = Boolean(
     paymentsOn &&
-      peladaTotalCents &&
-      peladaSaldoCents >= peladaTotalCents,
+      peladaPriceOnlyCents &&
+      peladaSaldoCents >= peladaPriceOnlyCents,
   );
 
   async function handleJoinClick() {
@@ -1453,7 +1457,7 @@ export default function PreJogo() {
 
           {paymentsOn && (
             <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
-              Pagamentos online não são reembolsáveis em dinheiro se saíres — o valor fica no teu saldo para outras peladas. Se o organizador cancelar, os valores pagos são devolvidos automaticamente.
+              Pagamentos online não são reembolsáveis em dinheiro se saíres — o preço da pelada fica no teu saldo (a taxa de 0,50€ não). Ao usar saldo, o organizador recebe na Caixa. Se o organizador cancelar, os valores pagos são devolvidos.
             </p>
           )}
 
@@ -1563,7 +1567,7 @@ export default function PreJogo() {
                 >
                   {paymentsOn
                     ? canPayWithSaldo
-                      ? `💰 Usar saldo (${formatCentsEuro(peladaTotalCents ?? 0)}) e confirmar presença`
+                      ? `💰 Usar saldo (${formatCentsEuro(peladaPriceOnlyCents ?? 0)}) e confirmar presença`
                       : `💳 Pagar ${formatMatchPriceAmount(matchDetails?.price) ?? ""} e confirmar presença`
                     : "Confirmar presença"}
                 </JogaButton>

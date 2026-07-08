@@ -609,14 +609,6 @@ export default function Perfil() {
           <ProfileSubscriptionCard profile={activeProfile} />
         )}
 
-        {!isViewingOther && (
-          <ProfilePeladaSaldoCard profile={activeProfile} />
-        )}
-
-        {!isViewingOther && (
-          <ProfileCaixaCard profile={activeProfile} />
-        )}
-
         <JogaCard variant="arena" className="flex items-center gap-4">
           <div
             className="w-16 h-16 rounded-2xl flex flex-col items-center justify-center shrink-0"
@@ -712,6 +704,14 @@ export default function Perfil() {
             </div>
           )}
         </JogaCard>
+
+        {!isViewingOther && (
+          <ProfilePeladaSaldoCard profile={activeProfile} />
+        )}
+
+        {!isViewingOther && (
+          <ProfileCaixaCard profile={activeProfile} />
+        )}
 
         {badges.length > 0 && (
         <div>

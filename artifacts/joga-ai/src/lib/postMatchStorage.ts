@@ -16,6 +16,10 @@ export type PeladaPayment = {
   refunded?: boolean;
   creditedToBalance?: boolean;
   paidVia?: "app" | "balance";
+  /** Transferência Stripe Connect ao organizador (pagamentos com saldo) */
+  stripeTransferId?: string;
+  /** Valor que foi para o organizador (sem taxa) */
+  organizerPriceCents?: number;
 };
 
 export type SavedPostMatch = {

@@ -33,8 +33,8 @@ export function ProfilePeladaSaldoCard({ profile }: Props) {
 
       <p className="text-white/45 text-xs mt-2 leading-relaxed">
         {hasSaldo
-          ? "Usa este saldo ao confirmar presença em peladas com pagamento online — sem cartão."
-          : "Se saíres de uma pelada já paga, o valor fica aqui para jogos futuros (sem reembolso em dinheiro)."}
+          ? "Usa este saldo ao confirmar presença em peladas com pagamento online — o valor vai para a Caixa do organizador."
+          : "Se saíres de uma pelada já paga, o preço da pelada fica aqui para jogos futuros (a taxa de 0,50€ não é devolvida)."}
       </p>
     </div>
   );

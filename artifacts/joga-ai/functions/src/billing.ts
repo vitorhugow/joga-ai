@@ -424,16 +424,11 @@ export const createPeladaCheckout = onCall(
     if (match.paymentsEnabled !== true) {
       throw new HttpsError("failed-precondition", "Esta pelada não aceita pagamentos na app.");
     }
-    const participantIds: string[] = Array.isArray(match.participantUserIds)
-      ? match.participantUserIds
-      : [];
-    if (!participantIds.includes(uid)) {
-      throw new HttpsError("permission-denied", "Confirma presença antes de pagar.");
-    }
     const players: Array<{ userId?: string; paid?: boolean }> = Array.isArray(match.players)
       ? match.players
       : [];
-    if (players.find((pl) => pl.userId === uid)?.paid === true) {
+    const paidUserIds: string[] = Array.isArray(match.paidUserIds) ? match.paidUserIds : [];
+    if (players.find((pl) => pl.userId === uid)?.paid === true || paidUserIds.includes(uid)) {
       throw new HttpsError("already-exists", "Já está pago. ✅");
     }
 
@@ -507,14 +502,21 @@ export async function markPlayerPaidFromSession(
   await db.runTransaction(async (tx) => {
     const ref = db.doc(`matches/${matchId}`);
     const snap = await tx.get(ref);
-    const players: Array<Record<string, unknown>> = Array.isArray(snap.data()?.players)
-      ? [...(snap.data()!.players as Array<Record<string, unknown>>)]
+    const data = snap.data() ?? {};
+    const players: Array<Record<string, unknown>> = Array.isArray(data.players)
+      ? [...(data.players as Array<Record<string, unknown>>)]
       : [];
     const idx = players.findIndex((pl) => pl.userId === uid);
-    if (idx === -1) return;
+    if (idx === -1) {
+      const paidUserIds: string[] = Array.isArray(data.paidUserIds)
+        ? [...(data.paidUserIds as string[])]
+        : [];
+      if (!paidUserIds.includes(uid)) paidUserIds.push(uid);
+      tx.update(ref, { paidUserIds, savedAt: FieldValue.serverTimestamp() });
+      return;
+    }
     players[idx] = { ...players[idx], paid: true, paidVia: "app", paidAt: new Date().toISOString() };
     tx.update(ref, { players, savedAt: FieldValue.serverTimestamp() });
-
   });
   console.log(`[stripeWebhook] pelada ${matchId}: ${uid} marcado como pago.`);
 }

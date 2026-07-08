@@ -138,6 +138,22 @@ export async function confirmPresence(
     await assertCommunityAccess(communityId, details?.openToExternal, userId);
   }
 
+  const paymentsRequired =
+    match.paymentsEnabled === true || details?.paymentsEnabled === true;
+  const isOrganizer = match.organizerId === userId;
+  const paidUserIds = match.paidUserIds ?? [];
+
+  if (paymentsRequired && !isOrganizer) {
+    const existingPlayer = (match.players ?? []).find(
+      (p) => p.userId === userId || p.id === userId,
+    );
+    const hasPaid =
+      paidUserIds.includes(userId) || existingPlayer?.paid === true;
+    if (!hasPaid) {
+      throw new Error("Paga a pelada online antes de confirmar presença.");
+    }
+  }
+
   const waitlist: WaitlistEntry[] = [...(match.waitlist ?? [])];
   const players: LivePlayer[] = [...(match.players ?? [])];
   const playerTeams = { ...(match.playerTeams ?? {}) };
@@ -163,7 +179,7 @@ export async function confirmPresence(
       name: profile.displayName.trim() || "Jogador",
       position: profile.position || "MEI",
       overall: profile.overall || 50,
-      paid: false,
+      paid: paymentsRequired && !isOrganizer ? true : false,
       isMe: true,
     };
     roster.players = [...players, newPlayer];

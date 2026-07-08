@@ -345,6 +345,7 @@ export default function PreJogo() {
   const [matchStatus, setMatchStatus] = useState<string>("configurando");
   const [paymentsOn, setPaymentsOn] = useState(false);
   const [organizerCaixaReady, setOrganizerCaixaReady] = useState(false);
+  const [paidUserIds, setPaidUserIds] = useState<string[]>([]);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
@@ -357,6 +358,37 @@ export default function PreJogo() {
     if (details?.organizerId) setOrganizerId(details.organizerId);
     if (details?.paymentsEnabled) setPaymentsOn(true);
   }, [matchId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get("pagamento");
+    if (!paymentStatus) return;
+
+    params.delete("pagamento");
+    const qs = params.toString();
+    const cleanUrl = qs
+      ? `${window.location.pathname}?${qs}`
+      : window.location.pathname;
+    window.history.replaceState({}, "", cleanUrl);
+
+    if (paymentStatus === "sucesso") {
+      toast({
+        title: "Pagamento recebido ✓",
+        description: "Agora podes confirmar a tua presença na pelada.",
+      });
+      void loadMatchFromFirestore(matchId).then((merged) => {
+        if (merged?.paidUserIds) setPaidUserIds(merged.paidUserIds);
+        if (userId && merged?.paidUserIds?.includes(userId)) {
+          setPaidUserIds(merged.paidUserIds);
+        }
+      });
+    } else if (paymentStatus === "cancelado") {
+      toast({
+        title: "Pagamento cancelado",
+        description: "Podes tentar outra vez quando quiseres.",
+      });
+    }
+  }, [matchId, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -374,6 +406,7 @@ export default function PreJogo() {
       }
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
       setMatchStatus(merged?.status ?? "configurando");
+      setPaidUserIds(merged?.paidUserIds ?? []);
       const details = loadMatchDetails(matchId);
       const payments =
         merged?.paymentsEnabled ?? details?.paymentsEnabled ?? false;
@@ -1192,6 +1225,10 @@ export default function PreJogo() {
   const isInMatch = myPlayerIndex >= 0;
   const isOnWaitlist = myWaitlistIndex >= 0;
   const myPlayer = myPlayerIndex >= 0 ? players[myPlayerIndex] : null;
+  const hasPaidForPelada = Boolean(
+    myPlayer?.paid || (userId && paidUserIds.includes(userId)),
+  );
+  const canConfirmAfterPayment = !paymentsOn || isOrganizer || hasPaidForPelada;
 
   useEffect(() => {
     const orgId = resolvedOrganizerId;
@@ -1225,6 +1262,14 @@ export default function PreJogo() {
       title: "Cria conta para confirmar presença",
       description: "Precisas de entrar para participar nesta pelada.",
     })) {
+      return;
+    }
+    if (paymentsOn && !canConfirmAfterPayment) {
+      toast({
+        title: "Pagamento em falta",
+        description: "Paga a pelada online antes de confirmar presença.",
+        variant: "destructive",
+      });
       return;
     }
     if (needsProfileName && !showRsvpNameForm) {
@@ -1296,7 +1341,7 @@ export default function PreJogo() {
               )}
               {paymentsOn && (
                 <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24" }}>
-                  💳 Caixa online
+                  💳 Pagamento Online
                 </span>
               )}
               {matchDetails.spotsRemaining && (
@@ -1346,49 +1391,52 @@ export default function PreJogo() {
       </div>
 
       <div className="px-4 space-y-5 pt-5">
-        {rosterHydrated && paymentsOn && !isOrganizer && (
+        {rosterHydrated && paymentsOn && !isOrganizer && !hasPaidForPelada && (
           <section
             className="rounded-2xl p-4"
             style={{
-              background: myPlayer?.paid
-                ? "rgba(16,185,129,0.1)"
-                : "rgba(251,191,36,0.1)",
-              border: `1px solid ${myPlayer?.paid ? "rgba(16,185,129,0.28)" : "rgba(251,191,36,0.28)"}`,
+              background: "rgba(251,191,36,0.1)",
+              border: "1px solid rgba(251,191,36,0.28)",
             }}
             data-testid="player-payment-section"
           >
             <p className="text-sm font-black text-white flex items-center gap-2">
-              💳 Caixa online
-              {myPlayer?.paid && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.2)", color: "#34d399" }}>
-                  ✓ Pago
-                </span>
-              )}
+              💳 Pagamento Online
             </p>
 
-            {myPlayer?.paid ? (
-              <p className="text-emerald-200/80 text-xs mt-2 leading-relaxed">
-                O teu pagamento está confirmado. Boa pelada!
-              </p>
-            ) : !isInMatch ? (
-              <p className="text-amber-200/80 text-xs mt-2 leading-relaxed">
-                Confirma a tua presença abaixo para poderes pagar {formatMatchPricePerPlayer(matchDetails?.price) ?? "a pelada"} pela Caixa.
-              </p>
-            ) : organizerCaixaReady ? (
-              <button
-                type="button"
-                onClick={() => void payPelada(matchId)}
-                className="mt-3 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-                style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
-                data-testid="button-pay-pelada"
-              >
-                💳 Pagar {formatMatchPricePerPlayer(matchDetails?.price) ?? matchDetails?.price ?? "a pelada"}
-              </button>
+            {organizerCaixaReady ? (
+              <>
+                <p className="text-amber-200/80 text-xs mt-2 leading-relaxed">
+                  Paga {formatMatchPricePerPlayer(matchDetails?.price) ?? "a pelada"} para confirmar a tua presença.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void payPelada(matchId)}
+                  className="mt-3 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+                  style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
+                  data-testid="button-pay-pelada"
+                >
+                  💳 Pagar {formatMatchPricePerPlayer(matchDetails?.price) ?? matchDetails?.price ?? "a pelada"}
+                </button>
+              </>
             ) : (
               <p className="text-amber-200/80 text-xs mt-2 leading-relaxed rounded-xl px-3 py-2.5" style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.22)" }}>
                 Pagamento online em breve — o organizador ainda está a ligar a Caixa. Por agora combina pagamento manual com ele.
               </p>
             )}
+          </section>
+        )}
+
+        {rosterHydrated && paymentsOn && !isOrganizer && hasPaidForPelada && !isInMatch && (
+          <section
+            className="rounded-2xl p-4"
+            style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.28)" }}
+            data-testid="player-paid-ready"
+          >
+            <p className="text-emerald-200 text-sm font-bold">✓ Pagamento confirmado</p>
+            <p className="text-emerald-200/70 text-xs mt-1">
+              Confirma a tua presença abaixo para entrar no plantel.
+            </p>
           </section>
         )}
 
@@ -1431,7 +1479,12 @@ export default function PreJogo() {
             ) : (
               <>
                 <p className="text-white/80 text-sm font-bold">Queres jogar nesta pelada?</p>
-                {showRsvpNameForm && isLinked && (
+                {paymentsOn && !canConfirmAfterPayment && (
+                  <p className="text-amber-200/80 text-xs mt-2 leading-relaxed">
+                    Primeiro tens de pagar online (secção acima) para confirmar presença.
+                  </p>
+                )}
+                {showRsvpNameForm && isLinked && canConfirmAfterPayment && (
                   <input
                     type="text"
                     value={rsvpGuestName}
@@ -1447,10 +1500,12 @@ export default function PreJogo() {
                   variant="primary"
                   size="md"
                   className="mt-3 w-full"
-                  disabled={rsvpBusy}
+                  disabled={rsvpBusy || !canConfirmAfterPayment}
                   onClick={handleRsvpClick}
                 >
-                  Confirmar presença
+                  {paymentsOn && !canConfirmAfterPayment
+                    ? "Paga primeiro para confirmar"
+                    : "Confirmar presença"}
                 </JogaButton>
               </>
             )}

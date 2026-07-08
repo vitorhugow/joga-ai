@@ -65,6 +65,8 @@ export type MatchListing = {
   gameType: string;
   level: string;
   date: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
   spotsRemaining: string;
   price: string;
   communityId?: string;
@@ -867,8 +869,10 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
     gameType: String(data.gameType ?? data.gameMode ?? "fut7"),
     level: String(data.level ?? "recreativo"),
     date: data.scheduledDate
-      ? `${data.scheduledDate} ${String(data.scheduledTime ?? "")}`.trim()
-      : String(data.createdAt ?? new Date().toISOString()),
+      ? String(data.scheduledDate)
+      : "A definir",
+    scheduledDate: data.scheduledDate ? String(data.scheduledDate) : undefined,
+    scheduledTime: data.scheduledTime ? String(data.scheduledTime) : undefined,
     spotsRemaining: data.maxPlayers
       ? `${Math.max(0, Number(data.maxPlayers) - (Array.isArray(data.players) ? data.players.length : 0))} vagas`
       : "—",

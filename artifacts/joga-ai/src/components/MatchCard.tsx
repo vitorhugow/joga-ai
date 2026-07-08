@@ -1,7 +1,8 @@
-import { MapPin, Clock, Users } from "lucide-react";
+import { MapPin, Users } from "lucide-react";
 import { Link } from "wouter";
 import { getMatchRoutePath, getMatchStatusLabel } from "@/lib/matchRepository";
 import { formatMatchPriceChip } from "@/lib/formatMatchPrice";
+import { getMatchScheduleLines } from "@/lib/formatMatchSchedule";
 
 interface MatchCardProps {
   id: string;
@@ -13,6 +14,8 @@ interface MatchCardProps {
   gameType: string;
   level: string;
   date: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
   spotsRemaining: string;
   price?: string;
   status?: string;
@@ -51,6 +54,8 @@ export function MatchCard({
   gameType,
   level,
   date,
+  scheduledDate,
+  scheduledTime,
   spotsRemaining,
   price,
   status,
@@ -67,6 +72,7 @@ export function MatchCard({
   const statusLabel = getMatchStatusLabel(status);
   const badgeStyle = statusBadgeStyle[status ?? "configurando"] ?? statusBadgeStyle.configurando;
   const priceChip = formatMatchPriceChip(price);
+  const schedule = getMatchScheduleLines({ date, scheduledDate, scheduledTime });
 
   return (
     <Link href={href}>
@@ -108,15 +114,20 @@ export function MatchCard({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs mb-2.5" style={{ color: "rgba(255,255,255,0.45)" }}>
+          <div className="flex items-center gap-1.5 text-xs mb-2" style={{ color: "rgba(255,255,255,0.45)" }}>
             <MapPin className="w-3 h-3 shrink-0" style={{ color: "#f87171" }} />
             <span className="truncate">📍 {location}, {city}</span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs mb-3" style={{ color: "rgba(255,255,255,0.5)" }}>
-            <Clock className="w-3 h-3 shrink-0" style={{ color: "#60a5fa" }} />
-            <span>🕐 {date}</span>
+          <div className="text-xs mb-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>
+            📅 {schedule.dateLine}
           </div>
+          {schedule.timeLine && (
+            <div className="text-xs mb-3" style={{ color: "rgba(255,255,255,0.5)" }}>
+              🕐 {schedule.timeLine}
+            </div>
+          )}
+          {!schedule.timeLine && <div className="mb-3" />}
 
           <div className="flex flex-wrap gap-1.5 mb-3">
             <span
@@ -143,9 +154,9 @@ export function MatchCard({
               <span
                 className="text-[10px] font-bold px-2 py-1 rounded-lg"
                 style={{ background: "rgba(16,185,129,0.14)", color: "#34d399", border: "1px solid rgba(16,185,129,0.28)" }}
-                data-testid={`match-caixa-${id}`}
+                data-testid={`match-payment-online-${id}`}
               >
-                💳 Caixa online
+                💳 Pagamento Online
               </span>
             )}
           </div>

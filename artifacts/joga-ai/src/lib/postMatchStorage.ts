@@ -32,6 +32,8 @@ export type SavedPostMatch = {
   waitlist?: WaitlistEntry[];
   maxPlayers?: number;
   openToExternal?: boolean;
+  /** Jogadores que pagaram online mas ainda não confirmaram presença */
+  paidUserIds?: string[];
 };
 
 const KEY_PREFIX = "joga-ai-post-match-v1-";

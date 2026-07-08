@@ -15,6 +15,10 @@ export type Entitlements = {
   /** ISO date — fim do período pago atual */
   proUntil?: string;
   plan?: EntitlementPlan;
+  /** Clube PRO activo nesta comunidade (última subscrição organizador) */
+  proCommunityId?: string;
+  /** Mapa comunidade → validade (várias subs possíveis) */
+  proCommunities?: Record<string, { proUntil?: string; subscriptionId?: string }>;
 };
 
 /** Preços fechados (Sprint alinhado a 04/07/2026) */
@@ -43,6 +47,20 @@ export function isProActive(entitlements?: Entitlements | null): boolean {
 
 export function isOrganizerPro(entitlements?: Entitlements | null): boolean {
   return isProActive(entitlements) && entitlements?.plan === "organizer_pro";
+}
+
+/** Clube PRO activo para uma comunidade específica. */
+export function isOrganizerProForCommunity(
+  entitlements?: Entitlements | null,
+  communityId?: string | null,
+): boolean {
+  if (!isOrganizerPro(entitlements)) return false;
+  if (!communityId) return true;
+  const club = entitlements?.proCommunities?.[communityId];
+  if (club?.proUntil) {
+    return Date.now() < new Date(club.proUntil).getTime();
+  }
+  return entitlements?.proCommunityId === communityId;
 }
 
 /** PRO Jogador (inclui quem tem PRO Organizador — tem tudo do jogador). */

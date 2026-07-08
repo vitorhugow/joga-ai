@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
-import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock, Repeat, CreditCard } from "lucide-react";
+import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock, Repeat, CreditCard, Link2 } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { isOrganizerPro } from "@/lib/entitlements";
+import { isOrganizerProForCommunity } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { createMatch } from "@/lib/matchRepository";
+import { loadMyCommunities, type Community } from "@/lib/communityRepository";
+import type { MatchAccessMode } from "@/lib/matchAccess";
+import { openToExternalFromAccessMode } from "@/lib/matchAccess";
 import { calculateOverall } from "@/lib/cardUtils";
 import { ProfileSetupDialog } from "@/components/profile/ProfileSetupDialog";
 import { toast } from "@/hooks/use-toast";
@@ -115,7 +118,21 @@ export default function CriarPartida() {
   const { requireLinked } = useAuthGate();
   const { profile, needsSetup, refresh } = useUserProfile();
   useStripeConnectReturn(() => void refresh());
-  const orgPro = isOrganizerPro(profile?.entitlements);
+  const [myCommunities, setMyCommunities] = useState<Community[]>([]);
+  const [accessMode, setAccessMode] = useState<MatchAccessMode>(
+    communityId ? "community" : "public",
+  );
+  const [selectedCommunityId, setSelectedCommunityId] = useState(communityId ?? "");
+
+  useEffect(() => {
+    if (!userId) return;
+    void loadMyCommunities(userId).then(setMyCommunities);
+  }, [userId]);
+
+  const effectiveCommunityId =
+    accessMode === "community" ? (selectedCommunityId || communityId) : communityId;
+
+  const orgPro = isOrganizerProForCommunity(profile?.entitlements, effectiveCommunityId);
   const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const hasStripeAccount = Boolean(profile?.stripeAccountId);
@@ -140,12 +157,26 @@ export default function CriarPartida() {
     time: "",
     maxPlayers: "14",
     price: "",
-    openToExternal: communityId ? false : true,
     notes: "",
   });
 
-  function set(key: string, value: string | boolean) {
+  function set(key: string, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function validateForm(): string | null {
+    if (!form.title.trim()) return "Preenche o nome da partida.";
+    if (!form.city.trim()) return "Preenche a cidade.";
+    if (!form.location.trim()) return "Preenche o campo/local.";
+    if (!form.date.trim()) return "Preenche a data.";
+    if (!form.time.trim()) return "Preenche a hora.";
+    if (!form.maxPlayers.trim() || Number(form.maxPlayers) < 4) return "Indica o número de jogadores (mín. 4).";
+    if (!form.price.trim()) return "Preenche o preço (podes escrever Grátis).";
+    if (!form.notes.trim()) return "Preenche as observações.";
+    if (accessMode === "community" && !(selectedCommunityId || communityId)) {
+      return "Escolhe a comunidade para o modo «Apenas da comunidade».";
+    }
+    return null;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -161,6 +192,13 @@ export default function CriarPartida() {
       setShowSetup(true);
       return;
     }
+
+    const validationError = validateForm();
+    if (validationError) {
+      toast({ title: "Campos em falta", description: validationError, variant: "destructive" });
+      return;
+    }
+
     if (repeatWeeks > 1 && !orgPro) {
       setShowProRepeatDialog(true);
       return;
@@ -205,6 +243,10 @@ export default function CriarPartida() {
 
     setSubmitting(true);
     try {
+      const matchCommunityId =
+        accessMode === "community" ? (selectedCommunityId || communityId) : communityId;
+      const openToExternal = openToExternalFromAccessMode(accessMode);
+
       const matchId = await createMatch({
         title: form.title,
         city: form.city,
@@ -217,13 +259,14 @@ export default function CriarPartida() {
         price: form.price,
         paymentsEnabled: onlinePayments,
         proBadge: orgPro,
-        openToExternal: form.openToExternal,
+        accessMode,
+        openToExternal,
         notes: form.notes,
         organizerId: userId,
         organizerName: profile.displayName,
         organizerPosition: profile.position,
         organizerOverall: calculateOverall(profile.attributes),
-        communityId,
+        communityId: matchCommunityId,
       });
       // Clube PRO: cria as ocorrências seguintes (semanais)
       if (orgPro && repeatWeeks > 1) {
@@ -244,13 +287,14 @@ export default function CriarPartida() {
               price: form.price,
               paymentsEnabled: onlinePayments,
               proBadge: orgPro,
-              openToExternal: form.openToExternal,
+              accessMode,
+              openToExternal,
               notes: form.notes,
               organizerId: userId,
               organizerName: profile.displayName,
               organizerPosition: profile.position,
               organizerOverall: calculateOverall(profile.attributes),
-              communityId,
+              communityId: matchCommunityId,
             });
             created++;
           } catch (err) {
@@ -338,19 +382,19 @@ export default function CriarPartida() {
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cidade" icon={<MapPin className="w-3 h-3" />}>
-            <StyledInput type="text" placeholder="Lisboa" value={form.city} onChange={(e) => set("city", e.target.value)} data-testid="input-city" />
+            <StyledInput type="text" placeholder="Lisboa" value={form.city} onChange={(e) => set("city", e.target.value)} data-testid="input-city" required />
           </Field>
           <Field label="Campo">
-            <StyledInput type="text" placeholder="Nome do campo" value={form.location} onChange={(e) => set("location", e.target.value)} data-testid="input-location" />
+            <StyledInput type="text" placeholder="Nome do campo" value={form.location} onChange={(e) => set("location", e.target.value)} data-testid="input-location" required />
           </Field>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Data">
-            <StyledInput type="date" value={form.date} onChange={(e) => set("date", e.target.value)} data-testid="input-date" />
+            <StyledInput type="date" value={form.date} onChange={(e) => set("date", e.target.value)} data-testid="input-date" required />
           </Field>
           <Field label="Hora">
-            <StyledInput type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="input-time" />
+            <StyledInput type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="input-time" required />
           </Field>
         </div>
 
@@ -370,10 +414,10 @@ export default function CriarPartida() {
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nº Jogadores" icon={<Users className="w-3 h-3" />}>
-            <StyledInput type="number" min="4" max="22" value={form.maxPlayers} onChange={(e) => set("maxPlayers", e.target.value)} data-testid="input-max-players" />
+            <StyledInput type="number" min="4" max="22" value={form.maxPlayers} onChange={(e) => set("maxPlayers", e.target.value)} data-testid="input-max-players" required />
           </Field>
           <Field label="Preço/Jogador" icon={<Euro className="w-3 h-3" />}>
-            <StyledInput type="text" placeholder={paymentsEnabled ? "0,50€ a 5€" : "Grátis ou 10€"} value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" />
+            <StyledInput type="text" placeholder={paymentsEnabled ? "0,50€ a 5€" : "Grátis ou 10€"} value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" required />
             {paymentsEnabled && (
               <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>Com pagamentos online: máx. 5€ por jogador</p>
             )}
@@ -415,35 +459,57 @@ export default function CriarPartida() {
           </p>
         </div>
 
-        <div className="flex items-center justify-between px-4 py-4 rounded-2xl" style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)" }}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: form.openToExternal ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.06)" }}>
-              {form.openToExternal ? <Globe className="w-5 h-5 text-emerald-400" /> : <Lock className="w-5 h-5" style={{ color: "rgba(255,255,255,0.35)" }} />}
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white">Aberto a externos</p>
-              <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                {form.openToExternal ? "Qualquer jogador pode entrar" : "Apenas da comunidade"}
-              </p>
-            </div>
+        <Field label="Quem pode entrar?">
+          <div className="grid grid-cols-1 gap-2">
+            {([
+              { mode: "public" as const, icon: Globe, title: "Qualquer jogador", desc: "Aparece no Encontrar Jogos" },
+              { mode: "community" as const, icon: Lock, title: "Apenas da comunidade", desc: "Só membros do clube escolhido" },
+              { mode: "private" as const, icon: Link2, title: "Privado", desc: "Só quem tiver o link privado" },
+            ]).map((opt) => {
+              const active = accessMode === opt.mode;
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.mode}
+                  type="button"
+                  onClick={() => setAccessMode(opt.mode)}
+                  className="flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left transition-all active:scale-[0.99]"
+                  style={active
+                    ? { background: "rgba(74,222,128,0.12)", border: "2px solid rgba(74,222,128,0.45)" }
+                    : { background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.09)" }}
+                  data-testid={`access-mode-${opt.mode}`}
+                >
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: active ? "rgba(74,222,128,0.18)" : "rgba(255,255,255,0.06)" }}>
+                    <Icon className="w-5 h-5" style={{ color: active ? "#4ade80" : "rgba(255,255,255,0.45)" }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">{opt.title}</p>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>{opt.desc}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          <button
-            type="button"
-            onClick={() => set("openToExternal", !form.openToExternal)}
-            className="relative rounded-full transition-colors shrink-0"
-            style={{
-              background: form.openToExternal ? "#16a34a" : "rgba(255,255,255,0.12)",
-              width: 48,
-              height: 28,
-            }}
-            data-testid="toggle-open-external"
-          >
-            <div className="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-md transition-all" style={{ left: form.openToExternal ? "calc(100% - 26px)" : "2px" }} />
-          </button>
-        </div>
+          {accessMode === "community" && (
+            <select
+              value={selectedCommunityId}
+              onChange={(e) => setSelectedCommunityId(e.target.value)}
+              className="mt-3 w-full rounded-2xl px-4 py-3.5 text-sm text-white bg-[#0f172a] border border-white/20 outline-none focus:border-emerald-500/60 [color-scheme:dark]"
+              data-testid="select-community-access"
+              required
+            >
+              <option value="" className="bg-[#0f172a] text-white">Escolhe a comunidade</option>
+              {myCommunities.map((c) => (
+                <option key={c.id} value={c.id} className="bg-[#0f172a] text-white">
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
 
         <Field label="Observações" icon={<FileText className="w-3 h-3" />}>
-          <StyledTextarea placeholder="Informações adicionais sobre a partida..." value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} data-testid="input-notes" />
+          <StyledTextarea placeholder="Informações adicionais sobre a partida..." value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} data-testid="input-notes" required />
         </Field>
 
         <JogaButton type="submit" variant="primary" size="lg" className="gap-3" data-testid="button-submit-match" disabled={submitting}>

@@ -1,7 +1,9 @@
 import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-react";
 import { startCheckout, openBillingPortal, type BillingInterval } from "@/lib/billing";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useAuth } from "@/contexts/AuthContext";
 import { isProActive } from "@/lib/entitlements";
+import { loadMyCommunities, type Community } from "@/lib/communityRepository";
 import { useEffect, useRef, useState } from "react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
@@ -29,8 +31,8 @@ const premiumSkins = [
 
 const planFeatures = {
   organizador: [
-    "Mensalistas: define o teu preço mensal e gere quem está em dia",
-    "Selo ✦ Clube PRO nas tuas peladas + destaque no Encontrar Jogos",
+    "Clube PRO activo só na comunidade que escolheres",
+    "Selo ✦ Clube PRO nas peladas desse clube",
     "Marca do clube na convocatória e na imagem de resultado",
     "Painel do clube: pagamentos, presenças e estatísticas da época",
     "Recorrentes, lembretes automáticos e histórico ilimitado",
@@ -130,9 +132,13 @@ function PlanPricing({
 }
 
 export default function Premium() {
+  const { userId } = useAuth();
   const { profile, refresh } = useUserProfile();
   const pro = isProActive(profile?.entitlements);
   const proUntil = profile?.entitlements?.proUntil;
+  const proCommunityId = profile?.entitlements?.proCommunityId;
+  const [myCommunities, setMyCommunities] = useState<Community[]>([]);
+  const [organizerCommunityId, setOrganizerCommunityId] = useState("");
   const daysLeft = proUntil
     ? Math.max(0, Math.ceil((new Date(proUntil).getTime() - Date.now()) / 86400000))
     : null;
@@ -143,6 +149,16 @@ export default function Premium() {
   const [activatingPlan, setActivatingPlan] = useState<EntitlementPlan | null>(null);
   const checkoutHandled = useRef(false);
   useDocumentTitle("Premium");
+
+  useEffect(() => {
+    if (!userId) return;
+    void loadMyCommunities(userId).then((list) => {
+      setMyCommunities(list);
+      if (!organizerCommunityId && list[0]?.id) {
+        setOrganizerCommunityId(list[0].id);
+      }
+    });
+  }, [userId, organizerCommunityId]);
 
   const showSubscription = pro || activatingPlan !== null;
   const activePlanLabel = pro
@@ -212,9 +228,21 @@ export default function Premium() {
   }, [activatingPlan, successOpen, refresh]);
 
   function runCheckout(plan: EntitlementPlan, interval: BillingInterval, key: string) {
+    if (plan === "organizer_pro" && !organizerCommunityId) {
+      toast({
+        title: "Escolhe o clube",
+        description: "O Clube PRO é activado por comunidade — selecciona qual queres tornar PRO.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCheckoutBusy(`${key}-${interval === "month" ? "month" : "year"}`);
     setActivatingPlan(plan);
-    void startCheckout(plan, interval).finally(() => setCheckoutBusy(null));
+    void startCheckout(
+      plan,
+      interval,
+      plan === "organizer_pro" ? organizerCommunityId : undefined,
+    ).finally(() => setCheckoutBusy(null));
   }
   return (
     <JogaPage theme="dark" padded={false}>
@@ -325,6 +353,9 @@ export default function Premium() {
             {pro && daysLeft != null && proUntil ? (
               <p className="text-white/50 text-sm mt-1">
                 Renova a {new Date(proUntil).toLocaleDateString("pt-PT")} · {daysLeft} {daysLeft === 1 ? "dia" : "dias"} restantes
+                {proCommunityId && myCommunities.find((c) => c.id === proCommunityId)
+                  ? ` · Clube: ${myCommunities.find((c) => c.id === proCommunityId)?.name}`
+                  : ""}
               </p>
             ) : (
               <p className="text-amber-200/60 text-sm mt-1">A confirmar pagamento…</p>
@@ -378,12 +409,30 @@ export default function Premium() {
                   </div>
                 ))}
               </div>
+              <p className="text-white/45 text-xs mb-3 leading-relaxed">
+                Cada assinatura activa o PRO num clube. Tens vários clubes? Subscreve um de cada vez.
+              </p>
+              <select
+                value={organizerCommunityId}
+                onChange={(e) => setOrganizerCommunityId(e.target.value)}
+                className="w-full rounded-2xl px-4 py-3 text-sm text-white bg-[#0f172a] border border-amber-400/25 outline-none mb-4 [color-scheme:dark]"
+                data-testid="select-pro-community"
+              >
+                <option value="" className="bg-[#0f172a] text-white">Escolhe o clube/comunidade</option>
+                {myCommunities.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-[#0f172a] text-white">
+                    {c.name}
+                  </option>
+                ))}
+              </select>
               <PlanPricing
                 monthlyPrice={PRICING.organizerProMonthly}
                 annualPrice={PRICING.organizerProAnnual}
                 checkoutBusy={checkoutBusy}
                 busyKey="organizer"
                 variant="gold"
+                disabled={!organizerCommunityId}
+                disabledLabel="Escolhe o clube"
                 onCheckout={(interval) => runCheckout("organizer_pro", interval, "organizer")}
               />
             </div>

@@ -41,6 +41,8 @@ import { collectAllEvents, computeTopScorers, collectLinkedPlayerUserIds } from 
 import { notifyMatchPlayersToVote } from "./notificationsRepository";
 import type { WaitlistEntry } from "./matchRsvpRepository";
 import { checkAndUnlockBadges } from "./badgeService";
+import type { MatchAccessMode } from "./matchAccess";
+import { openToExternalFromAccessMode } from "./matchAccess";
 
 export type CreateMatchInput = {
   title: string;
@@ -54,6 +56,7 @@ export type CreateMatchInput = {
   price: string;
   paymentsEnabled?: boolean;
   proBadge?: boolean;
+  accessMode: MatchAccessMode;
   openToExternal: boolean;
   notes: string;
   organizerId: string;
@@ -82,11 +85,13 @@ export type MatchDetails = {
   proBadge?: boolean;
   maxPlayers?: number;
   notes?: string;
+  accessMode?: MatchAccessMode;
   openToExternal?: boolean;
   organizerName?: string;
   organizerId?: string;
   communityId?: string;
   status?: string;
+  accessMode?: import("./matchAccess").MatchAccessMode;
 };
 
 function readMatchDetailsMap(): Record<string, MatchDetails> {
@@ -254,6 +259,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     price: input.price.trim() || "Grátis",
     paymentsEnabled: input.paymentsEnabled ?? false,
     proBadge: input.proBadge ?? false,
+    accessMode: input.accessMode,
     communityId: input.communityId,
     openToExternal: input.openToExternal,
     status: "configurando",
@@ -270,6 +276,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     maxPlayers,
     notes: input.notes,
     openToExternal: input.openToExternal,
+    accessMode: input.accessMode,
     organizerName: input.organizerName,
     organizerId: input.organizerId,
   });
@@ -288,6 +295,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
         price: listing.price,
         paymentsEnabled: input.paymentsEnabled ?? false,
         proBadge: input.proBadge ?? false,
+        accessMode: input.accessMode,
         openToExternal: input.openToExternal,
         notes: input.notes,
         organizerId: input.organizerId,
@@ -437,6 +445,12 @@ export async function cancelMatch(matchId: string): Promise<void> {
   if (status !== "configurando" && status !== "ao_vivo") {
     throw new Error("Só podes cancelar partidas em preparação ou ao vivo.");
   }
+
+  if (isFirebaseConfigured()) {
+    const { cancelPeladaWithRefunds } = await import("./peladaBilling");
+    await cancelPeladaWithRefunds(matchId);
+  }
+
   await updateMatchStatus(matchId, "cancelada");
 }
 
@@ -616,6 +630,7 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     paymentsEnabled: data.paymentsEnabled ?? false,
     proBadge: data.proBadge ?? false,
     openToExternal: data.openToExternal ?? null,
+    accessMode: data.accessMode ?? null,
     title: data.title ?? null,
     communityId: data.communityId ?? null,
     organizerId: data.organizerId ?? null,
@@ -901,6 +916,7 @@ function mergeMatchSources(
       false,
     proBadge: remoteValid?.proBadge ?? localValid?.proBadge ?? false,
     openToExternal: remoteValid?.openToExternal ?? localValid?.openToExternal,
+    accessMode: remoteValid?.accessMode ?? localValid?.accessMode,
   };
 }
 

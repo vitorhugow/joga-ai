@@ -33,6 +33,7 @@ export function openStripeUrl(url: string): boolean {
 export async function startCheckout(
   plan: EntitlementPlan,
   interval: BillingInterval = "month",
+  communityId?: string,
 ): Promise<void> {
   if (!isFirebaseConfigured()) {
     toast({
@@ -46,11 +47,16 @@ export async function startCheckout(
   try {
     const functions = getFunctions(app, "europe-west1");
     const createSession = httpsCallable<
-      { plan: EntitlementPlan; interval: BillingInterval; origin: string },
+      { plan: EntitlementPlan; interval: BillingInterval; origin: string; communityId?: string },
       { url: string }
     >(functions, "createCheckoutSession");
 
-    const result = await createSession({ plan, interval, origin: window.location.origin });
+    const result = await createSession({
+      plan,
+      interval,
+      origin: window.location.origin,
+      ...(communityId ? { communityId } : {}),
+    });
     const url = result.data?.url;
     if (!url) throw new Error("sessão sem URL");
     openStripeUrl(url);

@@ -14,6 +14,7 @@ import { loadPostMatch, savePostMatch, type SavedPostMatch } from "./postMatchSt
 import type { LivePlayer } from "./preMatchStorage";
 import { loadCommunityMembers, loadCommunity } from "./communityRepository";
 import { loadMatchDetails } from "./matchRepository";
+import { resolveAccessMode } from "./matchAccess";
 import { addNotification } from "./notificationsRepository";
 import { OPEN_MATCH_STATUSES, type MatchStatus } from "./matchRepository";
 
@@ -44,12 +45,15 @@ function getMaxPlayers(match: SavedPostMatch, detailsMax?: number): number {
   return Math.max(4, match.players?.length ?? 10);
 }
 
-async function assertCommunityAccess(
+async function assertMatchAccess(
   communityId: string | undefined,
-  openToExternal: boolean | undefined,
+  accessMode: ReturnType<typeof resolveAccessMode>,
   userId: string,
 ): Promise<void> {
-  if (!communityId || openToExternal !== false) return;
+  if (accessMode !== "community") return;
+  if (!communityId) {
+    throw new Error("Esta pelada é só para membros da comunidade.");
+  }
   const members = await loadCommunityMembers(communityId);
   if (!members.some((m) => m.userId === userId)) {
     throw new Error("Esta pelada é só para membros da comunidade.");
@@ -124,6 +128,11 @@ export async function confirmPresence(
 
   const details = loadMatchDetails(matchId);
   const communityId = match.communityId ?? details?.communityId;
+  const accessMode = resolveAccessMode({
+    accessMode: match.accessMode ?? details?.accessMode,
+    openToExternal: match.openToExternal ?? details?.openToExternal,
+    communityId,
+  });
 
   if (!canConfirmPresence(match.status)) {
     throw new Error("Só podes confirmar presença antes do jogo começar.");
@@ -132,10 +141,12 @@ export async function confirmPresence(
   if (communityId) {
     const isMember = await isCommunityMember(communityId, userId);
     if (!isMember) {
-      await assertCommunityAccess(communityId, details?.openToExternal, userId);
+      await assertMatchAccess(communityId, accessMode, userId);
     }
+  } else if (accessMode === "community") {
+    throw new Error("Esta pelada é só para membros da comunidade.");
   } else {
-    await assertCommunityAccess(communityId, details?.openToExternal, userId);
+    await assertMatchAccess(communityId, accessMode, userId);
   }
 
   const paymentsRequired =
@@ -150,7 +161,7 @@ export async function confirmPresence(
     const hasPaid =
       paidUserIds.includes(userId) || existingPlayer?.paid === true;
     if (!hasPaid) {
-      throw new Error("Paga a pelada online antes de confirmar presença.");
+      throw new Error("Paga a pelada online para confirmar presença.");
     }
   }
 

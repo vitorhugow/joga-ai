@@ -133,8 +133,17 @@ export const createCheckoutSession = onCall(
 
     const plan = request.data?.plan as Plan;
     const interval = (request.data?.interval as Interval) ?? "month";
+    const communityId = typeof request.data?.communityId === "string"
+      ? request.data.communityId.trim()
+      : "";
     if (plan !== "player_pro" && plan !== "organizer_pro") {
       throw new HttpsError("invalid-argument", "Plano inválido.");
+    }
+    if (plan === "organizer_pro" && !communityId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Escolhe o clube/comunidade para activar o Clube PRO.",
+      );
     }
     if (interval !== "month" && interval !== "year") {
       throw new HttpsError("invalid-argument", "Intervalo inválido.");
@@ -152,9 +161,15 @@ export const createCheckoutSession = onCall(
       customer: customerId,
       client_reference_id: uid,
       line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: { metadata: { firebaseUid: uid, plan } },
+      subscription_data: {
+        metadata: {
+          firebaseUid: uid,
+          plan,
+          ...(communityId ? { communityId } : {}),
+        },
+      },
       allow_promotion_codes: true,
-      success_url: `${origin}/premium?checkout=sucesso&plan=${plan}`,
+      success_url: `${origin}/premium?checkout=sucesso&plan=${plan}${communityId ? `&community=${communityId}` : ""}`,
       cancel_url: `${origin}/premium?checkout=cancelado`,
     });
 
@@ -192,28 +207,48 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
     return;
   }
   const plan: Plan = sub.metadata?.plan === "organizer_pro" ? "organizer_pro" : "player_pro";
+  const communityId = typeof sub.metadata?.communityId === "string"
+    ? sub.metadata.communityId
+    : "";
   const active = sub.status === "active" || sub.status === "trialing";
   const periodEnd = sub.current_period_end ?? null;
+  const proUntil = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
 
-  await getFirestore()
-    .doc(`users/${uid}`)
-    .set(
-      {
-        entitlements: active
-          ? {
-              pro: true,
-              plan,
-              proUntil: periodEnd
-                ? new Date(periodEnd * 1000).toISOString()
-                : null,
-            }
-          : { pro: false },
-        stripeSubscriptionId: sub.id,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-  console.log(`[stripeWebhook] entitlements ${active ? "ativos" : "revogados"} para ${uid} (${plan})`);
+  const userRef = getFirestore().doc(`users/${uid}`);
+  const patch: Record<string, unknown> = {
+    entitlements: active
+      ? {
+          pro: true,
+          plan,
+          proUntil,
+          ...(plan === "organizer_pro" && communityId
+            ? { proCommunityId: communityId }
+            : {}),
+        }
+      : { pro: false },
+    stripeSubscriptionId: sub.id,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (plan === "organizer_pro" && communityId) {
+    patch[`proCommunities.${communityId}`] = active
+      ? { proUntil, subscriptionId: sub.id }
+      : FieldValue.delete();
+    if (active) {
+      await getFirestore().doc(`communities/${communityId}`).set(
+        {
+          proActive: true,
+          proUntil,
+          proOrganizerId: uid,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+  }
+
+  await userRef.set(patch, { merge: true });
+  console.log(`[stripeWebhook] entitlements ${active ? "ativos" : "revogados"} para ${uid} (${plan}${communityId ? ` @ ${communityId}` : ""})`);
 }
 
 export const stripeWebhook = onRequest(
@@ -491,32 +526,158 @@ export const createPeladaCheckout = onCall(
   },
 );
 
-/** Marca o jogador como pago no doc da pelada (chamado pelo webhook) */
+/** Marca o jogador como pago e confirma presença automaticamente */
 export async function markPlayerPaidFromSession(
   session: Stripe.Checkout.Session,
 ): Promise<void> {
   const { matchId, uid } = (session.metadata ?? {}) as Record<string, string>;
   if (!matchId || !uid) return;
 
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id ?? "";
+  const amountCents = session.amount_total ?? 0;
+
   const db = getFirestore();
+  const userSnap = await db.doc(`users/${uid}`).get();
+  const user = userSnap.data() ?? {};
+
   await db.runTransaction(async (tx) => {
     const ref = db.doc(`matches/${matchId}`);
     const snap = await tx.get(ref);
+    if (!snap.exists) return;
     const data = snap.data() ?? {};
     const players: Array<Record<string, unknown>> = Array.isArray(data.players)
       ? [...(data.players as Array<Record<string, unknown>>)]
       : [];
+    const peladaPayments: Array<Record<string, unknown>> = Array.isArray(data.peladaPayments)
+      ? [...(data.peladaPayments as Array<Record<string, unknown>>)]
+      : [];
+
+    if (
+      paymentIntentId &&
+      !peladaPayments.some((p) => p.paymentIntentId === paymentIntentId)
+    ) {
+      peladaPayments.push({
+        userId: uid,
+        sessionId: session.id,
+        paymentIntentId,
+        amountCents,
+        paidAt: new Date().toISOString(),
+      });
+    }
+
+    const paidAt = new Date().toISOString();
     const idx = players.findIndex((pl) => pl.userId === uid);
-    if (idx === -1) {
+    if (idx >= 0) {
+      players[idx] = {
+        ...players[idx],
+        paid: true,
+        paidVia: "app",
+        paidAt,
+      };
+      tx.update(ref, { players, peladaPayments, savedAt: FieldValue.serverTimestamp() });
+      return;
+    }
+
+    const maxPlayers = Math.max(4, Number(data.maxPlayers) || 14);
+    if (players.length >= maxPlayers) {
       const paidUserIds: string[] = Array.isArray(data.paidUserIds)
         ? [...(data.paidUserIds as string[])]
         : [];
       if (!paidUserIds.includes(uid)) paidUserIds.push(uid);
-      tx.update(ref, { paidUserIds, savedAt: FieldValue.serverTimestamp() });
+      tx.update(ref, { paidUserIds, peladaPayments, savedAt: FieldValue.serverTimestamp() });
       return;
     }
-    players[idx] = { ...players[idx], paid: true, paidVia: "app", paidAt: new Date().toISOString() };
-    tx.update(ref, { players, savedAt: FieldValue.serverTimestamp() });
+
+    const newPlayer = {
+      id: uid,
+      userId: uid,
+      name: String(user.displayName ?? "Jogador").trim() || "Jogador",
+      position: String(user.position ?? "MEI"),
+      overall: Number(user.overall ?? 50) || 50,
+      paid: true,
+      paidVia: "app",
+      paidAt,
+      isMe: false,
+    };
+    const playerTeams = {
+      ...(typeof data.playerTeams === "object" && data.playerTeams
+        ? (data.playerTeams as Record<string, unknown>)
+        : {}),
+      [uid]: "BENCH",
+    };
+    const participantUserIds = Array.from(
+      new Set([
+        ...(Array.isArray(data.participantUserIds) ? (data.participantUserIds as string[]) : []),
+        uid,
+      ]),
+    );
+    const paidUserIds = (Array.isArray(data.paidUserIds) ? (data.paidUserIds as string[]) : [])
+      .filter((id) => id !== uid);
+
+    tx.update(ref, {
+      players: [...players, newPlayer],
+      playerTeams,
+      participantUserIds,
+      paidUserIds,
+      peladaPayments,
+      savedAt: FieldValue.serverTimestamp(),
+    });
   });
-  console.log(`[stripeWebhook] pelada ${matchId}: ${uid} marcado como pago.`);
+  console.log(`[stripeWebhook] pelada ${matchId}: ${uid} pago e confirmado.`);
 }
+
+/** Cancela pelada e reembolsa pagamentos online */
+export const cancelPeladaWithRefunds = onCall(
+  { region: REGION, secrets: [stripeSecretKey] },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    const matchId = String(request.data?.matchId ?? "");
+    if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
+
+    const db = getFirestore();
+    const ref = db.doc(`matches/${matchId}`);
+    const snap = await ref.get();
+    const match = snap.data();
+    if (!match) throw new HttpsError("not-found", "Pelada não encontrada.");
+    if (String(match.organizerId ?? "") !== uid) {
+      throw new HttpsError("permission-denied", "Só o organizador pode cancelar.");
+    }
+
+    const status = String(match.status ?? "configurando");
+    if (status !== "configurando" && status !== "ao_vivo") {
+      throw new HttpsError("failed-precondition", "Só podes cancelar em preparação ou ao vivo.");
+    }
+
+    const stripe = new Stripe(stripeSecretKey.value());
+    const payments: Array<Record<string, unknown>> = Array.isArray(match.peladaPayments)
+      ? [...(match.peladaPayments as Array<Record<string, unknown>>)]
+      : [];
+
+    for (const payment of payments) {
+      if (payment.refunded === true) continue;
+      const paymentIntentId = String(payment.paymentIntentId ?? "");
+      if (!paymentIntentId.startsWith("pi_")) continue;
+      try {
+        await stripe.refunds.create({ payment_intent: paymentIntentId });
+        payment.refunded = true;
+      } catch (err) {
+        console.warn("[cancelPeladaWithRefunds] refund:", paymentIntentId, err);
+      }
+    }
+
+    await ref.set(
+      {
+        status: "cancelada",
+        peladaPayments: payments,
+        savedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    return { refunded: payments.filter((p) => p.refunded === true).length };
+  },
+);

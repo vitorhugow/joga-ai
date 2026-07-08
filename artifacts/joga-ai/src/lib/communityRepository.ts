@@ -23,6 +23,7 @@ import {
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
+import { isListedInPublicBrowse, isListedInCommunityFeed } from "./matchAccess";
 import { MAX_PROFILE_PHOTO_BYTES } from "./userRepository";
 import { loadAllPostMatches } from "./postMatchStorage";
 
@@ -67,6 +68,7 @@ export type MatchListing = {
   date: string;
   scheduledDate?: string;
   scheduledTime?: string;
+  accessMode?: "public" | "community" | "private";
   spotsRemaining: string;
   price: string;
   communityId?: string;
@@ -625,8 +627,7 @@ export async function deleteCommunity(communityId: string): Promise<void> {
 }
 
 function isOpenPublicMatch(m: MatchListing): boolean {
-  if (m.communityId) return m.openToExternal === true;
-  return !m.status || OPEN_MATCH_STATUSES.includes(m.status as (typeof OPEN_MATCH_STATUSES)[number]);
+  return isListedInPublicBrowse(m);
 }
 
 /**
@@ -794,6 +795,7 @@ export async function loadCommunityMatches(
       .filter(
         (m) =>
           m.communityId === communityId &&
+          isListedInCommunityFeed(m) &&
           (!m.status ||
             COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
               m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
@@ -812,13 +814,17 @@ export async function loadCommunityMatches(
     );
     const snap = await getDocs(q);
 
-    return snap.docs.map((d) => mapMatchDoc(d.id, d.data())).slice(0, limitCount);
+    return snap.docs
+      .map((d) => mapMatchDoc(d.id, d.data()))
+      .filter(isListedInCommunityFeed)
+      .slice(0, limitCount);
   } catch (err) {
     console.warn("[communityRepository] loadCommunityMatches:", err);
     return readLocalMatchListings()
       .filter(
         (m) =>
           m.communityId === communityId &&
+          isListedInCommunityFeed(m) &&
           (!m.status ||
             COMMUNITY_ACTIVE_MATCH_STATUSES.includes(
               m.status as (typeof COMMUNITY_ACTIVE_MATCH_STATUSES)[number],
@@ -850,7 +856,9 @@ export function subscribeCommunityMatches(
   return onSnapshot(
     q,
     (snap) => {
-      const remote = snap.docs.map((d) => mapMatchDoc(d.id, d.data()));
+      const remote = snap.docs
+        .map((d) => mapMatchDoc(d.id, d.data()))
+        .filter(isListedInCommunityFeed);
       callback(remote.slice(0, limitCount));
     },
     (err) => {
@@ -881,6 +889,9 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
     status: data.status ? String(data.status) : undefined,
     proBadge: data.proBadge === true,
     openToExternal: data.openToExternal === true,
+    accessMode: typeof data.accessMode === "string"
+      ? (data.accessMode as MatchListing["accessMode"])
+      : undefined,
     paymentsEnabled: data.paymentsEnabled === true,
   };
 }

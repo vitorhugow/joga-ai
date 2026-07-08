@@ -22,6 +22,7 @@ import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
 import { formatMatchPricePerPlayer } from "@/lib/formatMatchPrice";
+import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
 import { createIncompleteSeedProfile, loadUserProfile } from "@/lib/userRepository";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
@@ -374,12 +375,25 @@ export default function PreJogo() {
     if (paymentStatus === "sucesso") {
       toast({
         title: "Pagamento recebido ✓",
-        description: "Agora podes confirmar a tua presença na pelada.",
+        description: "A tua presença foi confirmada automaticamente.",
       });
       void loadMatchFromFirestore(matchId).then((merged) => {
         if (merged?.paidUserIds) setPaidUserIds(merged.paidUserIds);
-        if (userId && merged?.paidUserIds?.includes(userId)) {
-          setPaidUserIds(merged.paidUserIds);
+        if (merged?.players && userId) {
+          const mapped = merged.players.map((p) => ({
+            id: p.id,
+            name: p.name,
+            position: p.position,
+            overall: p.overall,
+            paid: p.paid ?? false,
+            isMe: p.userId === userId,
+            manual: p.manual,
+            userId: p.userId,
+            guestId: p.guestId,
+            loanCard: p.loanCard,
+          }));
+          setPlayers(linkPlayersInRoster(mapped, userId));
+          setPlayerTeams(merged.playerTeams ?? {});
         }
       });
     } else if (paymentStatus === "cancelado") {
@@ -1225,10 +1239,26 @@ export default function PreJogo() {
   const isInMatch = myPlayerIndex >= 0;
   const isOnWaitlist = myWaitlistIndex >= 0;
   const myPlayer = myPlayerIndex >= 0 ? players[myPlayerIndex] : null;
-  const hasPaidForPelada = Boolean(
-    myPlayer?.paid || (userId && paidUserIds.includes(userId)),
-  );
-  const canConfirmAfterPayment = !paymentsOn || isOrganizer || hasPaidForPelada;
+
+  function handleJoinClick() {
+    if (!requireLinked({
+      mode: "register",
+      title: "Cria conta para confirmar presença",
+      description: "Precisas de entrar para participar nesta pelada.",
+    })) {
+      return;
+    }
+    if (paymentsOn && !isOrganizer && organizerCaixaReady) {
+      void payPelada(matchId);
+      return;
+    }
+    if (needsProfileName && !showRsvpNameForm) {
+      setShowRsvpNameForm(true);
+      return;
+    }
+    const name = rsvpGuestName.trim() || profile.displayName?.trim();
+    void handleConfirmPresence(name);
+  }
 
   useEffect(() => {
     const orgId = resolvedOrganizerId;
@@ -1257,27 +1287,7 @@ export default function PreJogo() {
   const needsProfileName = isLinked && !profile.displayName?.trim();
 
   function handleRsvpClick() {
-    if (!requireLinked({
-      mode: "register",
-      title: "Cria conta para confirmar presença",
-      description: "Precisas de entrar para participar nesta pelada.",
-    })) {
-      return;
-    }
-    if (paymentsOn && !canConfirmAfterPayment) {
-      toast({
-        title: "Pagamento em falta",
-        description: "Paga a pelada online antes de confirmar presença.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (needsProfileName && !showRsvpNameForm) {
-      setShowRsvpNameForm(true);
-      return;
-    }
-    const name = rsvpGuestName.trim() || profile.displayName?.trim();
-    void handleConfirmPresence(name);
+    handleJoinClick();
   }
 
   return (
@@ -1314,14 +1324,17 @@ export default function PreJogo() {
           </h1>
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-white/50 text-sm">
+            <span className="text-white font-bold text-sm">
               📍 {matchDetails?.location || "Local a definir"}
               {matchDetails?.city ? `, ${matchDetails.city}` : ""}
             </span>
-            {matchDetails?.date && (
+            {matchDetails?.scheduledDate && (
               <>
-                <span className="text-white/25">·</span>
-                <span className="text-white/50 text-sm">🕐 {matchDetails.date}</span>
+                <span className="text-white/40">·</span>
+                <span className="text-white font-bold text-sm">
+                  📅 {matchDetails.scheduledDate}
+                  {matchDetails.scheduledTime ? ` · 🕐 ${matchDetails.scheduledTime.slice(0, 5)}` : ""}
+                </span>
               </>
             )}
           </div>
@@ -1354,8 +1367,14 @@ export default function PreJogo() {
 
           {matchDetails?.organizerName && (
             <p className="text-white/40 text-xs mt-2">
-              Organizador: <span className="text-white/60 font-semibold">{matchDetails.organizerName}</span>
-              {matchDetails.openToExternal === false && " · Apenas comunidade"}
+              Organizador: <span className="text-white font-semibold">{matchDetails.organizerName}</span>
+              {matchDetails && (
+                <> · {accessModeLabel(resolveAccessMode({
+                  accessMode: matchDetails.accessMode,
+                  openToExternal: matchDetails.openToExternal,
+                  communityId: matchDetails.communityId,
+                }))}</>
+              )}
             </p>
           )}
 
@@ -1391,55 +1410,6 @@ export default function PreJogo() {
       </div>
 
       <div className="px-4 space-y-5 pt-5">
-        {rosterHydrated && paymentsOn && !isOrganizer && !hasPaidForPelada && (
-          <section
-            className="rounded-2xl p-4"
-            style={{
-              background: "rgba(251,191,36,0.1)",
-              border: "1px solid rgba(251,191,36,0.28)",
-            }}
-            data-testid="player-payment-section"
-          >
-            <p className="text-sm font-black text-white flex items-center gap-2">
-              💳 Pagamento Online
-            </p>
-
-            {organizerCaixaReady ? (
-              <>
-                <p className="text-amber-200/80 text-xs mt-2 leading-relaxed">
-                  Paga {formatMatchPricePerPlayer(matchDetails?.price) ?? "a pelada"} para confirmar a tua presença.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void payPelada(matchId)}
-                  className="mt-3 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-                  style={{ background: "#10b981", boxShadow: "0 4px 18px rgba(16,185,129,0.3)" }}
-                  data-testid="button-pay-pelada"
-                >
-                  💳 Pagar {formatMatchPricePerPlayer(matchDetails?.price) ?? matchDetails?.price ?? "a pelada"}
-                </button>
-              </>
-            ) : (
-              <p className="text-amber-200/80 text-xs mt-2 leading-relaxed rounded-xl px-3 py-2.5" style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.22)" }}>
-                Pagamento online em breve — o organizador ainda está a ligar a Caixa. Por agora combina pagamento manual com ele.
-              </p>
-            )}
-          </section>
-        )}
-
-        {rosterHydrated && paymentsOn && !isOrganizer && hasPaidForPelada && !isInMatch && (
-          <section
-            className="rounded-2xl p-4"
-            style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.28)" }}
-            data-testid="player-paid-ready"
-          >
-            <p className="text-emerald-200 text-sm font-bold">✓ Pagamento confirmado</p>
-            <p className="text-emerald-200/70 text-xs mt-1">
-              Confirma a tua presença abaixo para entrar no plantel.
-            </p>
-          </section>
-        )}
-
         {showRsvpBanner && (
           <section
             className="rounded-2xl p-4"
@@ -1478,13 +1448,13 @@ export default function PreJogo() {
               </>
             ) : (
               <>
-                <p className="text-white/80 text-sm font-bold">Queres jogar nesta pelada?</p>
-                {paymentsOn && !canConfirmAfterPayment && (
+                <p className="text-white font-bold text-sm">Queres jogar nesta pelada?</p>
+                {paymentsOn && !organizerCaixaReady && (
                   <p className="text-amber-200/80 text-xs mt-2 leading-relaxed">
-                    Primeiro tens de pagar online (secção acima) para confirmar presença.
+                    Pagamento online em breve — o organizador ainda está a ligar a Caixa.
                   </p>
                 )}
-                {showRsvpNameForm && isLinked && canConfirmAfterPayment && (
+                {showRsvpNameForm && isLinked && !paymentsOn && (
                   <input
                     type="text"
                     value={rsvpGuestName}
@@ -1500,11 +1470,12 @@ export default function PreJogo() {
                   variant="primary"
                   size="md"
                   className="mt-3 w-full"
-                  disabled={rsvpBusy || !canConfirmAfterPayment}
+                  disabled={rsvpBusy || (paymentsOn && !organizerCaixaReady)}
                   onClick={handleRsvpClick}
+                  data-testid={paymentsOn ? "button-pay-pelada" : "button-confirm-rsvp"}
                 >
-                  {paymentsOn && !canConfirmAfterPayment
-                    ? "Paga primeiro para confirmar"
+                  {paymentsOn
+                    ? `💳 Paga ${formatMatchPricePerPlayer(matchDetails?.price) ?? matchDetails?.price ?? ""} e confirma a tua presença`
                     : "Confirmar presença"}
                 </JogaButton>
               </>

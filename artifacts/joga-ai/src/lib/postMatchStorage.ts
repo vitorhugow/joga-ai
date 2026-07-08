@@ -7,6 +7,15 @@ export type { WaitlistEntry };
 export type PostMatchTeamKey = LiveTeamKey;
 export type PostMatchEventType = "golo" | "assistencia" | "defesa" | "cartao_amarelo" | "falta";
 
+export type PeladaPayment = {
+  userId: string;
+  sessionId: string;
+  paymentIntentId: string;
+  amountCents: number;
+  paidAt: string;
+  refunded?: boolean;
+};
+
 export type SavedPostMatch = {
   /** Pagamentos in-app ativos nesta pelada (organizador opt-in) */
   paymentsEnabled?: boolean;
@@ -32,8 +41,10 @@ export type SavedPostMatch = {
   waitlist?: WaitlistEntry[];
   maxPlayers?: number;
   openToExternal?: boolean;
+  accessMode?: "public" | "community" | "private";
   /** Jogadores que pagaram online mas ainda não confirmaram presença */
   paidUserIds?: string[];
+  peladaPayments?: PeladaPayment[];
 };
 
 const KEY_PREFIX = "joga-ai-post-match-v1-";

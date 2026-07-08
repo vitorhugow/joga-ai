@@ -47,6 +47,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { toast } from "@/hooks/use-toast";
+import { triggerPushSoftPrompt } from "@/components/PushPermissionPrompt";
+import { trackEvent } from "@/lib/analytics";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -425,6 +427,7 @@ export default function PreJogo() {
     window.history.replaceState({}, "", cleanUrl);
 
     if (paymentStatus === "sucesso") {
+      trackEvent("payment_completed", { matchId });
       toast({
         title: "Pagamento recebido ✓",
         description: "A tua presença foi confirmada automaticamente.",
@@ -814,6 +817,10 @@ export default function PreJogo() {
             ? `Estás na posição ${waitlist.length + 1} — avisamos se abrir vaga.`
             : "Entraste no plantel desta pelada.",
       });
+      if (result !== "waitlist") {
+        trackEvent("match_joined", { matchId });
+        triggerPushSoftPrompt();
+      }
     } catch (err) {
       toast({
         title: "Não foi possível confirmar",
@@ -1332,6 +1339,8 @@ export default function PreJogo() {
       try {
         const result = await payPelada(matchId);
         if (result === "balance") {
+          trackEvent("match_joined", { matchId });
+          triggerPushSoftPrompt();
           void refresh();
           const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
           if (merged?.waitlist) setWaitlist(merged.waitlist);

@@ -1,3 +1,7 @@
+/**
+ * firebase.ts — Firebase app, Firestore, Auth, App Check.
+ */
+
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   initializeFirestore,
@@ -6,18 +10,8 @@ import {
   persistentMultipleTabManager,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
-/**
- * Firebase config — substitui com as tuas credenciais do Firebase Console.
- * Em produção, usa variáveis de ambiente Vite: VITE_FIREBASE_API_KEY, etc.
- *
- * Passos no Firebase Console:
- *  1. Criar projecto (ou usar existente)
- *  2. Adicionar aplicação Web
- *  3. Copiar firebaseConfig para aqui (ou para .env.local)
- *  4. Firestore → Criar base de dados (modo de teste para começar)
- *  5. Authentication → Habilitar "Anonymous"
- */
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? "",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? "",
@@ -28,16 +22,8 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ?? "",
 };
 
-/** Evita re-inicialização em HMR */
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-/**
- * Cache local persistente (IndexedDB) com suporte multi-aba: permite ler/
- * escrever com a rede em baixo (fila de escritas offline) — essencial para
- * o placar do Ao Vivo continuar a funcionar sem ligação e sincronizar
- * quando a rede voltar. Em HMR (o módulo corre outra vez para a mesma app)
- * ou em browsers sem IndexedDB disponível, cai para o Firestore por defeito.
- */
 function createFirestore() {
   try {
     return initializeFirestore(app, {
@@ -53,7 +39,31 @@ export const db = createFirestore();
 export const auth = getAuth(app);
 export default app;
 
-/** Retorna true se o Firebase está configurado (credenciais presentes) */
 export function isFirebaseConfigured(): boolean {
   return Boolean(firebaseConfig.projectId && firebaseConfig.apiKey);
+}
+
+/** App Check (reCAPTCHA v3) — só com VITE_RECAPTCHA_SITE_KEY definida. */
+export function initAppCheck(): void {
+  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  if (!siteKey || !isFirebaseConfigured()) return;
+
+  if (import.meta.env.DEV) {
+    (globalThis as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN =
+      true;
+  }
+
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (err) {
+    console.warn("[firebase] App Check:", err);
+  }
+}
+
+/** Config pública (ex.: service worker de messaging). */
+export function getFirebasePublicConfig() {
+  return { ...firebaseConfig };
 }

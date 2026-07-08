@@ -35,6 +35,9 @@ import {
 import { CommunityDuel, RivalryCard } from "@/components/CommunityDuel";
 import { imageDisplaySrc } from "@/lib/imageUtils";
 import { loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository";
+import { loadBlockedIds, filterBlocked } from "@/lib/blockRepository";
+import { ReportBlockActions } from "@/components/ReportBlockActions";
+import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
@@ -84,6 +87,15 @@ export default function ComunidadePage() {
   const [rivalries, setRivalries] = useState<Awaited<ReturnType<typeof loadCommunityRivalries>>>([]);
   const [duelTargetId, setDuelTargetId] = useState<string>("");
   const [memberProfiles, setMemberProfiles] = useState<Map<string, PublicUserProfile>>(new Map());
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!userId) {
+      setBlockedIds(new Set());
+      return;
+    }
+    void loadBlockedIds(userId).then(setBlockedIds);
+  }, [userId]);
 
   async function refreshCommunity() {
     const c = await loadCommunity(id, userId);
@@ -131,25 +143,46 @@ export default function ComunidadePage() {
 
   const duelCandidates = useMemo(() => {
     const statsById = new Map(playerStats.map((s) => [s.userId, s]));
-    return members
-      .filter((m) => m.userId !== userId)
-      .map((m) => {
-        const stats = statsById.get(m.userId);
-        const profile = memberProfiles.get(m.userId);
-        if (stats) return stats;
-        return {
-          userId: m.userId,
-          name: profile?.displayName || m.displayName,
-          goals: 0,
-          assists: 0,
-          matches: 0,
-          mvpCount: 0,
-          ratingSum: 0,
-          ratingCount: 0,
-          avgRating: 0,
-        } satisfies CommunityPlayerStats;
-      });
-  }, [members, playerStats, memberProfiles, userId]);
+    return filterBlocked(
+      members
+        .filter((m) => m.userId !== userId)
+        .map((m) => {
+          const stats = statsById.get(m.userId);
+          const profile = memberProfiles.get(m.userId);
+          if (stats) return stats;
+          return {
+            userId: m.userId,
+            name: profile?.displayName || m.displayName,
+            goals: 0,
+            assists: 0,
+            matches: 0,
+            mvpCount: 0,
+            ratingSum: 0,
+            ratingCount: 0,
+            avgRating: 0,
+          } satisfies CommunityPlayerStats;
+        }),
+      blockedIds,
+    );
+  }, [members, playerStats, memberProfiles, userId, blockedIds]);
+
+  const visibleMembers = useMemo(
+    () => filterBlocked(members, blockedIds),
+    [members, blockedIds],
+  );
+
+  const visiblePlayerStats = useMemo(
+    () => filterBlocked(playerStats, blockedIds),
+    [playerStats, blockedIds],
+  );
+
+  const visibleRivalries = useMemo(
+    () =>
+      rivalries.filter(
+        (r) => !blockedIds.has(r.userIdA) && !blockedIds.has(r.userIdB),
+      ),
+    [rivalries, blockedIds],
+  );
 
   if (!community) {
     return (
@@ -164,7 +197,7 @@ export default function ComunidadePage() {
   const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
   const hasAccess = isMember || isAdmin;
   const coverSrc = imageDisplaySrc(community.coverImage);
-  const displayMemberCount = members.length > 0 ? members.length : community.memberCount;
+  const displayMemberCount = visibleMembers.length > 0 ? visibleMembers.length : community.memberCount;
 
   async function handleRequestJoin() {
     if (!requireLinked({ mode: "register", title: "Cria conta para entrar na comunidade" })) {
@@ -184,6 +217,7 @@ export default function ComunidadePage() {
     try {
       if (community.isPrivate) {
         await requestToJoin(id, userId, profile.displayName || "Jogador");
+        trackEvent("community_join_requested", { communityId: id });
         setJoinStatus("pending");
         await refreshCommunity();
         toast({
@@ -260,9 +294,20 @@ export default function ComunidadePage() {
           <ChevronLeft className="w-5 h-5 text-white" />
         </Link>
         <div className="absolute bottom-4 left-4 right-4">
-          <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">
-            {community.name}
-          </h1>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">
+                {community.name}
+              </h1>
+            </div>
+            {userId && community.adminId !== userId ? (
+              <ReportBlockActions
+                targetType="community"
+                targetId={id}
+                targetLabel={community.name}
+              />
+            ) : null}
+          </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <div className="flex items-center gap-1 text-white/80 text-xs">
               <MapPin className="w-3 h-3" />
@@ -436,25 +481,25 @@ export default function ComunidadePage() {
 
         {hasAccess && activeTab === "liga" && (
           <div className="space-y-4">
-            {playerStats.length === 0 ? (
+            {visiblePlayerStats.length === 0 ? (
               <p className="text-white/40 text-sm text-center py-8">Sem dados de liga ainda.</p>
             ) : (
               <>
                 <RankingList
                   title="Golos"
-                  entries={computeLeaderboard(playerStats, "goals")}
+                  entries={computeLeaderboard(visiblePlayerStats, "goals")}
                 />
                 <RankingList
                   title="Assistências"
-                  entries={computeLeaderboard(playerStats, "assists")}
+                  entries={computeLeaderboard(visiblePlayerStats, "assists")}
                 />
                 <RankingList
                   title="Nota média"
-                  entries={computeLeaderboard(playerStats, "avgRating")}
+                  entries={computeLeaderboard(visiblePlayerStats, "avgRating")}
                 />
                 <RankingList
                   title="MVP"
-                  entries={computeLeaderboard(playerStats, "mvp")}
+                  entries={computeLeaderboard(visiblePlayerStats, "mvp")}
                 />
               </>
             )}
@@ -500,10 +545,10 @@ export default function ComunidadePage() {
               />
             )}
 
-            {rivalries.length > 0 && (
+            {visibleRivalries.length > 0 && (
               <div className="space-y-3">
                 <h3 className="font-display font-black text-white text-lg">As tuas rivalidades</h3>
-                {rivalries.map((r) => (
+                {visibleRivalries.map((r) => (
                   <RivalryCard key={r.pairId} rivalry={r} currentUserId={userId} />
                 ))}
               </div>
@@ -513,10 +558,10 @@ export default function ComunidadePage() {
 
         {hasAccess && activeTab === "membros" && (
           <div className="space-y-3">
-            {members.length === 0 ? (
+            {visibleMembers.length === 0 ? (
               <p className="text-white/40 text-sm text-center py-8">Sem membros listados.</p>
             ) : (
-              members.map((m) => {
+              visibleMembers.map((m) => {
                 const profile = memberProfiles.get(m.userId);
                 const photoSrc = imageDisplaySrc(profile?.photoUrl);
                 return (

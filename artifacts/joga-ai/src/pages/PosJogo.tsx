@@ -69,6 +69,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { generateMatchNarrative } from "@/lib/matchNarrative";
 import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { toast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { SponsorSlot } from "@/components/SponsorSlot";
@@ -871,6 +872,7 @@ export default function PosJogo() {
 
     const voteRecord = { userId, ratings, createdAt: new Date().toISOString() };
     flow.upsertVote(voteRecord);
+    trackEvent("vote_submitted", { matchId });
     submitVote(matchId, voteRecord).catch(console.warn);
     markUserVoted(matchId, userId).catch(console.warn);
     // O voto já está submetido (local + servidor) — limpa o rascunho para

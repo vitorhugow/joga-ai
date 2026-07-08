@@ -211,6 +211,41 @@ service cloud.firestore {
           && validNotificationCreate()
           && canCreateClientNotification(userId, notifId);
       }
+
+      match /fcmTokens/{tokenId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /blocked/{targetUid} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    match /reports/{reportId} {
+      function validReportCreate() {
+        return request.resource.data.keys().hasOnly(
+            ['reporterId', 'targetType', 'targetId', 'reason', 'details', 'status', 'createdAt']
+          )
+          && request.resource.data.reporterId == request.auth.uid
+          && request.resource.data.status == 'open'
+          && request.resource.data.targetType in ['user', 'community']
+          && request.resource.data.reason in [
+            'nome_ofensivo', 'foto_inapropriada', 'comportamento', 'spam', 'outro'
+          ]
+          && request.resource.data.targetId is string
+          && request.resource.data.targetId.size() > 0
+          && request.resource.data.targetId.size() <= 128
+          && request.resource.data.details is string
+          && request.resource.data.details.size() <= 500;
+      }
+
+      allow create: if isSignedIn() && validReportCreate();
+      allow read, update: if isAppAdmin();
+      allow delete: if false;
+    }
+
+    match /rateLimits/{docId} {
+      allow read, write: if false;
     }
 
     match /matches/{matchId} {
@@ -251,9 +286,6 @@ service cloud.firestore {
 
       match /events/{eventId} {
         allow read: if isSignedIn();
-        // Modelo "mesário único": só o organizador regista eventos.
-        // Se um dia houver marcação multi-dispositivo, adicionar um campo
-        // participantIds: string[] na partida e permitir esses uids aqui.
         allow write: if isMatchOrganizer(matchId);
       }
 
@@ -264,9 +296,6 @@ service cloud.firestore {
 
       match /summary/{docId} {
         allow read: if isSignedIn();
-        // O resumo/resultado é gravado quando a votação termina — o que
-        // normalmente acontece no dispositivo do último jogador a votar,
-        // não necessariamente o organizador.
         allow write: if isSignedIn() && (
           isMatchOrganizer(matchId)
           || matchDoc(matchId).status in ['aguardando_auditoria', 'auditada', 'concluida']

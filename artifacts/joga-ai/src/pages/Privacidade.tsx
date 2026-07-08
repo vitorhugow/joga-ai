@@ -30,6 +30,8 @@ const SECTIONS = [
         <li><strong>Pagamentos:</strong> quando usas subscrições PRO ou pagamentos de pelada, o processamento é feito pela <strong>Stripe</strong>. Não guardamos números de cartão — apenas identificadores de cliente Stripe, estado de pagamento e subscrição associados à tua conta.</li>
         <li><strong>Organizadores (Stripe Connect):</strong> identificador da conta Express Stripe para receber pagamentos de peladas, conforme o onboarding Stripe.</li>
         <li><strong>Técnicos:</strong> dados de utilização da app, tipo de dispositivo, endereço IP aproximado e registos necessários à segurança e funcionamento do serviço.</li>
+        <li><strong>Notificações push (opcional):</strong> se activares avisos no browser ou Android, guardamos o token FCM do dispositivo, plataforma e user-agent.</li>
+        <li><strong>Analytics (opcional):</strong> eventos de utilização agregados via Google Analytics for Firebase, apenas com o teu consentimento explícito.</li>
       </ul>
     ),
   },
@@ -52,7 +54,7 @@ const SECTIONS = [
       <ul className="list-disc pl-5 space-y-1">
         <li><strong>Execução de contrato:</strong> prestação do serviço Joga AI que solicitaste ao criar conta.</li>
         <li><strong>Interesse legítimo:</strong> melhorar o serviço, segurança e prevenção de abuso.</li>
-        <li><strong>Consentimento:</strong> quando aplicável (ex.: comunicações opcionais).</li>
+        <li><strong>Consentimento:</strong> analytics anónimos (Google Analytics for Firebase) e comunicações opcionais — só com o teu «Aceitar» no banner da app.</li>
         <li><strong>Obrigação legal:</strong> conservação de registos de pagamento e faturação, quando exigido por lei.</li>
       </ul>
     ),
@@ -151,13 +153,28 @@ const SECTIONS = [
     ),
   },
   {
-    title: "10. Cookies e armazenamento local",
+    title: "10. Cookies, analytics e notificações push",
     body: (
-      <p>
-        A aplicação usa armazenamento local do browser (localStorage) para preferências e cache
-        offline de partidas no teu dispositivo, e cookies técnicos necessários à sessão de
-        autenticação. Não usamos cookies de publicidade de terceiros.
-      </p>
+      <>
+        <p>
+          A aplicação usa armazenamento local do browser (localStorage) para preferências, consentimento
+          de analytics (<code className="text-emerald-300/80">joga-ai-consent-v1</code>), cache offline
+          de partidas no teu dispositivo, e cookies técnicos necessários à sessão de autenticação.
+          Não usamos cookies de publicidade de terceiros.
+        </p>
+        <p className="mt-2">
+          <strong>Analytics:</strong> quando aceitas no banner, utilizamos Google Analytics for Firebase
+          (GA4) para medir utilização agregada e melhorar o Joga AI. Base legal: consentimento. Se
+          recusares, nunca inicializamos analytics. Para retirar o consentimento depois, limpa os dados
+          do site no browser (definições do site → limpar dados de jogaai.pt, incluindo localStorage).
+        </p>
+        <p className="mt-2">
+          <strong>Notificações push:</strong> se activares avisos, guardamos o token do dispositivo em{" "}
+          <code className="text-emerald-300/80">users/&#123;uid&#125;/fcmTokens</code> para enviar
+          avisos de peladas, pagamentos e cancelamentos. Podes desactivar nas definições do browser ou
+          ao sair da conta (removemos o token).
+        </p>
+      </>
     ),
   },
   {

@@ -16,6 +16,7 @@ import {
   type AppNotification,
 } from "@/lib/notificationsRepository";
 import { toast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import {
   Dialog,
   DialogContent,
@@ -125,6 +126,7 @@ export function NotificationsBell({
 
   async function handleMarkRead(notif: AppNotification) {
     if (!userId || notif.read) return;
+    trackEvent("notification_opened", { notifId: notif.id });
     await markNotificationRead(userId, notif.id);
     setNotifications((current) =>
       current.map((n) => (n.id === notif.id ? { ...n, read: true } : n)),
@@ -314,6 +316,7 @@ export function NotificationsBell({
                         href={notif.link}
                         className="inline-block mt-3 text-xs font-bold text-emerald-400"
                         onClick={() => {
+                          trackEvent("notification_opened", { notifId: notif.id });
                           void handleMarkRead(notif);
                           setOpen(false);
                         }}

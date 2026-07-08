@@ -1,9 +1,34 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import fs from "node:fs";
+import type { Plugin } from "vite";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { VitePWA } from "vite-plugin-pwa";
+
+function firebaseMessagingSwPlugin(): Plugin {
+  return {
+    name: "firebase-messaging-sw",
+    configResolved(config) {
+      const env = loadEnv(config.mode, config.root, "VITE_");
+      const firebaseConfig = {
+        apiKey: env.VITE_FIREBASE_API_KEY ?? "",
+        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN ?? "",
+        projectId: env.VITE_FIREBASE_PROJECT_ID ?? "",
+        storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET ?? "",
+        messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? "",
+        appId: env.VITE_FIREBASE_APP_ID ?? "",
+      };
+      const sw = `/* Firebase Cloud Messaging — background (gerado no build) */
+importScripts('https://www.gstatic.com/firebasejs/11.4.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.4.0/firebase-messaging-compat.js');
+firebase.initializeApp(${JSON.stringify(firebaseConfig)});
+firebase.messaging();`;
+      fs.writeFileSync(path.resolve(config.root, "public/firebase-messaging-sw.js"), sw);
+    },
+  };
+}
 
 const port = Number(process.env.PORT ?? "5173");
 
@@ -19,6 +44,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    firebaseMessagingSwPlugin(),
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",

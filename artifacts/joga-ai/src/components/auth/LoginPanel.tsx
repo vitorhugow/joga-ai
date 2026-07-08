@@ -2,6 +2,9 @@ import { useState, type FormEvent } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { waitForAccountLinked } from "@/lib/auth";
+import { trackEvent } from "@/lib/analytics";
+import { getAuth } from "firebase/auth";
+import app from "@/lib/firebase";
 import { JogaButton, JogaCard } from "@/components/joga";
 
 function GoogleIcon() {
@@ -73,6 +76,12 @@ export function LoginPanel({ onSuccess, compact = false, bare = false, initialMo
     try {
       await signInWithGoogle();
       await waitForAccountLinked();
+      const user = getAuth(app).currentUser;
+      if (user && user.metadata.creationTime === user.metadata.lastSignInTime) {
+        trackEvent("sign_up");
+      } else {
+        trackEvent("login");
+      }
       onSuccess?.();
     } catch (err) {
       setError(mapAuthError(err));
@@ -99,8 +108,10 @@ export function LoginPanel({ onSuccess, compact = false, bare = false, initialMo
     try {
       if (mode === "register") {
         await registerWithEmail(email.trim(), password, name.trim() || undefined);
+        trackEvent("sign_up");
       } else {
         await loginWithEmail(email.trim(), password);
+        trackEvent("login");
       }
       await waitForAccountLinked();
       onSuccess?.();

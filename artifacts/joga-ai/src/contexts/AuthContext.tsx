@@ -12,6 +12,7 @@ import {
   isAccountLinked,
   signInAnonymousSession,
 } from "@/lib/auth";
+import { removePushToken } from "@/lib/pushNotifications";
 import { markProfileAsLinked, migrateLocalProfileIfNeeded } from "@/lib/userRepository";
 import { syncProfileEmail } from "@/lib/adminRepository";
 import { processPendingRatings } from "@/lib/ratingsRelease";
@@ -147,6 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await resetPassword(email);
     },
     logout: async () => {
+      const uid = auth.currentUser?.uid;
+      if (uid) await removePushToken(uid);
       await logout();
     },
   };

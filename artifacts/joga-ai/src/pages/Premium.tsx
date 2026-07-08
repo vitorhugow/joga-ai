@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { trackEvent } from "@/lib/analytics";
 import { monthlyEquivalentFromAnnual, PRICING } from "@/lib/entitlements";
 import type { EntitlementPlan } from "@/lib/entitlements";
 import { ProCheckoutSuccessDialog } from "@/components/ProCheckoutSuccessDialog";
@@ -187,6 +188,7 @@ export default function Premium() {
     if (status === "sucesso") {
       const plan: EntitlementPlan =
         planParam === "organizer_pro" ? "organizer_pro" : "player_pro";
+      trackEvent("pro_checkout_success", { plan, interval: "month" });
       onCheckoutSuccess(plan);
     }
     if (status === "cancelado") {

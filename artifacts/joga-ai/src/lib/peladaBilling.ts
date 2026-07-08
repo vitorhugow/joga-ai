@@ -6,6 +6,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import app, { isFirebaseConfigured } from "./firebase";
 import { toast } from "@/hooks/use-toast";
 import { callableErrorMessage } from "./callableError";
+import { trackEvent } from "./analytics";
 import { openStripeUrl } from "./billing";
 
 type ConnectIntent = "onboard" | "manage";
@@ -52,6 +53,7 @@ async function openConnectLink(options: {
     if (!result.data?.url) throw new Error("sem URL");
 
     if (options.toastOnOpen !== false && intent === "onboard") {
+      trackEvent("connect_onboarding_started");
       toast({
         title: "Ligar Caixa",
         description:
@@ -121,6 +123,7 @@ export async function payPelada(matchId: string): Promise<PayPeladaResult> {
     );
     const balanceResult = await balanceFn({ matchId });
     if (balanceResult.data?.paid) {
+      trackEvent("payment_started", { matchId, method: "balance" });
       toast({
         title: "Pago com saldo ✓",
         description: "Presença confirmada nesta pelada.",
@@ -146,6 +149,7 @@ export async function payPelada(matchId: string): Promise<PayPeladaResult> {
     >(getFunctions(app, "europe-west1"), "createPeladaCheckout");
     const result = await fn({ matchId, origin: window.location.origin });
     if (!result.data?.url) throw new Error("sem URL");
+    trackEvent("payment_started", { matchId, method: "card" });
     openStripeUrl(result.data.url);
     return "stripe";
   } catch (err: unknown) {

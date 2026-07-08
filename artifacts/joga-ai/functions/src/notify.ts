@@ -4,6 +4,7 @@
  */
 
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 
 export type NotifyPriority = "popup" | "center";
 export type NotifyType = "match" | "community" | "system";
@@ -16,6 +17,66 @@ export type NotifyPayload = {
   link?: string;
   priority?: NotifyPriority;
 };
+
+const PUSH_PREFIXES = ["pay-", "game-", "vote-", "newmatch-"];
+
+function shouldSendPush(payload: NotifyPayload): boolean {
+  if (payload.priority === "popup") return true;
+  return PUSH_PREFIXES.some((prefix) => payload.id.startsWith(prefix));
+}
+
+async function sendPushToUser(uid: string, payload: NotifyPayload): Promise<void> {
+  if (!shouldSendPush(payload)) return;
+
+  try {
+    const db = getFirestore();
+    const tokensSnap = await db.collection(`users/${uid}/fcmTokens`).get();
+    if (tokensSnap.empty) return;
+
+    const tokens = tokensSnap.docs.map((d) => d.id).filter(Boolean);
+    const messaging = getMessaging();
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title: payload.title.slice(0, 80),
+        body: payload.body.slice(0, 240),
+      },
+      data: {
+        notifId: payload.id,
+        ...(payload.link ? { link: payload.link } : {}),
+      },
+      webpush: payload.link
+        ? {
+            fcmOptions: { link: payload.link.startsWith("http") ? payload.link : `https://jogaai.pt${payload.link}` },
+          }
+        : undefined,
+    });
+
+    const invalid: string[] = [];
+    response.responses.forEach((result, index) => {
+      if (result.success) return;
+      const code = result.error?.code ?? "";
+      if (
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token"
+      ) {
+        invalid.push(tokens[index]);
+      } else {
+        console.warn(`[notify] push falhou ${uid}:`, code, result.error?.message);
+      }
+    });
+
+    if (invalid.length > 0) {
+      const batch = db.batch();
+      for (const token of invalid) {
+        batch.delete(db.doc(`users/${uid}/fcmTokens/${token}`));
+      }
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn(`[notify] push FCM ${uid}:`, err);
+  }
+}
 
 export function formatEuroCents(cents: number): string {
   return `${(cents / 100).toFixed(2).replace(".", ",")}€`;
@@ -59,6 +120,7 @@ export async function notifyUser(uid: string, payload: NotifyPayload): Promise<v
     },
     { merge: true },
   );
+  await sendPushToUser(uid, payload);
 }
 
 export async function notifyUsers(uids: string[], payload: NotifyPayload): Promise<void> {

@@ -28,6 +28,9 @@ import { exportPlayerCardPng, shareOrDownloadPng } from "@/lib/cardExportUtils";
 import { badgesFromIds } from "@/lib/badgeCatalog";
 import { useAppAdmin } from "@/hooks/useAppAdmin";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
+import { DeleteAccountSection } from "@/components/DeleteAccountSection";
+import { ReportBlockActions } from "@/components/ReportBlockActions";
+import { loadBlockedIds } from "@/lib/blockRepository";
 
 /* ─── Pitch SVG texture ─── */
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -202,6 +205,7 @@ export default function Perfil() {
   const [activeTab, setActiveTab] = useState<"atributos" | "estatisticas">("atributos");
   const [isCardExpanded, setIsCardExpanded] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
+  const [targetBlocked, setTargetBlocked] = useState(false);
   const [matchHistory, setMatchHistory] = useState<UserMatchHistoryEntry[]>([]);
   const cardExportRef = useRef<HTMLDivElement>(null);
 
@@ -210,6 +214,14 @@ export default function Perfil() {
     loadMyCommunities(userId).then(setMyCommunities);
     loadUserMatchHistory(userId).then(setMatchHistory);
   }, [userId, isViewingOther]);
+
+  useEffect(() => {
+    if (!isViewingOther || !viewUserId || !userId) {
+      setTargetBlocked(false);
+      return;
+    }
+    void loadBlockedIds(userId).then((ids) => setTargetBlocked(ids.has(viewUserId)));
+  }, [isViewingOther, viewUserId, userId]);
 
   const [skinOverride, setSkinOverride] = useState<string | null>(null);
   const player = profileToPlayerCard(activeProfile);
@@ -431,6 +443,15 @@ export default function Perfil() {
             <h1 className="font-display font-black text-xl tracking-tight text-white" data-testid="header-title">
               {isViewingOther ? `Perfil de ${player.name.split(" ")[0]}` : "O Meu Perfil"}
             </h1>
+            {isViewingOther && viewUserId ? (
+              <ReportBlockActions
+                targetType="user"
+                targetId={viewUserId}
+                targetLabel={player.name}
+                isBlocked={targetBlocked}
+                onBlockChange={setTargetBlocked}
+              />
+            ) : null}
             {!isViewingOther && (
             <div className="flex items-center gap-2 flex-wrap justify-end">
               <JogaButton
@@ -809,6 +830,8 @@ export default function Perfil() {
           </JogaButton>
         </Link>
         )}
+
+        {!isViewingOther && isLinked && <DeleteAccountSection />}
 
       </div>
 

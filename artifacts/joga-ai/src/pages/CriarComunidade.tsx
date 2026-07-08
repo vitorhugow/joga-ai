@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { trackEvent } from "@/lib/analytics";
 
 const GAME_TYPES = [
   { value: "fut7", label: "Fut 7" },
@@ -47,6 +48,7 @@ export default function CriarComunidade() {
         adminId: userId,
         adminDisplayName: profile.displayName || "Organizador",
       });
+      trackEvent("community_created", { gameType });
       toast({ title: "Comunidade criada!", description: "Já podes convidar a malta." });
       setLocation("/comunidades");
     } catch {

@@ -116,3 +116,45 @@ export async function syncProfileEmail(uid: string, email: string): Promise<void
 }
 
 export type { UserProfile };
+
+export type AdminReport = {
+  id: string;
+  reporterId: string;
+  targetType: "user" | "community";
+  targetId: string;
+  reason: string;
+  details: string;
+  status: string;
+  createdAt?: string;
+};
+
+export async function adminLoadOpenReports(): Promise<AdminReport[]> {
+  if (!isFirebaseConfigured()) return [];
+  const snap = await getDocs(
+    query(collection(db, "reports"), where("status", "==", "open"), fsLimit(50)),
+  );
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      reporterId: String(data.reporterId ?? ""),
+      targetType: data.targetType === "community" ? "community" : "user",
+      targetId: String(data.targetId ?? ""),
+      reason: String(data.reason ?? ""),
+      details: String(data.details ?? ""),
+      status: String(data.status ?? "open"),
+      createdAt: data.createdAt?.toDate?.()?.toISOString(),
+    };
+  });
+}
+
+export async function adminUpdateReportStatus(
+  reportId: string,
+  status: "resolved" | "dismissed",
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+  await updateDoc(doc(db, "reports", reportId), {
+    status,
+    updatedAt: serverTimestamp(),
+  });
+}

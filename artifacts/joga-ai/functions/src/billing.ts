@@ -24,18 +24,12 @@ import {
   notifyPromotedFromWaitlist,
   notifyUser,
 } from "./notify";
+import { callableBase, REGION } from "./callableOptions";
+import { assertRateLimit } from "./rateLimit";
+import { stripeSecretKey, createStripeClient } from "./stripeClient";
 
-const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 
-/** Versão pinada pelo stripe@17 (ver LatestApiVersion em node_modules/stripe/types) — NÃO atualizar o package stripe para v18+ sem rever applySubscription (current_period_end migrou para subscription items na API 2025+). */
-const STRIPE_API_VERSION = "2025-02-24.acacia" as const;
-
-function createStripeClient(secretKey: string): Stripe {
-  return new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
-}
-
-const REGION = "europe-west1";
 const ALLOWED_ORIGINS = new Set([
   "https://jogaai.pt",
   "https://www.jogaai.pt",
@@ -142,10 +136,11 @@ function throwStripeConnectError(err: unknown): never {
 }
 
 export const createCheckoutSession = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão para assinar o PRO.");
+    await assertRateLimit(uid, "createCheckoutSession", 10, 60);
 
     const plan = request.data?.plan as Plan;
     const interval = (request.data?.interval as Interval) ?? "month";
@@ -195,10 +190,11 @@ export const createCheckoutSession = onCall(
 );
 
 export const createPortalSession = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    await assertRateLimit(uid, "createPortalSession", 10, 60);
 
     const customerId = (await getFirestore().doc(`users/${uid}`).get()).data()
       ?.stripeCustomerId;
@@ -571,10 +567,11 @@ async function syncOrganizerAccountPrefill(
 
 /** Onboarding ou gestão Stripe Connect Express do organizador */
 export const createConnectOnboarding = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    await assertRateLimit(uid, "createConnectOnboarding", 10, 60);
 
     const intent = request.data?.intent === "manage" ? "manage" : "onboard";
     const returnPath = safeReturnPath(request.data?.returnPath);
@@ -641,10 +638,11 @@ export const createConnectOnboarding = onCall(
 
 /** Checkout de UMA pelada: preço → organizador; taxa → plataforma */
 export const createPeladaCheckout = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    await assertRateLimit(uid, "createPeladaCheckout", 10, 60);
     const matchId = String(request.data?.matchId ?? "");
     if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
 
@@ -1187,10 +1185,11 @@ export const releasePeladaPaymentsOnMatchLive = releasePeladaPaymentsOnMatchComp
 
 /** Paga pelada com saldo — valor retido até a pelada ser concluída */
 export const payPeladaWithBalance = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    await assertRateLimit(uid, "payPeladaWithBalance", 5, 60);
     const matchId = String(request.data?.matchId ?? "");
     if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
 
@@ -1253,10 +1252,11 @@ export const payPeladaWithBalance = onCall(
 
 /** Sai da pelada e credita o preço ao saldo — reverte a transferência do organizador */
 export const leavePeladaWithBalanceCredit = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    await assertRateLimit(uid, "leavePeladaWithBalanceCredit", 5, 60);
     const matchId = String(request.data?.matchId ?? "");
     if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
 
@@ -1456,6 +1456,7 @@ async function cancelPeladaWithBalanceCreditsHandler(
 ): Promise<{ credited: number; refunded: number }> {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+  await assertRateLimit(uid, "cancelPeladaWithBalanceCredits", 3, 60);
   const matchId = String(request.data?.matchId ?? "");
   if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
 
@@ -1576,12 +1577,12 @@ async function cancelPeladaWithBalanceCreditsHandler(
 }
 
 export const cancelPeladaWithBalanceCredits = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   cancelPeladaWithBalanceCreditsHandler,
 );
 
 /** @deprecated use cancelPeladaWithBalanceCredits */
 export const cancelPeladaWithRefunds = onCall(
-  { region: REGION, secrets: [stripeSecretKey] },
+  { ...callableBase({ secrets: [stripeSecretKey] }) },
   cancelPeladaWithBalanceCreditsHandler,
 );

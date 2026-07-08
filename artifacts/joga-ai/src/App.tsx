@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGateProvider } from "@/contexts/AuthGateContext";
 import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
 import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
+import { AppServices } from "@/components/AppServices";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
 import { Suspense } from "react";
 import NotFound from "@/pages/not-found";
@@ -106,8 +107,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <AuthGateProvider>
-            <ProfileSetupGate />
-            <MatchVoteReminderModal />
+            <AppServices />
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Router />
             </WouterRouter>

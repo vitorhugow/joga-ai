@@ -18,6 +18,8 @@ import { ProfileEditDialog } from "@/components/profile/ProfileEditDialog";
 import { hasOrganizerWhatsapp } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { triggerPushSoftPrompt } from "@/components/PushPermissionPrompt";
+import { trackEvent } from "@/lib/analytics";
 import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -318,6 +320,11 @@ export default function CriarPartida() {
           toast({ title: `${created} peladas criadas 🔁`, description: "Uma por semana, mesmas definições." });
         }
       }
+      trackEvent("match_created", {
+        communityId: matchCommunityId ?? "",
+        paymentsEnabled: onlinePayments,
+      });
+      triggerPushSoftPrompt();
       setLocation(`/partida/${matchId}/pre-jogo`);
     } catch (err) {
       console.error(err);

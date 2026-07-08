@@ -13,6 +13,7 @@ import app, { isFirebaseConfigured } from "./firebase";
 import { toast } from "@/hooks/use-toast";
 import type { EntitlementPlan } from "./entitlements";
 import { callableErrorMessage } from "./callableError";
+import { trackEvent } from "./analytics";
 
 export type BillingInterval = "month" | "year";
 
@@ -45,6 +46,7 @@ export async function startCheckout(
   }
 
   try {
+    trackEvent("pro_checkout_started", { plan, interval });
     const functions = getFunctions(app, "europe-west1");
     const createSession = httpsCallable<
       { plan: EntitlementPlan; interval: BillingInterval; origin: string; communityId?: string },

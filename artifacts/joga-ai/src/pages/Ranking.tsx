@@ -5,6 +5,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { calculateOverall } from "@/lib/cardUtils";
 import { loadGlobalRanking, profileToPlayerCard, type PublicPlayerProfile } from "@/lib/userRepository";
 import { useUserId } from "@/contexts/AuthContext";
+import { loadBlockedIds, filterBlocked } from "@/lib/blockRepository";
 import { JogaChip, JogaPage } from "@/components/joga";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { imageDisplaySrc } from "@/lib/imageUtils";
@@ -52,6 +53,15 @@ export default function Ranking() {
   const [category, setCategory] = useState<Category>("overall");
   const [players, setPlayers] = useState<PublicPlayerProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!userId) {
+      setBlockedIds(new Set());
+      return;
+    }
+    void loadBlockedIds(userId).then(setBlockedIds);
+  }, [userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,11 +100,11 @@ export default function Ranking() {
   }, [userId, profile.profileComplete]);
 
   const ranked = useMemo(() => {
-    return [...players]
+    return filterBlocked(players, blockedIds)
       .sort((a, b) => categoryValue(b, category) - categoryValue(a, category))
       .slice(0, 50)
       .map((entry, index) => ({ ...entry, rank: index + 1 }));
-  }, [players, category]);
+  }, [players, category, blockedIds]);
 
   const cat = categories.find((c) => c.key === category)!;
 

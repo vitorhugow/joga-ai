@@ -21,3 +21,4 @@ export {
   onJoinRequestCreatedNotifyAdmin,
   onCommunityMemberRemovedNotify,
 } from "./communityNotifications";
+export { deleteMyAccount } from "./account";

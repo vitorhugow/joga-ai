@@ -10,6 +10,7 @@ import {
   subscribeToNotifications,
   type AppNotification,
 } from "@/lib/notificationsRepository";
+import { markPopupNotificationShown } from "@/lib/pushNotifications";
 import { loadMatchFromFirestore } from "@/lib/matchRepository";
 
 type PopupKind = "vote" | "pay" | "generic";
@@ -62,6 +63,7 @@ export function MatchVoteReminderModal() {
       if (pending.length === 0) return;
 
       pending.forEach((n) => shownRef.current.add(n.id));
+      pending.forEach((n) => markPopupNotificationShown(n.id));
 
       void Promise.all(
         pending.map(async (n) => {

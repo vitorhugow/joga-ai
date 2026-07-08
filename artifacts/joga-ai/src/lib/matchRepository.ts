@@ -91,7 +91,6 @@ export type MatchDetails = {
   organizerId?: string;
   communityId?: string;
   status?: string;
-  accessMode?: import("./matchAccess").MatchAccessMode;
 };
 
 function readMatchDetailsMap(): Record<string, MatchDetails> {

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Crown, Search, Shield, UserX } from "lucide-react";
+import { ArrowLeft, Crown, Flag, Search, Shield, UserX } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAppAdmin } from "@/hooks/useAppAdmin";
@@ -13,7 +13,10 @@ import {
   adminLoadUser,
   adminRevokePro,
   adminUnlockSkin,
+  adminLoadOpenReports,
+  adminUpdateReportStatus,
   type AdminUserRow,
+  type AdminReport,
 } from "@/lib/adminRepository";
 import { toast } from "@/hooks/use-toast";
 
@@ -48,6 +51,32 @@ export default function Admin() {
   const [proUntil, setProUntil] = useState(defaultProUntil);
   const [busy, setBusy] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [reports, setReports] = useState<AdminReport[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    setReportsLoading(true);
+    void adminLoadOpenReports()
+      .then(setReports)
+      .finally(() => setReportsLoading(false));
+  }, [isAdmin]);
+
+  async function handleReportAction(reportId: string, status: "resolved" | "dismissed") {
+    setBusy(true);
+    try {
+      await adminUpdateReportStatus(reportId, status);
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+      toast({
+        title: status === "resolved" ? "Denúncia resolvida" : "Denúncia dispensada",
+      });
+    } catch (err) {
+      console.warn("[Admin] report:", err);
+      toast({ title: "Erro ao actualizar denúncia", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function runSearch() {
     setBusy(true);
@@ -317,6 +346,60 @@ export default function Admin() {
         {searched && results.length === 0 && !busy && (
           <p className="text-center text-white/35 text-sm">Nenhum utilizador encontrado.</p>
         )}
+
+        <div
+          className="rounded-2xl p-4 space-y-3"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Flag className="w-4 h-4 text-amber-400" />
+            <h2 className="font-display font-black text-white text-lg">Denúncias</h2>
+          </div>
+          {reportsLoading ? (
+            <p className="text-white/40 text-sm">A carregar…</p>
+          ) : reports.length === 0 ? (
+            <p className="text-white/40 text-sm">Sem denúncias abertas.</p>
+          ) : (
+            <div className="space-y-3">
+              {reports.map((report) => (
+                <div
+                  key={report.id}
+                  className="rounded-xl p-3 space-y-2"
+                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                >
+                  <p className="text-white text-sm font-bold">
+                    {report.targetType === "community" ? "Comunidade" : "Jogador"} · {report.reason}
+                  </p>
+                  <p className="text-white/40 text-xs font-mono break-all">
+                    alvo: {report.targetId} · de: {report.reporterId}
+                  </p>
+                  {report.details ? (
+                    <p className="text-white/55 text-xs leading-relaxed">{report.details}</p>
+                  ) : null}
+                  <div className="flex gap-2 pt-1">
+                    <JogaButton
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void handleReportAction(report.id, "resolved")}
+                    >
+                      Resolvido
+                    </JogaButton>
+                    <JogaButton
+                      variant="ghost"
+                      size="sm"
+                      className="text-white/50"
+                      disabled={busy}
+                      onClick={() => void handleReportAction(report.id, "dismissed")}
+                    >
+                      Dispensar
+                    </JogaButton>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </JogaPage>
   );

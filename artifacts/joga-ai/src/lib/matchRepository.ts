@@ -775,19 +775,20 @@ export async function updateMatchStatus(
  */
 export async function loadMatchFromFirestore(
   matchId: string,
+  options?: { preferRemote?: boolean },
 ): Promise<SavedPostMatch | null> {
   const local = loadPostMatch(matchId);
   const pre = loadPreMatch(matchId);
 
   if (!isFirebaseConfigured()) {
-    return mergeMatchSources(matchId, null, local, pre);
+    return mergeMatchSources(matchId, null, local, pre, options);
   }
 
   try {
     const ref = doc(db, "matches", matchId);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      return mergeMatchSources(matchId, null, local, pre);
+      return mergeMatchSources(matchId, null, local, pre, options);
     }
 
     const remote = snap.data() as Omit<SavedPostMatch, "version">;
@@ -816,12 +817,12 @@ export async function loadMatchFromFirestore(
       proBadge: remote.proBadge ?? false,
     };
 
-    const merged = mergeMatchSources(matchId, remoteMatch, local, pre);
+    const merged = mergeMatchSources(matchId, remoteMatch, local, pre, options);
     if (merged) savePostMatch(merged);
     return merged;
   } catch (err) {
     console.warn("[matchRepository] loadMatchFromFirestore:", err);
-    return mergeMatchSources(matchId, null, local, pre);
+    return mergeMatchSources(matchId, null, local, pre, options);
   }
 }
 
@@ -844,6 +845,7 @@ function mergeMatchSources(
   remote: SavedPostMatch | null,
   local: SavedPostMatch | null,
   pre: SavedPreMatch | null,
+  options?: { preferRemote?: boolean },
 ): SavedPostMatch | null {
   const remoteValid = remote?.matchId === matchId ? remote : null;
   const localValid = local?.matchId === matchId ? local : null;
@@ -872,12 +874,15 @@ function mergeMatchSources(
     },
   ];
 
-  const bestRoster = [...rosterCandidates].sort((a, b) => {
-    if (b.players.length !== a.players.length) {
-      return b.players.length - a.players.length;
-    }
-    return b.savedAt - a.savedAt;
-  })[0];
+  const bestRoster =
+    options?.preferRemote && remoteValid
+      ? rosterCandidates[0]
+      : [...rosterCandidates].sort((a, b) => {
+          if (b.players.length !== a.players.length) {
+            return b.players.length - a.players.length;
+          }
+          return b.savedAt - a.savedAt;
+        })[0];
 
   const base = remoteValid ?? localValid;
   const now = new Date().toISOString();

@@ -429,7 +429,7 @@ export default function PreJogo() {
         title: "Pagamento recebido ✓",
         description: "A tua presença foi confirmada automaticamente.",
       });
-      void loadMatchFromFirestore(matchId).then((merged) => {
+      void loadMatchFromFirestore(matchId, { preferRemote: true }).then((merged) => {
         if (merged?.paidUserIds) setPaidUserIds(merged.paidUserIds);
         if (merged?.players && userId) {
           const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
@@ -847,6 +847,7 @@ export default function PreJogo() {
     }
 
     setRsvpBusy(true);
+    skipNextPersist.current = true;
     try {
       let creditedCents = 0;
       if (myPlayer?.paid && paymentsOn) {
@@ -856,12 +857,32 @@ export default function PreJogo() {
       } else {
         await leaveMatch(matchId, userId);
       }
-      const merged = await loadMatchFromFirestore(matchId);
+      const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
       if (merged?.waitlist) setWaitlist(merged.waitlist);
-      if (merged?.players) {
+      setPaidUserIds(merged?.paidUserIds ?? []);
+      if (merged) {
         const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setPlayerTeams(merged.playerTeams ?? {});
+        setAssignments(merged.assignments ?? {});
+        savePreMatch(
+          {
+            version: 1,
+            matchId,
+            gameMode: merged.gameMode,
+            teamCount: merged.teamCount,
+            teamNames: merged.teamNames,
+            players: merged.players,
+            playerTeams: merged.playerTeams,
+            assignments: merged.assignments ?? {},
+            savedAt: merged.savedAt,
+          },
+          matchId,
+        );
+      } else {
+        setPlayers((current) =>
+          current.filter((p) => p.userId !== userId && p.id !== userId),
+        );
       }
       toast({
         title: "Saíste da pelada",
@@ -878,6 +899,9 @@ export default function PreJogo() {
       });
     } finally {
       setRsvpBusy(false);
+      window.setTimeout(() => {
+        skipNextPersist.current = false;
+      }, 800);
     }
   }
 
@@ -1202,15 +1226,15 @@ export default function PreJogo() {
     setPlayers((current) =>
       current.map((player) => {
         if (player.id !== playerId) return player;
-        const paid = !player.paid;
         const paidOnline = player.paidVia === "app" || player.paidVia === "balance";
-        return {
-          ...player,
-          paid,
-          paidVia: paid && paidOnline ? player.paidVia : undefined,
-        };
+        if (paidOnline) return player;
+        return { ...player, paid: !player.paid, paidVia: undefined };
       }),
     );
+  }
+
+  function playerPaidOnline(player: Player): boolean {
+    return player.paidVia === "app" || player.paidVia === "balance";
   }
 
   const selectedSlot = pickerSlot;
@@ -1309,7 +1333,7 @@ export default function PreJogo() {
         const result = await payPelada(matchId);
         if (result === "balance") {
           void refresh();
-          const merged = await loadMatchFromFirestore(matchId);
+          const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
           if (merged?.waitlist) setWaitlist(merged.waitlist);
           if (merged?.players && userId) {
             const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
@@ -1930,16 +1954,28 @@ export default function PreJogo() {
 
                   {canManageMatch && (
                     <div className="mt-3">
-                      <button
-                        onClick={() => togglePaid(player.id)}
-                        className="w-full rounded-xl py-2 text-[11px] font-black cursor-pointer"
-                        style={player.paid
-                          ? { background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.24)" }
-                          : { background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.24)" }
-                        }
-                      >
-                        {player.paid ? "Pago" : "Pendente"}
-                      </button>
+                      {playerPaidOnline(player) && player.paid ? (
+                        <p
+                          className="w-full rounded-xl py-2 text-center text-[11px] font-black text-amber-300/90"
+                          style={{
+                            background: "rgba(251,191,36,0.12)",
+                            border: "1px solid rgba(251,191,36,0.28)",
+                          }}
+                        >
+                          💳 Pago online — não editável
+                        </p>
+                      ) : (
+                        <button
+                          onClick={() => togglePaid(player.id)}
+                          className="w-full rounded-xl py-2 text-[11px] font-black cursor-pointer"
+                          style={player.paid
+                            ? { background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.24)" }
+                            : { background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.24)" }
+                          }
+                        >
+                          {player.paid ? "Pago" : "Pendente"}
+                        </button>
+                      )}
 
                       {/* Botão de remover afastado do toggle de pagamento para evitar toques acidentais */}
                       <div className="flex justify-end mt-2">

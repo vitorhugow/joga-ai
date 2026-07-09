@@ -19,10 +19,12 @@ import {
   onSnapshot,
   serverTimestamp,
   arrayUnion,
+  arrayRemove,
   type DocumentData,
   type PartialWithFieldValue,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { resolveControllerIds } from "./liveControllerUtils";
 import {
   savePostMatch,
   loadPostMatch,
@@ -169,36 +171,37 @@ export async function startMatchLive(
   if (!isFirebaseConfigured()) return;
 
   const ref = doc(db, "matches", matchId);
-  await updateDoc(ref, {
-    liveControllerId: organizerId || existing.organizerId,
-    savedAt: serverTimestamp(),
-  });
+  const controllerId = organizerId || existing.organizerId;
+  if (controllerId) {
+    await updateDoc(ref, {
+      liveControllerIds: arrayUnion(controllerId),
+      savedAt: serverTimestamp(),
+    });
+  }
 }
 
-/** Passa o controlo ao vivo a outro jogador (só organizador). */
-export async function transferLiveControl(
-  matchId: string,
-  newControllerId: string,
-): Promise<void> {
-  if (!isFirebaseConfigured()) return;
+/** Adiciona um controlador ao vivo (só organizador, via rules). */
+export async function addLiveController(matchId: string, controllerId: string): Promise<void> {
+  if (!isFirebaseConfigured() || !controllerId) return;
 
   const ref = doc(db, "matches", matchId);
   await updateDoc(ref, {
-    liveControllerId: newControllerId,
+    liveControllerIds: arrayUnion(controllerId),
     savedAt: serverTimestamp(),
   });
 }
 
-/** Organizador retoma o controlo ao vivo. */
-export async function reclaimLiveControl(
+/** Remove um controlador ao vivo — nunca o organizador. */
+export async function removeLiveController(
   matchId: string,
+  controllerId: string,
   organizerId: string,
 ): Promise<void> {
-  if (!isFirebaseConfigured()) return;
+  if (!isFirebaseConfigured() || !controllerId || controllerId === organizerId) return;
 
   const ref = doc(db, "matches", matchId);
   await updateDoc(ref, {
-    liveControllerId: organizerId,
+    liveControllerIds: arrayRemove(controllerId),
     savedAt: serverTimestamp(),
   });
 }
@@ -693,7 +696,7 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     title: data.title ?? null,
     communityId: data.communityId ?? null,
     organizerId: data.organizerId ?? null,
-    liveControllerId: data.organizerId ?? null,
+    liveControllerIds: data.organizerId ? [data.organizerId] : [],
     savedAt: serverTimestamp(),
   };
 }
@@ -984,7 +987,7 @@ function mergeMatchSources(
 
 export type MatchDocMeta = {
   match: SavedPostMatch | null;
-  liveControllerId: string | null;
+  liveControllerIds: string[];
   organizerId: string | null;
 };
 
@@ -1032,7 +1035,7 @@ export function subscribeToMatch(
     ref,
     (snap) => {
       if (!snap.exists()) {
-        callback({ match: null, liveControllerId: null, organizerId: null });
+        callback({ match: null, liveControllerIds: [], organizerId: null });
         return;
       }
 
@@ -1044,10 +1047,13 @@ export function subscribeToMatch(
       if (merged) savePostMatch(merged);
 
       const organizerId = (data.organizerId as string | undefined) ?? null;
-      const liveControllerId =
-        (data.liveControllerId as string | undefined) ?? organizerId;
+      const liveControllerIds = resolveControllerIds({
+        liveControllerIds: data.liveControllerIds as string[] | undefined,
+        liveControllerId: data.liveControllerId as string | undefined,
+        organizerId,
+      });
 
-      callback({ match: merged, liveControllerId, organizerId });
+      callback({ match: merged, liveControllerIds, organizerId });
     },
     (err) => console.warn("[matchRepository] subscribeToMatch:", err),
   );

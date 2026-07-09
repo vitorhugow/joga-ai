@@ -14,9 +14,9 @@ import {
   saveMatchToFirestoreOrThrow,
   getMatchReturnPath,
   subscribeToMatch,
-  transferLiveControl,
-  reclaimLiveControl,
 } from "@/lib/matchRepository";
+import { findRecentDuplicateEvent, isUserLiveController } from "@/lib/liveControllerUtils";
+import { ManageLiveControllersDialog } from "@/components/ManageLiveControllersDialog";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { getCurrentUserId } from "@/lib/auth";
 import {
@@ -121,15 +121,18 @@ export default function AoVivo() {
   const [setupState, setSetupState] = useState<MatchSetupState | null>(null);
   const [hasSetupDoc, setHasSetupDoc] = useState(false);
   const [organizerId, setOrganizerId] = useState<string | null | undefined>(undefined);
-  const [liveControllerId, setLiveControllerId] = useState<string | null>(null);
+  const [liveControllerIds, setLiveControllerIds] = useState<string[]>([]);
+  const [controllersDialogOpen, setControllersDialogOpen] = useState(false);
   const isOrganizer = Boolean(userId && organizerId && userId === organizerId);
-  const isLiveController = Boolean(userId && liveControllerId && userId === liveControllerId);
+  const isLiveController = isUserLiveController(userId, {
+    liveControllerIds,
+    organizerId,
+  });
   const [remoteMatch, setRemoteMatch] = useState<SavedPostMatch | null>(null);
   const [liveState, setLiveState] = useState<ParsedMatchLiveState | null>(() => loadCachedLive(matchId));
   const [clockTick, setClockTick] = useState(0);
   const [showResumo, setShowResumo] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [transferOpen, setTransferOpen] = useState(false);
   const lastEventClickRef = useRef(0);
 
   const live = liveState;
@@ -187,7 +190,7 @@ export default function AoVivo() {
 
     const unsubMatch = subscribeToMatch(matchId, (meta) => {
       setOrganizerId(meta.organizerId);
-      setLiveControllerId(meta.liveControllerId);
+      setLiveControllerIds(meta.liveControllerIds);
       setRemoteMatch(meta.match);
       if (meta.organizerId && userId === meta.organizerId) {
         void ensureSetupMigrated(matchId, meta.organizerId, meta.match?.players ?? []);
@@ -297,6 +300,19 @@ export default function AoVivo() {
     if (Date.now() - lastEventClickRef.current < 400 && type === "golo") return;
     lastEventClickRef.current = Date.now();
 
+    const duplicate = findRecentDuplicateEvent(events, {
+      miniGameId,
+      type,
+      playerId: selectedPlayer.id,
+      team,
+    });
+    if (duplicate) {
+      toast({
+        title: type === "golo" ? "Este golo já foi registado." : "Este evento já foi registado.",
+      });
+      return;
+    }
+
     const eventId = `${miniGameId}-${type}-${selectedPlayer.id}-${clickBucket}`;
 
     void addLiveEventAction(matchId, {
@@ -307,8 +323,14 @@ export default function AoVivo() {
       team,
       time: formatTime(seconds),
       miniGameId,
-    }).then((added) => {
-      if (!added) return;
+    }).then((result) => {
+      if (result === "duplicate") {
+        toast({
+          title: type === "golo" ? "Este golo já foi registado." : "Este evento já foi registado.",
+        });
+        return;
+      }
+      if (result !== "added") return;
       addLiveEventSubcollection(matchId, {
         type,
         playerId: selectedPlayer.id,
@@ -320,9 +342,13 @@ export default function AoVivo() {
     });
   }
 
-  function removeEvent(_eventId: string) {
+  function undoLastEventAction() {
     if (!isLiveController) return;
     void undoLastEvent(matchId);
+  }
+
+  function removeEvent(_eventId: string) {
+    undoLastEventAction();
   }
 
   async function reiniciarCronometro() {
@@ -384,25 +410,6 @@ export default function AoVivo() {
       players.find((player) => playerTeams[player.id] === nextAwayTeam);
 
     setSelectedPlayerId(firstPlayer?.id || null);
-  }
-
-  async function handleTransferControl(targetUserId: string) {
-    if (!isOrganizer || !targetUserId) return;
-    const player = players.find((p) => p.userId === targetUserId || p.id === targetUserId);
-    const ok = await confirm({
-      description: `Passar o comando ao vivo a ${player?.name ?? "este jogador"}?`,
-      confirmLabel: "Passar comando",
-    });
-    if (!ok) return;
-    await transferLiveControl(matchId, targetUserId);
-    setTransferOpen(false);
-    toast({ title: "Comando transferido." });
-  }
-
-  async function handleReclaimControl() {
-    if (!isOrganizer || !organizerId) return;
-    await reclaimLiveControl(matchId, organizerId);
-    toast({ title: "Retomaste o comando ao vivo." });
   }
 
   async function terminarPelada() {
@@ -671,16 +678,8 @@ export default function AoVivo() {
             </section>
           )}
 
-          {isOrganizer && !isLiveController && (
-            <JogaButton variant="ghost" size="md" className="w-full" onClick={() => void handleReclaimControl()}>
-              Retomar comando
-            </JogaButton>
-          )}
-
           <p className="text-white/30 text-xs text-center">
-            {isOrganizer && !isLiveController
-              ? "Passaste o comando — podes retomá-lo a qualquer momento."
-              : "Só o controlador ao vivo pode alterar esta partida."}
+            A acompanhar em tempo real — só os controladores podem alterar o jogo.
           </p>
         </div>
       </JogaPage>
@@ -762,6 +761,11 @@ export default function AoVivo() {
         <div className="text-center">
           <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.22em]">Ao Vivo</p>
           <p className="text-white font-display font-black text-base">{teamNames[activeHomeTeam]} x {teamNames[activeAwayTeam]}</p>
+          {liveControllerIds.length > 0 && (
+            <p className="text-white/30 text-[10px] font-semibold mt-0.5">
+              {liveControllerIds.length} controlador{liveControllerIds.length === 1 ? "" : "es"}
+            </p>
+          )}
         </div>
 
         <div className="w-12" />
@@ -885,8 +889,8 @@ export default function AoVivo() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[200px]">
               {isOrganizer && (
-                <DropdownMenuItem onClick={() => setTransferOpen(true)} className="gap-2 cursor-pointer">
-                  Passar comando
+                <DropdownMenuItem onClick={() => setControllersDialogOpen(true)} className="gap-2 cursor-pointer">
+                  Gerir controladores
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={reiniciarCronometro} className="gap-2 cursor-pointer">
@@ -1043,6 +1047,18 @@ export default function AoVivo() {
               </button>
             ))}
           </div>
+
+          {events.length > 0 && (
+            <JogaButton
+              variant="ghost"
+              size="md"
+              className="w-full mt-3 gap-2 border border-red-400/25 text-red-200"
+              onClick={undoLastEventAction}
+            >
+              <RotateCcw className="w-4 h-4" />
+              Desfazer último evento
+            </JogaButton>
+          )}
         </section>
 
         <section className="rounded-3xl p-4" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -1075,30 +1091,15 @@ export default function AoVivo() {
         </section>
       </div>
 
-      {transferOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-8">
-          <div className="w-full max-w-md rounded-3xl p-4" style={{ background: "#0d1117", border: "1px solid rgba(255,255,255,0.12)" }}>
-            <p className="text-white font-black mb-3">Passar comando a…</p>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {players
-                .filter((p) => p.id !== organizerId)
-                .map((player) => (
-                  <button
-                    key={player.id}
-                    type="button"
-                    className="w-full text-left rounded-2xl px-3 py-2.5 text-white font-semibold"
-                    style={{ background: "rgba(255,255,255,0.06)" }}
-                    onClick={() => void handleTransferControl(player.userId ?? player.id)}
-                  >
-                    {player.name}
-                  </button>
-                ))}
-            </div>
-            <JogaButton variant="ghost" size="md" className="w-full mt-3" onClick={() => setTransferOpen(false)}>
-              Cancelar
-            </JogaButton>
-          </div>
-        </div>
+      {organizerId && (
+        <ManageLiveControllersDialog
+          open={controllersDialogOpen}
+          onOpenChange={setControllersDialogOpen}
+          matchId={matchId}
+          organizerId={organizerId}
+          liveControllerIds={liveControllerIds}
+          players={players}
+        />
       )}
 
       {ConfirmDialog}

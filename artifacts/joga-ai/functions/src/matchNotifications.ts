@@ -179,6 +179,33 @@ export const onMatchRatingsReleasedNotify = onDocumentUpdated(
   },
 );
 
+/** Controlador ao vivo alterado → notifica o novo controlador. */
+export const onLiveControllerChangedNotify = onDocumentUpdated(
+  { document: "matches/{matchId}", region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    const prevController = String(before.liveControllerId ?? before.organizerId ?? "");
+    const nextController = String(after.liveControllerId ?? after.organizerId ?? "");
+    if (!nextController || prevController === nextController) return;
+    if (nextController === String(after.organizerId ?? "")) return;
+
+    const matchId = event.params.matchId;
+    const title = String(after.title ?? "pelada");
+
+    await notifyUser(nextController, {
+      id: `livectl-${matchId}-${nextController}`,
+      type: "match",
+      priority: "center",
+      title: "Comando ao vivo",
+      body: `És o controlador de «${title}» — podes iniciar o jogo.`,
+      link: `/partida/${matchId}/ao-vivo`,
+    });
+  },
+);
+
 /** Pelada alterada (data/hora/local) → popup aos jogadores com conta. */
 export const onMatchUpdatedNotifyChanges = onDocumentUpdated(
   { document: "matches/{matchId}", region: REGION },

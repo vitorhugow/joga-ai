@@ -37,6 +37,7 @@ export {
   onMatchEnteringVoteNotify,
   onMatchPromotedFromWaitlistNotify,
   onMatchRatingsReleasedNotify,
+  onLiveControllerChangedNotify,
 } from "./matchNotifications";
 export {
   onJoinRequestCreatedNotifyAdmin,

@@ -26,6 +26,30 @@ service cloud.firestore {
         && matchDoc(matchId).organizerId == request.auth.uid;
     }
 
+    function liveControllerId(matchId) {
+      let data = matchDoc(matchId);
+      return data.liveControllerId != null
+        ? data.liveControllerId
+        : data.organizerId;
+    }
+
+    function isLiveController(matchId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/matches/$(matchId))
+        && liveControllerId(matchId) == request.auth.uid;
+    }
+
+    function isMatchOrganizerOrLiveController(matchId) {
+      return isMatchOrganizer(matchId) || isLiveController(matchId);
+    }
+
+    function isLiveControllerIdUpdate(matchId) {
+      return isMatchOrganizer(matchId)
+        && request.resource.data.organizerId == resource.data.organizerId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['liveControllerId', 'savedAt']);
+    }
+
     // Administradores da app (painel /admin — PRO manual sem Stripe)
     function isAppAdmin() {
       return isSignedIn() && (
@@ -301,6 +325,7 @@ service cloud.firestore {
         || isMatchLiveEndUpdate(matchId)
         || isMatchVotingFinalizeUpdate(matchId)
         || isMatchVoteMarkUpdate()
+        || isLiveControllerIdUpdate(matchId)
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;
@@ -321,14 +346,19 @@ service cloud.firestore {
         allow delete: if isMatchOrganizer(matchId);
       }
 
+      match /state/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isMatchOrganizerOrLiveController(matchId);
+      }
+
       match /events/{eventId} {
         allow read: if isSignedIn();
-        allow write: if isMatchOrganizer(matchId);
+        allow write: if isMatchOrganizerOrLiveController(matchId);
       }
 
       match /miniGames/{gameId} {
         allow read: if isSignedIn();
-        allow write: if isMatchOrganizer(matchId);
+        allow write: if isMatchOrganizerOrLiveController(matchId);
       }
 
       match /summary/{docId} {

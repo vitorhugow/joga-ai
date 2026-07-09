@@ -42,6 +42,11 @@ import type { WaitlistEntry } from "./matchRsvpRepository";
 import { checkAndUnlockBadges } from "./badgeService";
 import type { MatchAccessMode } from "./matchAccess";
 import { openToExternalFromAccessMode } from "./matchAccess";
+import {
+  ensureLiveDoc,
+  setupFromRoster,
+  updateSetup,
+} from "./matchStateRepository";
 
 export type CreateMatchInput = {
   title: string;
@@ -156,6 +161,44 @@ export async function startMatchLive(
     status: "ao_vivo",
     organizerId: organizerId || existing.organizerId,
     savedAt: now,
+  });
+
+  await ensureLiveDoc(matchId);
+
+  if (!isFirebaseConfigured()) return;
+
+  const ref = doc(db, "matches", matchId);
+  await updateDoc(ref, {
+    liveControllerId: organizerId || existing.organizerId,
+    savedAt: serverTimestamp(),
+  });
+}
+
+/** Passa o controlo ao vivo a outro jogador (só organizador). */
+export async function transferLiveControl(
+  matchId: string,
+  newControllerId: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+
+  const ref = doc(db, "matches", matchId);
+  await updateDoc(ref, {
+    liveControllerId: newControllerId,
+    savedAt: serverTimestamp(),
+  });
+}
+
+/** Organizador retoma o controlo ao vivo. */
+export async function reclaimLiveControl(
+  matchId: string,
+  organizerId: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+
+  const ref = doc(db, "matches", matchId);
+  await updateDoc(ref, {
+    liveControllerId: organizerId,
+    savedAt: serverTimestamp(),
   });
 }
 
@@ -590,6 +633,8 @@ export async function saveMatchRoster(
   };
 
   await saveMatchToFirestore(matchId, updated);
+
+  await updateSetup(matchId, setupFromRoster(roster));
 }
 
 /**
@@ -632,6 +677,7 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     title: data.title ?? null,
     communityId: data.communityId ?? null,
     organizerId: data.organizerId ?? null,
+    liveControllerId: data.organizerId ?? null,
     savedAt: serverTimestamp(),
   };
 }
@@ -918,6 +964,77 @@ function mergeMatchSources(
     openToExternal: remoteValid?.openToExternal ?? localValid?.openToExternal,
     accessMode: remoteValid?.accessMode ?? localValid?.accessMode,
   };
+}
+
+export type MatchDocMeta = {
+  match: SavedPostMatch | null;
+  liveControllerId: string | null;
+  organizerId: string | null;
+};
+
+function mapFirestoreMatchDoc(matchId: string, data: DocumentData): SavedPostMatch {
+  const remote = data as Omit<SavedPostMatch, "version">;
+  return {
+    version: 1,
+    matchId: remote.matchId ?? matchId,
+    status: remote.status ?? "configurando",
+    createdAt: remote.createdAt ?? new Date().toISOString(),
+    expiresAt: remote.expiresAt ?? new Date().toISOString(),
+    savedAt: remote.savedAt ?? new Date().toISOString(),
+    gameMode: remote.gameMode ?? "fut5",
+    teamCount: remote.teamCount ?? 2,
+    teamNames: remote.teamNames ?? { A: "Equipa A", B: "Equipa B", C: "Equipa C", D: "Equipa D" },
+    players: remote.players ?? [],
+    playerTeams: remote.playerTeams ?? {},
+    assignments: remote.assignments ?? {},
+    currentPlayerId: remote.currentPlayerId ?? "",
+    miniGames: remote.miniGames ?? [],
+    votedUserIds: remote.votedUserIds,
+    waitlist: remote.waitlist ?? [],
+    paidUserIds: remote.paidUserIds ?? [],
+    title: remote.title,
+    communityId: remote.communityId,
+    organizerId: remote.organizerId,
+    paymentsEnabled: remote.paymentsEnabled ?? false,
+    proBadge: remote.proBadge ?? false,
+    openToExternal: remote.openToExternal,
+    accessMode: remote.accessMode,
+  };
+}
+
+/** Plantel e metadados da partida em tempo real. */
+export function subscribeToMatch(
+  matchId: string,
+  callback: (meta: MatchDocMeta) => void,
+): () => void {
+  if (!isFirebaseConfigured() || !matchId || matchId === "default") {
+    return () => {};
+  }
+
+  const ref = doc(db, "matches", matchId);
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        callback({ match: null, liveControllerId: null, organizerId: null });
+        return;
+      }
+
+      const data = snap.data();
+      const remoteMatch = mapFirestoreMatchDoc(matchId, data);
+      const local = loadPostMatch(matchId);
+      const pre = loadPreMatch(matchId);
+      const merged = mergeMatchSources(matchId, remoteMatch, local, pre, { preferRemote: true });
+      if (merged) savePostMatch(merged);
+
+      const organizerId = (data.organizerId as string | undefined) ?? null;
+      const liveControllerId =
+        (data.liveControllerId as string | undefined) ?? organizerId;
+
+      callback({ match: merged, liveControllerId, organizerId });
+    },
+    (err) => console.warn("[matchRepository] subscribeToMatch:", err),
+  );
 }
 
 /**

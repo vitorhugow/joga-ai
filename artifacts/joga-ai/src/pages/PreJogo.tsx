@@ -16,9 +16,15 @@ import {
   MessageCircle,
   UserPlus,
 } from "lucide-react";
-import { loadMatchFromFirestore, saveMatchRoster, cancelMatch, startMatchLive } from "@/lib/matchRepository";
+import { loadMatchFromFirestore, saveMatchRoster, cancelMatch, startMatchLive, subscribeToMatch } from "@/lib/matchRepository";
 import { loadPreMatch } from "@/lib/preMatchStorage";
 import { savePreMatch } from "@/lib/preMatchStorage";
+import {
+  cacheSetupFromSnapshot,
+  ensureSetupMigrated,
+  subscribeToSetup,
+  type MatchSetupState,
+} from "@/lib/matchStateRepository";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
@@ -390,6 +396,7 @@ export default function PreJogo() {
   useDocumentTitle(matchDetails?.title || "Pré-jogo");
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
+  const [setupSyncState, setSetupSyncState] = useState<"idle" | "saving" | "saved">("idle");
   const [organizerId, setOrganizerId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -462,13 +469,23 @@ export default function PreJogo() {
 
   useEffect(() => {
     let cancelled = false;
+    skipNextPersist.current = true;
+    setRosterHydrated(false);
 
-    async function hydrateRoster() {
-      skipNextPersist.current = true;
-      setRosterHydrated(false);
+    const pre = loadPreMatch(matchId);
+    if (pre && !cancelled) {
+      const mapped = pre.players.map((p) => toPreJogoPlayer(p, userId));
+      setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
+      setGameMode(pre.gameMode ?? "fut5");
+      setTeamCount(pre.teamCount ?? 2);
+      setPlayerTeams(pre.playerTeams ?? {});
+      setAssignments(pre.assignments ?? {});
+    }
 
-      const merged = await loadMatchFromFirestore(matchId);
-      const pre = loadPreMatch(matchId);
+    const unsubMatch = subscribeToMatch(matchId, (meta) => {
+      if (cancelled) return;
+
+      const merged = meta.match;
       if (merged?.organizerId) setOrganizerId(merged.organizerId);
       else if (merged?.players?.length) {
         const paidOrganizer = merged.players.find((p) => p.paid && p.userId);
@@ -477,6 +494,7 @@ export default function PreJogo() {
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
       setMatchStatus(merged?.status ?? "configurando");
       setPaidUserIds(merged?.paidUserIds ?? []);
+
       const details = loadMatchDetails(matchId);
       const payments =
         merged?.paymentsEnabled ?? details?.paymentsEnabled ?? false;
@@ -489,33 +507,44 @@ export default function PreJogo() {
         });
       }
 
-      if (cancelled) return;
-
-      const source = merged ?? pre;
-
-      if (source) {
-        const mapped = source.players.map((p) => toPreJogoPlayer(p, userId));
+      if (merged) {
+        const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
-        setWaitlist(merged?.waitlist ?? []);
-        setGameMode(source.gameMode ?? "fut5");
-        setTeamCount(source.teamCount ?? 2);
-        setPlayerTeams(source.playerTeams ?? {});
-        setAssignments(
-          merged?.assignments ??
-            pre?.assignments ??
-            {},
-        );
+        setWaitlist(merged.waitlist ?? []);
+      }
+
+      if (meta.organizerId && userId === meta.organizerId) {
+        void ensureSetupMigrated(matchId, meta.organizerId, merged?.players ?? []);
       }
 
       setRosterHydrated(true);
       window.setTimeout(() => {
         skipNextPersist.current = false;
       }, 0);
-    }
+    });
 
-    void hydrateRoster();
+    const unsubSetup = subscribeToSetup(matchId, (setup: MatchSetupState | null) => {
+      if (cancelled || !setup) return;
+
+      skipNextPersist.current = true;
+      setGameMode(setup.gameMode);
+      setTeamCount(setup.teamCount);
+      setPlayerTeams(setup.playerTeams);
+      setAssignments(setup.assignments);
+      setSetupSyncState("saved");
+
+      const mergedPlayers = loadPreMatch(matchId)?.players ?? [];
+      cacheSetupFromSnapshot(matchId, setup, mergedPlayers);
+
+      window.setTimeout(() => {
+        skipNextPersist.current = false;
+      }, 0);
+    });
+
     return () => {
       cancelled = true;
+      unsubMatch();
+      unsubSetup();
     };
   }, [matchId, userId]);
 
@@ -567,6 +596,7 @@ export default function PreJogo() {
   const persistRoster = useCallback(() => {
     if (!matchId || skipNextPersist.current) return;
 
+    setSetupSyncState("saving");
     void saveMatchRoster(matchId, {
       gameMode,
       teamCount,
@@ -575,7 +605,7 @@ export default function PreJogo() {
       playerTeams,
       assignments,
       waitlist,
-    });
+    }).then(() => setSetupSyncState("saved"));
   }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist]);
 
   useEffect(() => {
@@ -583,7 +613,7 @@ export default function PreJogo() {
 
     const timeout = window.setTimeout(() => {
       persistRoster();
-    }, 400);
+    }, 500);
 
     return () => window.clearTimeout(timeout);
   }, [rosterHydrated, persistRoster]);
@@ -1422,7 +1452,15 @@ export default function PreJogo() {
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>
 
-          <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.22em]">Pré-Jogo Editável</p>
+          <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.22em]">
+            Pré-Jogo Editável
+            {canManageMatch && setupSyncState === "saving" && (
+              <span className="block text-[9px] text-amber-300/80 normal-case tracking-normal mt-0.5">a guardar…</span>
+            )}
+            {canManageMatch && setupSyncState === "saved" && (
+              <span className="block text-[9px] text-emerald-300/70 normal-case tracking-normal mt-0.5">guardado</span>
+            )}
+          </p>
           {canManageMatch ? (
             <button
               onClick={() => void shareMatchUrl()}

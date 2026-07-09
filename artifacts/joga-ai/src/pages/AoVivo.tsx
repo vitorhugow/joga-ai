@@ -13,17 +13,35 @@ import {
   loadMatchFromFirestore,
   saveMatchToFirestoreOrThrow,
   getMatchReturnPath,
+  subscribeToMatch,
+  transferLiveControl,
+  reclaimLiveControl,
 } from "@/lib/matchRepository";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { getCurrentUserId } from "@/lib/auth";
 import {
-  addLiveEvent,
-  finalizeMiniGame,
+  addLiveEvent as addLiveEventSubcollection,
   saveMiniGame,
-  saveLiveMatchState,
-  subscribeLiveMatchState,
-  type LiveMatchState,
+  finalizeMiniGame,
 } from "@/lib/liveMatchRepository";
+import {
+  subscribeToSetup,
+  subscribeToLive,
+  computeElapsedSeconds,
+  formatLiveTime,
+  loadCachedLive,
+  toggleClock,
+  resetClock,
+  setNextTeams,
+  confirmNextMiniGame,
+  endMiniGame,
+  markLiveEnded,
+  addLiveEventAction,
+  undoLastEvent,
+  ensureSetupMigrated,
+  type ParsedMatchLiveState,
+  type MatchSetupState,
+} from "@/lib/matchStateRepository";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
@@ -86,9 +104,7 @@ const eventTypes: { key: EventType; label: string; emoji: string }[] = [
 ];
 
 function formatTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
-  const secs = (seconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${secs}`;
+  return formatLiveTime(seconds);
 }
 
 export default function AoVivo() {
@@ -100,149 +116,102 @@ export default function AoVivo() {
   const matchId = resolveMatchId({ routeMatchId: params?.id });
   const returnTo = getMatchReturnPath();
   const { ready: phaseReady } = useMatchPhaseGuard(matchId, "ao-vivo");
-  const [preMatch, setPreMatch] = useState<SavedPreMatch | null>(null);
+
+  const [setupState, setSetupState] = useState<MatchSetupState | null>(null);
+  const [hasSetupDoc, setHasSetupDoc] = useState(false);
   const [organizerId, setOrganizerId] = useState<string | null | undefined>(undefined);
+  const [liveControllerId, setLiveControllerId] = useState<string | null>(null);
   const isOrganizer = Boolean(userId && organizerId && userId === organizerId);
+  const isLiveController = Boolean(userId && liveControllerId && userId === liveControllerId);
   const [remoteMatch, setRemoteMatch] = useState<SavedPostMatch | null>(null);
-  const [remoteLive, setRemoteLive] = useState<LiveMatchState | null>(null);
-  const [viewerTick, setViewerTick] = useState(0);
-
-  const [seconds, setSeconds] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-
-  const [activeHomeTeam, setActiveHomeTeam] = useState<TeamKey>("A");
-  const [activeAwayTeam, setActiveAwayTeam] = useState<TeamKey>("B");
-  const [nextHomeTeam, setNextHomeTeam] = useState<TeamKey>("A");
-  const [nextAwayTeam, setNextAwayTeam] = useState<TeamKey>("B");
-  const [showNextGamePicker, setShowNextGamePicker] = useState(true);
-
-  const [scoreA, setScoreA] = useState(0);
-  const [scoreB, setScoreB] = useState(0);
-
-  const [events, setEvents] = useState<LiveEvent[]>([]);
-  const [miniGames, setMiniGames] = useState<MiniGame[]>([]);
+  const [liveState, setLiveState] = useState<ParsedMatchLiveState | null>(() => loadCachedLive(matchId));
+  const [clockTick, setClockTick] = useState(0);
   const [showResumo, setShowResumo] = useState(false);
-
-  const [playerTeams, setPlayerTeams] = useState<Record<string, TeamKey>>({});
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const lastEventClickRef = useRef(0);
+
+  const live = liveState;
+  const scoreA = live?.scoreA ?? 0;
+  const scoreB = live?.scoreB ?? 0;
+  const isRunning = live?.status === "running";
+  const seconds = useMemo(() => computeElapsedSeconds(live), [live, clockTick]);
+  const activeHomeTeam = ((live?.activeHomeTeam as TeamKey) || "A") as TeamKey;
+  const activeAwayTeam = ((live?.activeAwayTeam as TeamKey) || "B") as TeamKey;
+  const nextHomeTeam = ((live?.nextHomeTeam as TeamKey) || "A") as TeamKey;
+  const nextAwayTeam = ((live?.nextAwayTeam as TeamKey) || "B") as TeamKey;
+  const showNextGamePicker = live?.showNextGamePicker ?? true;
+  const events = (live?.events ?? []) as LiveEvent[];
+  const miniGames = (live?.miniGames ?? []) as MiniGame[];
+
+  const preMatch = useMemo((): SavedPreMatch | null => {
+    const cached = loadPreMatch(matchId);
+    const players = remoteMatch?.players ?? cached?.players ?? [];
+    if (!players.length && !setupState && !cached) return null;
+
+    return {
+      version: 1,
+      matchId,
+      gameMode: setupState?.gameMode ?? remoteMatch?.gameMode ?? cached?.gameMode ?? "fut5",
+      teamCount: setupState?.teamCount ?? remoteMatch?.teamCount ?? cached?.teamCount ?? 2,
+      teamNames: setupState?.teamNames ??
+        remoteMatch?.teamNames ??
+        cached?.teamNames ?? { A: "Time A", B: "Time B", C: "Time C", D: "Time D" },
+      players,
+      playerTeams: setupState?.playerTeams ?? remoteMatch?.playerTeams ?? cached?.playerTeams ?? {},
+      assignments: setupState?.assignments ?? remoteMatch?.assignments ?? cached?.assignments ?? {},
+      savedAt: cached?.savedAt ?? new Date().toISOString(),
+    };
+  }, [matchId, setupState, remoteMatch]);
+
+  const playerTeams = preMatch?.playerTeams ?? {};
 
   useEffect(() => {
     if (!phaseReady) return;
 
-    const data = loadPreMatch(matchId);
-    setPreMatch(data);
-
-    if (data) {
-      setPlayerTeams(data.playerTeams as Record<string, TeamKey>);
-
+    if (preMatch) {
       const first =
-        data.players.find((player) => data.playerTeams[player.id] === "A") ||
-        data.players.find((player) => data.playerTeams[player.id] === "B") ||
-        data.players[0];
-
-      setSelectedPlayerId(first?.id || null);
+        preMatch.players.find((player) => playerTeams[player.id] === "A") ||
+        preMatch.players.find((player) => playerTeams[player.id] === "B") ||
+        preMatch.players[0];
+      setSelectedPlayerId((current) => current ?? first?.id ?? null);
     }
-
-    void loadMatchFromFirestore(matchId).then((match) => {
-      setOrganizerId(match?.organizerId ?? null);
-      setRemoteMatch(match ?? null);
-    });
 
     document.body.classList.add("joga-ai-ao-vivo-page");
     return () => document.body.classList.remove("joga-ai-ao-vivo-page");
-  }, [matchId, phaseReady]);
+  }, [phaseReady, preMatch, playerTeams]);
 
-  // Qualquer pessoa que abra a partida (não só o organizador) recebe o
-  // estado ao vivo em tempo real — placar, cronómetro, equipas e eventos.
   useEffect(() => {
     if (!phaseReady) return;
-    return subscribeLiveMatchState(matchId, setRemoteLive);
-  }, [matchId, phaseReady]);
+
+    const unsubMatch = subscribeToMatch(matchId, (meta) => {
+      setOrganizerId(meta.organizerId);
+      setLiveControllerId(meta.liveControllerId);
+      setRemoteMatch(meta.match);
+      if (meta.organizerId && userId === meta.organizerId) {
+        void ensureSetupMigrated(matchId, meta.organizerId, meta.match?.players ?? []);
+      }
+    });
+
+    const unsubSetup = subscribeToSetup(matchId, (setup) => {
+      setSetupState(setup);
+      setHasSetupDoc(Boolean(setup));
+    });
+
+    const unsubLive = subscribeToLive(matchId, setLiveState);
+
+    return () => {
+      unsubMatch();
+      unsubSetup();
+      unsubLive();
+    };
+  }, [matchId, phaseReady, userId]);
 
   useEffect(() => {
-    if (!isOrganizer || !isRunning) return;
-
-    const interval = window.setInterval(() => {
-      setSeconds((value) => value + 1);
-    }, 1000);
-
+    if (live?.status !== "running") return;
+    const interval = window.setInterval(() => setClockTick((v) => v + 1), 1000);
     return () => window.clearInterval(interval);
-  }, [isOrganizer, isRunning]);
-
-  // Cronómetro do espectador: extrapolado localmente a partir do último
-  // snapshot recebido, para não depender de escritas a cada segundo.
-  useEffect(() => {
-    if (isOrganizer || !remoteLive?.isRunning) return;
-
-    const interval = window.setInterval(() => {
-      setViewerTick((value) => value + 1);
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [isOrganizer, remoteLive?.isRunning]);
-
-  const viewerSeconds = useMemo(() => {
-    if (!remoteLive) return 0;
-    if (!remoteLive.isRunning) return remoteLive.seconds ?? 0;
-    const elapsed = Math.max(0, Math.floor((Date.now() - remoteLive.syncedAtMs) / 1000));
-    return (remoteLive.seconds ?? 0) + elapsed;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remoteLive, viewerTick]);
-
-  // Espelha o estado ao vivo local no Firestore (só o organizador escreve).
-  const broadcastLiveRef = useRef<() => void>(() => {});
-  broadcastLiveRef.current = () => {
-    if (!isOrganizer || !phaseReady) return;
-    saveLiveMatchState(matchId, {
-      scoreA,
-      scoreB,
-      activeHomeTeam,
-      activeAwayTeam,
-      showNextGamePicker,
-      nextHomeTeam,
-      nextAwayTeam,
-      isRunning,
-      seconds,
-      syncedAtMs: Date.now(),
-      playerTeams,
-      events,
-      miniGames: miniGames.map((game) => ({
-        id: game.id,
-        title: game.title,
-        scoreA: game.scoreA,
-        scoreB: game.scoreB,
-        homeTeam: game.homeTeam,
-        awayTeam: game.awayTeam,
-        winner: game.winner,
-      })),
-    }).catch(console.warn);
-  };
-
-  useEffect(() => {
-    broadcastLiveRef.current();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    isOrganizer,
-    phaseReady,
-    matchId,
-    scoreA,
-    scoreB,
-    activeHomeTeam,
-    activeAwayTeam,
-    showNextGamePicker,
-    nextHomeTeam,
-    nextAwayTeam,
-    isRunning,
-    playerTeams,
-    events,
-    miniGames,
-  ]);
-
-  useEffect(() => {
-    if (!isOrganizer || !isRunning) return;
-    const interval = window.setInterval(() => broadcastLiveRef.current(), 8000);
-    return () => window.clearInterval(interval);
-  }, [isOrganizer, isRunning]);
+  }, [live?.status]);
 
   const players = preMatch?.players || [];
   const activeTeamCount = preMatch?.teamCount || 2;
@@ -307,6 +276,8 @@ export default function AoVivo() {
   const homePressureWidth = Math.max(18, Math.min(82, (homePressure / pressureTotal) * 100));
 
   function addEvent(type: EventType) {
+    if (!isLiveController) return;
+
     if (!canRegisterEvent) {
       toast({ title: "O cronómetro precisa estar a correr para marcar eventos.", variant: "destructive" });
       return;
@@ -318,48 +289,37 @@ export default function AoVivo() {
 
     if (!activeTeamsForGame.includes(team)) return;
 
-    const event: LiveEvent = {
-      id: `event-${Date.now()}`,
+    const miniGameId = live?.currentMiniGameId ?? `current-${activeHomeTeam}-vs-${activeAwayTeam}`;
+    const clickBucket = Math.floor(Date.now() / 400);
+    if (Date.now() - lastEventClickRef.current < 400 && type === "golo") return;
+    lastEventClickRef.current = Date.now();
+
+    const eventId = `${miniGameId}-${type}-${selectedPlayer.id}-${clickBucket}`;
+
+    void addLiveEventAction(matchId, {
+      eventId,
       type,
       playerId: selectedPlayer.id,
       playerName: selectedPlayer.name,
       team,
       time: formatTime(seconds),
-    };
-
-    setEvents((current) => [event, ...current]);
-
-    if (type === "golo") {
-      if (team === activeHomeTeam) setScoreA((value) => value + 1);
-      if (team === activeAwayTeam) setScoreB((value) => value + 1);
-    }
-
-    // Persiste evento no Firestore (fire-and-forget)
-    addLiveEvent(matchId, {
-      type,
-      playerId: selectedPlayer.id,
-      playerName: selectedPlayer.name,
-      team,
-      time: event.time,
-      miniGameId: `current-${activeHomeTeam}-vs-${activeAwayTeam}`,
-    }).catch(console.warn);
+      miniGameId,
+    }).then((added) => {
+      if (!added) return;
+      addLiveEventSubcollection(matchId, {
+        type,
+        playerId: selectedPlayer.id,
+        playerName: selectedPlayer.name,
+        team,
+        time: formatTime(seconds),
+        miniGameId,
+      }).catch(console.warn);
+    });
   }
 
-  function removeEvent(eventId: string) {
-    const target = events.find((event) => event.id === eventId);
-    if (!target) return;
-
-    if (target.type === "golo") {
-      if (target.team === activeHomeTeam) setScoreA((value) => Math.max(0, value - 1));
-      if (target.team === activeAwayTeam) setScoreB((value) => Math.max(0, value - 1));
-    }
-
-    setEvents((current) => current.filter((event) => event.id !== eventId));
-  }
-
-  function resetTimer() {
-    setSeconds(0);
-    setIsRunning(false);
+  function removeEvent(_eventId: string) {
+    if (!isLiveController) return;
+    void undoLastEvent(matchId);
   }
 
   async function reiniciarCronometro() {
@@ -368,16 +328,15 @@ export default function AoVivo() {
       confirmLabel: "Reiniciar",
     });
     if (!ok) return;
-    resetTimer();
+    await resetClock(matchId);
   }
 
-  function toggleTimer() {
+  async function toggleTimer() {
     if (showNextGamePicker) {
       toast({ title: "Escolhe primeiro quais equipas vão jogar este mini jogo.", variant: "destructive" });
       return;
     }
-
-    setIsRunning((value) => !value);
+    await toggleClock(matchId);
   }
 
   async function finalizarMiniJogo() {
@@ -389,61 +348,58 @@ export default function AoVivo() {
     const ok = await confirm("Finalizar apenas este mini jogo? A pelada continuará aberta.");
     if (!ok) return;
 
-    const winner = scoreA === scoreB ? "Empate" : scoreA > scoreB ? teamNames[activeHomeTeam] : teamNames[activeAwayTeam];
-    const miniGameId = `game-${Date.now()}`;
-
-    setMiniGames((current) => [
-      ...current,
-      {
-        id: miniGameId,
-        title: `${teamNames[activeHomeTeam]} ${scoreA} x ${scoreB} ${teamNames[activeAwayTeam]}`,
-        scoreA,
-        scoreB,
-        homeTeam: activeHomeTeam,
-        awayTeam: activeAwayTeam,
-        events,
-        winner,
-      },
-    ]);
-
-    // Persiste mini-game no Firestore
-    saveMiniGame(matchId, {
-      id: miniGameId,
-      title: `${teamNames[activeHomeTeam]} ${scoreA} x ${scoreB} ${teamNames[activeAwayTeam]}`,
-      homeTeam: activeHomeTeam,
-      awayTeam: activeAwayTeam,
-      scoreA,
-      scoreB,
-      winner,
-      order: Date.now(),
-    }).catch(console.warn);
-    finalizeMiniGame(matchId, miniGameId, { scoreA, scoreB, winner }).catch(console.warn);
-
-    setScoreA(0);
-    setScoreB(0);
-    setEvents([]);
-    setSeconds(0);
-    setIsRunning(false);
-    setNextHomeTeam(activeHomeTeam);
-    setNextAwayTeam(activeAwayTeam);
-    setShowNextGamePicker(true);
+    const ended = await endMiniGame(matchId, teamNames);
+    if (ended) {
+      saveMiniGame(matchId, {
+        id: ended.id,
+        title: ended.title,
+        homeTeam: ended.homeTeam,
+        awayTeam: ended.awayTeam,
+        scoreA: ended.scoreA,
+        scoreB: ended.scoreB,
+        winner: ended.winner,
+        order: Date.now(),
+      }).catch(console.warn);
+      finalizeMiniGame(matchId, ended.id, {
+        scoreA: ended.scoreA,
+        scoreB: ended.scoreB,
+        winner: ended.winner,
+      }).catch(console.warn);
+    }
   }
 
-  function confirmarProximoJogo() {
+  async function confirmarProximoJogo() {
     if (nextHomeTeam === nextAwayTeam) {
       toast({ title: "Escolhe duas equipas diferentes.", variant: "destructive" });
       return;
     }
 
-    setActiveHomeTeam(nextHomeTeam);
-    setActiveAwayTeam(nextAwayTeam);
+    await confirmNextMiniGame(matchId, nextHomeTeam, nextAwayTeam);
 
     const firstPlayer =
       players.find((player) => playerTeams[player.id] === nextHomeTeam) ||
       players.find((player) => playerTeams[player.id] === nextAwayTeam);
 
     setSelectedPlayerId(firstPlayer?.id || null);
-    setShowNextGamePicker(false);
+  }
+
+  async function handleTransferControl(targetUserId: string) {
+    if (!isOrganizer || !targetUserId) return;
+    const player = players.find((p) => p.userId === targetUserId || p.id === targetUserId);
+    const ok = await confirm({
+      description: `Passar o comando ao vivo a ${player?.name ?? "este jogador"}?`,
+      confirmLabel: "Passar comando",
+    });
+    if (!ok) return;
+    await transferLiveControl(matchId, targetUserId);
+    setTransferOpen(false);
+    toast({ title: "Comando transferido." });
+  }
+
+  async function handleReclaimControl() {
+    if (!isOrganizer || !organizerId) return;
+    await reclaimLiveControl(matchId, organizerId);
+    toast({ title: "Retomaste o comando ao vivo." });
   }
 
   async function terminarPelada() {
@@ -454,7 +410,7 @@ export default function AoVivo() {
     });
     if (!ok) return;
 
-    setIsRunning(false);
+    await markLiveEnded(matchId);
 
     const shouldSaveCurrentGame =
       !showNextGamePicker &&
@@ -519,7 +475,6 @@ export default function AoVivo() {
       window.location.href = `/partida/${matchId}/pos-jogo`;
     } catch (err) {
       console.warn("[AoVivo] terminarPelada:", err);
-      setIsRunning(false);
       toast({
         title: "Não foi possível terminar a pelada.",
         description: "Verifica a tua ligação e tenta novamente.",
@@ -549,25 +504,25 @@ export default function AoVivo() {
     );
   }
 
-  // Só o organizador controla a partida. Qualquer outro membro vê tudo em
-  // tempo real (placar, cronómetro, eventos), sem poder alterar nada.
-  if (!isOrganizer) {
+  // Modo leitura: quem não é o controlador ao vivo vê tudo em tempo real.
+  if (!isLiveController) {
     const viewPlayers = remoteMatch?.players ?? preMatch?.players ?? [];
     const viewTeamNames: Record<TeamKey, string> = {
       ...defaultTeamNames,
-      ...((remoteMatch?.teamNames || preMatch?.teamNames || {}) as Partial<Record<TeamKey, string>>),
+      ...((setupState?.teamNames || remoteMatch?.teamNames || preMatch?.teamNames || {}) as Partial<Record<TeamKey, string>>),
     };
-    const liveHomeTeam = ((remoteLive?.activeHomeTeam as TeamKey) || "A") as TeamKey;
-    const liveAwayTeam = ((remoteLive?.activeAwayTeam as TeamKey) || "B") as TeamKey;
-    const liveScoreA = remoteLive?.scoreA ?? 0;
-    const liveScoreB = remoteLive?.scoreB ?? 0;
-    const liveEvents = remoteLive?.events ?? [];
-    const liveMiniGames = remoteLive?.miniGames ?? [];
+    const liveHomeTeam = activeHomeTeam;
+    const liveAwayTeam = activeAwayTeam;
+    const liveScoreA = scoreA;
+    const liveScoreB = scoreB;
+    const liveEvents = events;
+    const liveMiniGames = miniGames;
     const liveHomeWinning = liveScoreA > liveScoreB;
     const liveAwayWinning = liveScoreB > liveScoreA;
+    const viewPlayerTeams = setupState?.playerTeams ?? remoteMatch?.playerTeams ?? preMatch?.playerTeams ?? {};
     const liveTeamsByKey = viewPlayers.reduce<Record<TeamKey, LivePlayer[]>>(
       (map, player) => {
-        const team = ((remoteLive?.playerTeams?.[player.id] as TeamKey) || "BENCH") as TeamKey;
+        const team = ((viewPlayerTeams[player.id] as TeamKey) || "BENCH") as TeamKey;
         map[team] = map[team] || [];
         map[team].push(player);
         return map;
@@ -599,7 +554,7 @@ export default function AoVivo() {
         </div>
 
         <div className="px-4 space-y-4">
-          {!remoteLive && (
+          {!live && (
             <JogaCard variant="arena" padding="lg" className="text-center">
               <p className="text-white/45 text-sm">A aguardar o organizador iniciar o jogo…</p>
             </JogaCard>
@@ -628,8 +583,8 @@ export default function AoVivo() {
               </div>
 
               <div className="px-2">
-                <p className="font-display font-black text-white text-4xl leading-none">{formatTime(viewerSeconds)}</p>
-                <p className="text-white/35 text-[11px] font-black uppercase mt-2">{remoteLive?.isRunning ? "Rodando" : "Parado"}</p>
+                <p className="font-display font-black text-white text-4xl leading-none">{formatTime(seconds)}</p>
+                <p className="text-white/35 text-[11px] font-black uppercase mt-2">{isRunning ? "Rodando" : "Parado"}</p>
               </div>
 
               <div className="flex-1 rounded-3xl py-4" style={{ background: `${teamColors[liveAwayTeam]}14`, border: `1px solid ${teamColors[liveAwayTeam]}33` }}>
@@ -644,7 +599,7 @@ export default function AoVivo() {
             </div>
           </section>
 
-          {(remoteLive?.showNextGamePicker ?? false) && (
+          {(showNextGamePicker) && (
             <JogaCard variant="arena" padding="md" className="text-center">
               <p className="text-white/55 text-sm">O organizador está a escolher o próximo mini jogo…</p>
             </JogaCard>
@@ -713,13 +668,23 @@ export default function AoVivo() {
             </section>
           )}
 
-          <p className="text-white/30 text-xs text-center">Só o organizador pode controlar esta partida.</p>
+          {isOrganizer && !isLiveController && (
+            <JogaButton variant="ghost" size="md" className="w-full" onClick={() => void handleReclaimControl()}>
+              Retomar comando
+            </JogaButton>
+          )}
+
+          <p className="text-white/30 text-xs text-center">
+            {isOrganizer && !isLiveController
+              ? "Passaste o comando — podes retomá-lo a qualquer momento."
+              : "Só o controlador ao vivo pode alterar esta partida."}
+          </p>
         </div>
       </JogaPage>
     );
   }
 
-  if (!preMatch) {
+  if (!preMatch && !hasSetupDoc && !(remoteMatch?.players?.length)) {
     return (
       <JogaPage theme="arena" padded className="py-6" bottomSpace={false} hideFooterCredit>
         <JogaCard variant="arena" padding="lg" className="text-center">
@@ -916,6 +881,11 @@ export default function AoVivo() {
               </JogaButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[200px]">
+              {isOrganizer && (
+                <DropdownMenuItem onClick={() => setTransferOpen(true)} className="gap-2 cursor-pointer">
+                  Passar comando
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={reiniciarCronometro} className="gap-2 cursor-pointer">
                 <RotateCcw className="w-4 h-4" />
                 Reiniciar cronómetro
@@ -953,14 +923,14 @@ export default function AoVivo() {
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="block text-cyan-200/80 text-[10px] font-black uppercase mb-1">Casa</span>
-                <select value={nextHomeTeam} onChange={(e) => setNextHomeTeam(e.target.value as TeamKey)} className="w-full rounded-2xl p-3 bg-black/35 text-white border border-cyan-400/35 font-black" style={{ boxShadow: "0 0 12px rgba(34,211,238,0.15)" }}>
+                <select value={nextHomeTeam} onChange={(e) => void setNextTeams(matchId, e.target.value, nextAwayTeam)} className="w-full rounded-2xl p-3 bg-black/35 text-white border border-cyan-400/35 font-black" style={{ boxShadow: "0 0 12px rgba(34,211,238,0.15)" }}>
                   {visibleTeams.map((team) => <option key={team} value={team}>{teamNames[team]}</option>)}
                 </select>
               </label>
 
               <label className="block">
                 <span className="block text-fuchsia-200/80 text-[10px] font-black uppercase mb-1">Fora</span>
-                <select value={nextAwayTeam} onChange={(e) => setNextAwayTeam(e.target.value as TeamKey)} className="w-full rounded-2xl p-3 bg-black/35 text-white border border-fuchsia-400/35 font-black" style={{ boxShadow: "0 0 12px rgba(232,121,249,0.15)" }}>
+                <select value={nextAwayTeam} onChange={(e) => void setNextTeams(matchId, nextHomeTeam, e.target.value)} className="w-full rounded-2xl p-3 bg-black/35 text-white border border-fuchsia-400/35 font-black" style={{ boxShadow: "0 0 12px rgba(232,121,249,0.15)" }}>
                   {visibleTeams.map((team) => <option key={team} value={team}>{teamNames[team]}</option>)}
                 </select>
               </label>
@@ -1101,6 +1071,33 @@ export default function AoVivo() {
           )}
         </section>
       </div>
+
+      {transferOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-8">
+          <div className="w-full max-w-md rounded-3xl p-4" style={{ background: "#0d1117", border: "1px solid rgba(255,255,255,0.12)" }}>
+            <p className="text-white font-black mb-3">Passar comando a…</p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {players
+                .filter((p) => p.id !== organizerId)
+                .map((player) => (
+                  <button
+                    key={player.id}
+                    type="button"
+                    className="w-full text-left rounded-2xl px-3 py-2.5 text-white font-semibold"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                    onClick={() => void handleTransferControl(player.userId ?? player.id)}
+                  >
+                    {player.name}
+                  </button>
+                ))}
+            </div>
+            <JogaButton variant="ghost" size="md" className="w-full mt-3" onClick={() => setTransferOpen(false)}>
+              Cancelar
+            </JogaButton>
+          </div>
+        </div>
+      )}
+
       {ConfirmDialog}
     </JogaPage>
   );

@@ -908,16 +908,14 @@ export default function PreJogo() {
     setRsvpBusy(true);
     let result: "confirmed" | "waitlist" = "confirmed";
     try {
-      const uid = userId;
       const overall = profile.profileComplete
         ? calculateOverall(profile.attributes)
         : 50;
-      result = await confirmPresence(matchId, uid, {
+      result = await confirmPresence(matchId, userId, {
         displayName,
         position: profile.position || "MEI",
         overall,
       });
-      setShowRsvpNameForm(false);
     } catch (err) {
       toast({
         title: "Não foi possível confirmar",
@@ -937,17 +935,21 @@ export default function PreJogo() {
           : "Entraste no plantel desta pelada.",
     });
 
-    if (result !== "waitlist") {
-      try {
+    try {
+      setShowRsvpNameForm(false);
+      if (result !== "waitlist") {
         trackEvent("match_joined", { matchId });
-      } catch {
-        /* analytics opcional */
-      }
-      try {
         triggerPushSoftPrompt();
-      } catch {
-        /* push opcional */
       }
+      const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
+      if (merged?.waitlist) setWaitlist(merged.waitlist);
+      if (merged?.players && userId) {
+        const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
+        setPlayers(linkPlayersInRoster(mapped, userId));
+        setPlayerTeams(merged.playerTeams ?? {});
+      }
+    } catch (err) {
+      console.warn("[PreJogo] pós-confirmação RSVP:", err);
     }
   }
 

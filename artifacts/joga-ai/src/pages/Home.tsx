@@ -154,11 +154,11 @@ export default function Home() {
 
   const ranking = rankingSets[rankingTab];
 
-    const m = match as EnrichedMatchListing;
-    if (m.voted && match.status === "aguardando_auditoria") {
+  function matchHref(match: EnrichedMatchListing) {
+    if (match.voted && match.status === "aguardando_auditoria") {
       return matchSummaryPath(match.id);
     }
-    if (m.pendingVote && match.status === "aguardando_auditoria") {
+    if (match.pendingVote && match.status === "aguardando_auditoria") {
       return matchSummaryPath(match.id);
     }
     return getMatchRoutePath(match.id, match.status);

@@ -86,9 +86,30 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/communities/$(communityId)).data;
     }
 
+    function communityAdminId(communityId) {
+      return communityDoc(communityId).adminId;
+    }
+
+    function userEntitlements(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.entitlements;
+    }
+
+    /** Fonte de verdade: entitlements do admin — não community.proActive. */
+    function isOrganizerProOnCommunity(communityId) {
+      let adminId = communityAdminId(communityId);
+      let ent = userEntitlements(adminId);
+      return (ent.organizerPro.active == true
+          && (ent.organizerPro.proCommunityId == communityId
+              || ent.proCommunityId == communityId
+              || communityId in ent.proCommunities))
+        || (ent.pro == true
+            && ent.plan == 'organizer_pro'
+            && ent.proCommunityId == communityId);
+    }
+
     function isCommunityOpenToExternal(communityId) {
       return communityDoc(communityId).openToExternal == true
-        && communityDoc(communityId).proActive == true;
+        && isOrganizerProOnCommunity(communityId);
     }
 
     function isMatchRsvpUpdate() {

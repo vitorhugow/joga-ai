@@ -20,12 +20,15 @@ import {
   collectionGroup,
   writeBatch,
   increment,
+  deleteField,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
 import { isListedInPublicBrowse, isListedInCommunityFeed } from "./matchAccess";
-import { MAX_PROFILE_PHOTO_BYTES } from "./userRepository";
+import { MAX_PROFILE_PHOTO_BYTES, loadUserProfile } from "./userRepository";
+import { isOrganizerProForCommunity } from "./entitlements";
 import { loadAllPostMatches } from "./postMatchStorage";
+import { uploadCommunityCover, deleteImageByUrl } from "./imageStorage";
 
 export class CommunityCoverTooLargeError extends Error {
   constructor() {
@@ -52,6 +55,7 @@ export type Community = {
   isMember: boolean;
   memberCount: number;
   coverImage?: string;
+  coverUrl?: string;
   adminId?: string;
   proActive?: boolean;
   openToExternal?: boolean;
@@ -164,7 +168,8 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
         gameType: data.gameType ?? "fut7",
         isPrivate: Boolean(data.isPrivate),
         memberCount: Number(data.memberCount ?? 1),
-        coverImage: data.coverImage,
+        coverImage: data.coverImage ? String(data.coverImage) : undefined,
+        coverUrl: data.coverUrl ? String(data.coverUrl) : undefined,
         adminId: data.adminId,
         proActive: data.proActive === true,
         openToExternal: data.openToExternal === true,
@@ -206,6 +211,7 @@ function mapCommunityDoc(
     isPrivate: Boolean(data.isPrivate),
     memberCount: Number(data.memberCount ?? 1),
     coverImage: data.coverImage ? String(data.coverImage) : undefined,
+    coverUrl: data.coverUrl ? String(data.coverUrl) : undefined,
     adminId: data.adminId ? String(data.adminId) : undefined,
     isMember,
     proActive: data.proActive === true,
@@ -617,19 +623,44 @@ export async function joinCommunityPublic(
 export async function updateCommunity(
   communityId: string,
   input: UpdateCommunityInput,
+  options?: { actorUserId?: string },
 ): Promise<void> {
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
+  const communityRef = doc(db, "communities", communityId);
   const patch: Record<string, unknown> = {};
   if (input.name !== undefined) patch.name = input.name.trim();
   if (input.city !== undefined) patch.city = input.city.trim();
   if (input.gameType !== undefined) patch.gameType = input.gameType;
   if (input.isPrivate !== undefined) patch.isPrivate = input.isPrivate;
+
   if (input.coverImage !== undefined) {
-    patch.coverImage = validateCoverImageForFirestore(input.coverImage);
+    const cover = input.coverImage;
+    if (!cover) {
+      const snap = await getDoc(communityRef);
+      const data = snap.data();
+      void deleteImageByUrl(typeof data?.coverUrl === "string" ? data.coverUrl : undefined);
+      patch.coverUrl = deleteField();
+      patch.coverImage = deleteField();
+    } else if (cover.startsWith("data:") && options?.actorUserId) {
+      const snap = await getDoc(communityRef);
+      const data = snap.data();
+      const prevStorageUrl =
+        typeof data?.coverUrl === "string"
+          ? data.coverUrl
+          : typeof data?.coverImage === "string" && data.coverImage.startsWith("http")
+            ? data.coverImage
+            : undefined;
+      const url = await uploadCommunityCover(communityId, cover);
+      patch.coverUrl = url;
+      patch.coverImage = deleteField();
+      void deleteImageByUrl(prevStorageUrl);
+    } else {
+      patch.coverImage = validateCoverImageForFirestore(cover);
+    }
   }
 
-  await updateDoc(doc(db, "communities", communityId), patch);
+  await updateDoc(communityRef, patch);
 }
 
 export async function leaveCommunity(communityId: string, userId: string): Promise<void> {
@@ -671,30 +702,39 @@ export async function deleteCommunity(communityId: string): Promise<void> {
   await batch.commit();
 }
 
-function isOpenPublicMatch(m: MatchListing, communityFlags?: Map<string, { openToExternal: boolean; proActive: boolean }>): boolean {
+/** Clube PRO activo — fonte de verdade: entitlements do admin (não community.proActive). */
+export async function isCommunityOrganizerPro(communityId: string): Promise<boolean> {
+  const community = await loadCommunity(communityId);
+  if (!community?.adminId) return false;
+  const admin = await loadUserProfile(community.adminId);
+  return isOrganizerProForCommunity(admin?.entitlements, communityId);
+}
+
+function isOpenPublicMatch(m: MatchListing, communityFlags?: Map<string, { openToExternal: boolean; organizerPro: boolean }>): boolean {
   const flags = m.communityId ? communityFlags?.get(m.communityId) : undefined;
   return isListedInPublicBrowse({
     accessMode: m.accessMode,
     openToExternal: m.openToExternal,
     communityId: m.communityId,
     communityOpenToExternal: flags?.openToExternal,
-    communityProActive: flags?.proActive,
+    communityProActive: flags?.organizerPro,
     status: m.status,
   });
 }
 
 async function loadCommunityFlagsForMatches(
   matches: MatchListing[],
-): Promise<Map<string, { openToExternal: boolean; proActive: boolean }>> {
-  const map = new Map<string, { openToExternal: boolean; proActive: boolean }>();
+): Promise<Map<string, { openToExternal: boolean; organizerPro: boolean }>> {
+  const map = new Map<string, { openToExternal: boolean; organizerPro: boolean }>();
   const ids = [...new Set(matches.map((m) => m.communityId).filter(Boolean))] as string[];
   await Promise.all(
     ids.map(async (id) => {
       const c = await loadCommunity(id);
       if (c) {
+        const organizerPro = await isCommunityOrganizerPro(id);
         map.set(id, {
           openToExternal: c.openToExternal === true,
-          proActive: c.proActive === true,
+          organizerPro,
         });
       }
     }),

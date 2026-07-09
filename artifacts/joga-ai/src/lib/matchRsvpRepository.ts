@@ -12,7 +12,7 @@ import {
 import { loadPreMatch } from "./preMatchStorage";
 import { loadPostMatch, savePostMatch, type SavedPostMatch } from "./postMatchStorage";
 import type { LivePlayer } from "./preMatchStorage";
-import { loadCommunityMembers, loadCommunity } from "./communityRepository";
+import { loadCommunityMembers, loadCommunity, isCommunityOrganizerPro } from "./communityRepository";
 import { loadMatchDetails } from "./matchRepository";
 import { resolveAccessMode } from "./matchAccess";
 import { addNotification } from "./notificationsRepository";
@@ -55,7 +55,7 @@ async function assertMatchAccess(
     throw new Error("Esta pelada é só para membros da comunidade.");
   }
   const community = await loadCommunity(communityId);
-  if (community?.openToExternal && community.proActive) return;
+  if (community?.openToExternal && (await isCommunityOrganizerPro(communityId))) return;
 
   const members = await loadCommunityMembers(communityId);
   if (!members.some((m) => m.userId === userId)) {

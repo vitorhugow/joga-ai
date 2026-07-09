@@ -117,7 +117,7 @@ export default function ClubeDashboard() {
     );
   }
 
-  if (!orgPro && community.proActive !== true) {
+  if (!orgPro) {
     return (
       <JogaPage theme="dark" className="py-8 space-y-4">
         <Link href={`/comunidades/${id}`} className="inline-flex items-center gap-2 text-white/60 text-sm">

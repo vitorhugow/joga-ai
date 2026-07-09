@@ -5,8 +5,10 @@ import { Link, useRoute } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
 import { ReferralCard } from "@/components/ReferralCard";
 import { SkinPicker } from "@/components/SkinPicker";
-import { hasPlayerPro, isOrganizerPro, isProActive } from "@/lib/entitlements";
+import { hasPlayerPro, isOrganizerPro, hasPlayerProOnly } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
+import { trackEvent } from "@/lib/analytics";
 import { ProfileSubscriptionCard } from "@/components/ProfileSubscriptionCard";
 import { ProfileCaixaCard } from "@/components/ProfileCaixaCard";
 import { ProfilePeladaSaldoCard } from "@/components/ProfilePeladaSaldoCard";
@@ -251,6 +253,7 @@ export default function Perfil() {
   }, [isViewingOther, viewUserId, userId]);
 
   const [skinOverride, setSkinOverride] = useState<string | null>(null);
+  const [cardDownloadProOpen, setCardDownloadProOpen] = useState(false);
   const player = profileToPlayerCard(activeProfile);
   const playerPro = hasPlayerPro(activeProfile?.entitlements);
 
@@ -317,12 +320,14 @@ export default function Perfil() {
       return;
     }
 
+    if (!hasPlayerProOnly(activeProfile?.entitlements)) {
+      trackEvent("pro_gate_clicked", { feature: "card_download" });
+      setCardDownloadProOpen(true);
+      return;
+    }
+
     try {
-      // HD (4x) é PRO; plano gratuito exporta em qualidade normal (1.5x)
-      const proExport = isProActive(activeProfile?.entitlements);
-      const blob = await exportPlayerCardPng(exportNode, {
-        pixelRatio: proExport ? 4 : 1.5,
-      });
+      const blob = await exportPlayerCardPng(exportNode, { pixelRatio: 4 });
       const result = await shareOrDownloadPng(
         blob,
         `joga-ai-carta-${overall}.png`,
@@ -967,6 +972,14 @@ export default function Perfil() {
           </div>
         </div>
       )}
+
+      <ProUpgradeDialog
+        open={cardDownloadProOpen}
+        onOpenChange={setCardDownloadProOpen}
+        featureTitle="Descarregar carta em HD"
+        featureDescription="Exporta a tua carta de jogador em alta resolução para partilhar nas redes."
+        tier="player"
+      />
     </JogaPage>
   );
 }

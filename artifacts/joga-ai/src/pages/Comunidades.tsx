@@ -10,7 +10,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaChip, JogaPage } from "@/components/joga";
-import { imageDisplaySrc } from "@/lib/imageUtils";
+import { imageDisplaySrc, resolveCommunityCover } from "@/lib/imageUtils";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const gameTypeLabel: Record<string, string> = {
@@ -44,6 +44,7 @@ function CommunityCard({
   memberCount,
   gameType,
   coverImage,
+  coverUrl,
   joined,
   proActive,
 }: {
@@ -53,12 +54,14 @@ function CommunityCard({
   memberCount: number;
   gameType: string;
   coverImage?: string;
+  coverUrl?: string;
   joined?: boolean;
   proActive?: boolean;
 }) {
   const accent = gameTypeAccent[gameType] || { color: "#9ca3af", bg: "rgba(156,163,175,0.2)" };
   const abbr = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   const clubBg = clubColors[parseInt(id, 36) % clubColors.length];
+  const coverSrc = resolveCommunityCover({ coverUrl, coverImage });
 
   return (
     <Link href={`/comunidades/${id}`} data-testid={`community-card-${id}`}>
@@ -71,8 +74,8 @@ function CommunityCard({
         }}
       >
         <div className="relative h-28 overflow-hidden">
-          {coverImage ? (
-            <img src={imageDisplaySrc(coverImage)} alt={name} className="w-full h-full object-cover" />
+          {coverSrc ? (
+            <img src={imageDisplaySrc(coverSrc)} alt={name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full" style={{ background: clubBg }} />
           )}

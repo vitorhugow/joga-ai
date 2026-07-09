@@ -10,6 +10,7 @@ import {
   persistentMultipleTabManager,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 const firebaseConfig = {
@@ -37,6 +38,7 @@ function createFirestore() {
 
 export const db = createFirestore();
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 export default app;
 
 export function isFirebaseConfigured(): boolean {

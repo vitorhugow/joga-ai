@@ -482,7 +482,7 @@ export const updateCommunityClubSettings = onCall(
 
     const userSnap = await db.doc(`users/${uid}`).get();
     const entitlements = userSnap.data()?.entitlements as Record<string, unknown> | undefined;
-    if (!isOrganizerProOnCommunity(entitlements, communityId) && community.proActive !== true) {
+    if (!isOrganizerProOnCommunity(entitlements, communityId)) {
       throw new HttpsError("failed-precondition", "Requer Clube PRO activo nesta comunidade.");
     }
 

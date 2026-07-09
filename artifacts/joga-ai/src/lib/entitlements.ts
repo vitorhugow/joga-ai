@@ -96,3 +96,10 @@ export function hasPlayerPro(entitlements?: Entitlements | null): boolean {
   }
   return isProActive(entitlements);
 }
+
+/** Subscrição Jogador PRO activa (exclui só Clube PRO sem Jogador PRO). */
+export function hasPlayerProOnly(entitlements?: Entitlements | null): boolean {
+  if (entitlements?.playerPro) return slotActive(entitlements.playerPro);
+  if (entitlements?.organizerPro) return false;
+  return isProActive(entitlements) && entitlements?.plan === "player_pro";
+}

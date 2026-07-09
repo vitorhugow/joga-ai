@@ -18,14 +18,13 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { PhotoCropDialog } from "@/components/profile/PhotoCropDialog";
-import { imageDisplaySrc, compressDataUrlToMaxBytes } from "@/lib/imageUtils";
+import { imageDisplaySrc, resolveCommunityCover } from "@/lib/imageUtils";
 import {
   COMMUNITY_COVER_ASPECT,
   COMMUNITY_COVER_LABEL,
   COMMUNITY_COVER_OUTPUT_HEIGHT,
   COMMUNITY_COVER_OUTPUT_WIDTH,
 } from "@/lib/communityCover";
-import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -81,7 +80,7 @@ export default function ComunidadeConfiguracoes() {
       setCity(c.city);
       setGameType(c.gameType);
       setIsPrivate(c.isPrivate);
-      setCoverImage(c.coverImage ?? "");
+      setCoverImage(resolveCommunityCover(c) ?? "");
       setMensalistaEnabled(c.mensalista?.enabled === true);
       setMensalistaPrice(
         c.mensalista?.priceCents ? String(c.mensalista.priceCents / 100) : "10",
@@ -117,15 +116,16 @@ export default function ComunidadeConfiguracoes() {
     e.preventDefault();
     setSaving(true);
     try {
-      let coverToSave = coverImage || undefined;
-      if (coverToSave?.startsWith("data:")) {
-        coverToSave = await compressDataUrlToMaxBytes(coverToSave, MAX_PROFILE_PHOTO_BYTES);
-      }
-      await updateCommunity(id, { name, city, gameType, isPrivate, coverImage: coverToSave });
+      const coverToSave = coverImage || undefined;
+      await updateCommunity(
+        id,
+        { name, city, gameType, isPrivate, coverImage: coverToSave },
+        { actorUserId: userId },
+      );
       const refreshed = await loadCommunity(id, userId);
       if (refreshed) {
         setCommunity(refreshed);
-        setCoverImage(refreshed.coverImage ?? "");
+        setCoverImage(resolveCommunityCover(refreshed) ?? "");
       }
       toast({ title: "Comunidade actualizada" });
     } catch (err) {
@@ -267,11 +267,9 @@ export default function ComunidadeConfiguracoes() {
             cropDescription={`Ajusta como no banner da comunidade (${COMMUNITY_COVER_LABEL}).`}
             applyLabel="Aplicar capa"
             onApply={(dataUrl) => {
-              void compressDataUrlToMaxBytes(dataUrl, MAX_PROFILE_PHOTO_BYTES).then((compressed) => {
-                setCoverImage(compressed);
-                setCropOpen(false);
-                setCropSource(null);
-              });
+              setCoverImage(dataUrl);
+              setCropOpen(false);
+              setCropSource(null);
             }}
           />
           <label className="flex items-center gap-2 text-sm text-white/70">
@@ -287,7 +285,7 @@ export default function ComunidadeConfiguracoes() {
           <h2 className="font-display font-black text-white text-lg">Clube PRO</h2>
           <ProFeatureBadge tier="organizer" />
         </div>
-        {!orgPro && community.proActive !== true ? (
+        {!orgPro ? (
           <div className="text-center py-4">
             <p className="text-white/50 text-sm mb-3">Mensalistas, peladas públicas e branding do clube.</p>
             <JogaButton variant="gold" size="sm" onClick={() => setProDialogOpen(true)}>

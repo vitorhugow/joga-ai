@@ -14,6 +14,7 @@ import {
   joinCommunityPublic,
   leaveCommunity,
   getJoinRequestStatus,
+  isCommunityOrganizerPro,
   type Community,
   type MatchListing,
   type CommunityMember,
@@ -33,7 +34,7 @@ import {
   type CommunityPlayerStats,
 } from "@/lib/communityStatsRepository";
 import { CommunityDuel, RivalryCard } from "@/components/CommunityDuel";
-import { imageDisplaySrc } from "@/lib/imageUtils";
+import { imageDisplaySrc, resolveCommunityCover } from "@/lib/imageUtils";
 import { loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository";
 import { loadBlockedIds, filterBlocked } from "@/lib/blockRepository";
 import { ReportBlockActions } from "@/components/ReportBlockActions";
@@ -90,6 +91,7 @@ export default function ComunidadePage() {
   const [duelTargetId, setDuelTargetId] = useState<string>("");
   const [memberProfiles, setMemberProfiles] = useState<Map<string, PublicUserProfile>>(new Map());
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+  const [organizerProActive, setOrganizerProActive] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -102,6 +104,11 @@ export default function ComunidadePage() {
   async function refreshCommunity() {
     const c = await loadCommunity(id, userId);
     setCommunity(c);
+    if (c) {
+      void isCommunityOrganizerPro(id).then(setOrganizerProActive);
+    } else {
+      setOrganizerProActive(false);
+    }
     if (userId) {
       const status = await getJoinRequestStatus(id, userId);
       setJoinStatus(status);
@@ -198,9 +205,11 @@ export default function ComunidadePage() {
   const isAdmin = community.adminId === userId;
   const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
   const hasAccess = isMember || isAdmin;
-  const coverSrc = imageDisplaySrc(community.branding?.bannerUrl || community.coverImage);
+  const coverSrc = imageDisplaySrc(
+    community.branding?.bannerUrl || resolveCommunityCover(community),
+  );
   const brandColor =
-    community.proActive && community.branding?.primaryColor
+    organizerProActive && community.branding?.primaryColor
       ? community.branding.primaryColor
       : undefined;
   const orgPro = isOrganizerProForCommunity(profile?.entitlements, id);
@@ -317,13 +326,13 @@ export default function ComunidadePage() {
             <div className="min-w-0">
               <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">
                 {community.name}
-                {community.proActive && (
+                {organizerProActive && (
                   <span className="ml-2 align-middle inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide bg-amber-400/15 text-amber-300 border border-amber-400/35">
                     ✦ Clube PRO
                   </span>
                 )}
               </h1>
-              {community.branding?.logoUrl && community.proActive && (
+              {community.branding?.logoUrl && organizerProActive && (
                 <img
                   src={community.branding.logoUrl}
                   alt=""
@@ -367,7 +376,7 @@ export default function ComunidadePage() {
             <Link href={`/comunidades/${id}/configuracoes`} className="flex-1">
               <JogaButton variant="ghost" size="sm" className="w-full">⚙️ Configurar</JogaButton>
             </Link>
-            {(orgPro || community.proActive) && (
+            {orgPro && (
               <Link href={`/comunidades/${id}/dashboard`} className="flex-1">
                 <JogaButton
                   variant="gold"

@@ -21,5 +21,17 @@ service firebase.storage {
       allow write: if isCommunityAdmin(communityId) && isValidBrandingImage();
       allow delete: if isCommunityAdmin(communityId);
     }
+
+    match /users/{uid}/avatar/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && isValidBrandingImage();
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /communities/{communityId}/cover/{fileName} {
+      allow read: if true;
+      allow write: if isCommunityAdmin(communityId) && isValidBrandingImage();
+      allow delete: if isCommunityAdmin(communityId);
+    }
   }
 }

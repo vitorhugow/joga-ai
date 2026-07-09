@@ -19,6 +19,8 @@ import {
   type DocumentReference,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { uploadUserAvatar, deleteImageByUrl } from "./imageStorage";
+import { resolveImageSrc } from "./imageUtils";
 import { clearPendingReferral, consumePendingReferral } from "./referral";
 import { effectiveSkinId } from "./cardSkins";
 import type { PlayerAttributes } from "./cardUtils";
@@ -224,6 +226,24 @@ function validatePhotoUrlForFirestore(photoUrl?: string): string | undefined {
     throw new ProfilePhotoTooLargeError();
   }
   return photoUrl;
+}
+
+async function normalizePhotoForPersist(
+  userId: string,
+  photoUrl: string | undefined,
+  previousPhotoUrl?: string,
+): Promise<string | undefined> {
+  if (!photoUrl) return undefined;
+  if (!photoUrl.startsWith("data:")) return photoUrl;
+  if (!isFirebaseConfigured()) return validatePhotoUrlForFirestore(photoUrl);
+  try {
+    const url = await uploadUserAvatar(userId, photoUrl);
+    void deleteImageByUrl(previousPhotoUrl);
+    return url;
+  } catch (err) {
+    console.warn("[userRepository] avatar upload failed:", err);
+    return validatePhotoUrlForFirestore(photoUrl);
+  }
 }
 
 function localProfileKey(userId: string) {
@@ -670,7 +690,11 @@ export async function completeUserProfile(
   const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
   const position = input.position || current.position;
 
-  let photoUrl = validatePhotoUrlForFirestore(input.photoUrl ?? current.photoUrl);
+  let photoUrl = await normalizePhotoForPersist(
+    userId,
+    input.photoUrl ?? current.photoUrl,
+    current.photoUrl,
+  );
 
   const updated: UserProfile = {
     ...current,
@@ -747,7 +771,7 @@ export async function updateUserProfile(
 
   const photoUrl =
     patch.photoUrl !== undefined
-      ? validatePhotoUrlForFirestore(patch.photoUrl)
+      ? await normalizePhotoForPersist(userId, patch.photoUrl, current.photoUrl)
       : current.photoUrl;
 
   const updated: UserProfile = {
@@ -1137,7 +1161,7 @@ export function profileToPlayerCard(profile: UserProfile) {
     name: profile.displayName || "Jogador",
     position: profile.position,
     shirtNumber: profile.shirtNumber,
-    photoUrl: profile.photoUrl,
+    photoUrl: resolveImageSrc(profile.photoUrl),
     title: profile.title,
     attributes: profile.attributes,
     seasonStats: profile.seasonStats,

@@ -16,10 +16,46 @@ export type ResultImageData = {
   topScorerGoals?: number;
 };
 
+export type ResultImageOptions = {
+  pixelRatio?: number;
+  watermark?: boolean;
+  clubLogoUrl?: string;
+};
+
 const W = 1080;
 const H = 1350;
 
-export async function generateResultImage(data: ResultImageData): Promise<Blob> {
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Não foi possível carregar o logo"));
+    img.src = url;
+  });
+}
+
+function scaleCanvas(source: HTMLCanvasElement, pixelRatio: number): HTMLCanvasElement {
+  if (pixelRatio <= 1) return source;
+  const out = document.createElement("canvas");
+  out.width = source.width * pixelRatio;
+  out.height = source.height * pixelRatio;
+  const ctx = out.getContext("2d");
+  if (!ctx) return source;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, out.width, out.height);
+  return out;
+}
+
+export async function generateResultImage(
+  data: ResultImageData,
+  options?: ResultImageOptions,
+): Promise<Blob> {
+  const pixelRatio = options?.pixelRatio ?? 1;
+  const watermark = options?.watermark ?? false;
+  const clubLogoUrl = options?.clubLogoUrl;
+
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -123,8 +159,37 @@ export async function generateResultImage(data: ResultImageData): Promise<Blob> 
   ctx.font = "900 40px system-ui, sans-serif";
   ctx.fillText("jogaai.pt", W / 2, 1260);
 
+  // Marca de água ou logo do clube (canto inferior — não sobrepõe o placar)
+  const cornerSize = 72;
+  const cornerPad = 36;
+  const cornerX = W - cornerPad - cornerSize;
+  const cornerY = H - cornerPad - cornerSize;
+
+  if (clubLogoUrl) {
+    try {
+      const logo = await loadImage(clubLogoUrl);
+      ctx.save();
+      roundRect(ctx, cornerX, cornerY, cornerSize, cornerSize, 12);
+      ctx.clip();
+      ctx.drawImage(logo, cornerX, cornerY, cornerSize, cornerSize);
+      ctx.restore();
+    } catch {
+      // Falha no logo não bloqueia a exportação
+    }
+  } else if (watermark) {
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "700 26px system-ui, sans-serif";
+    ctx.fillText("joga.ai", W - cornerPad, H - cornerPad);
+    ctx.restore();
+  }
+
+  const scaled = scaleCanvas(canvas, pixelRatio);
+
   return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
+    scaled.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("toBlob falhou"))),
       "image/png",
     );

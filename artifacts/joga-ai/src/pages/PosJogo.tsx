@@ -75,6 +75,9 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { SponsorSlot } from "@/components/SponsorSlot";
 import { MatchStatsSections } from "@/components/MatchStatsSections";
 import { generateResultImage } from "@/lib/resultImage";
+import { hasPlayerPro, isOrganizerProForCommunity } from "@/lib/entitlements";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 
 const eventLabels: Record<string, string> = {
@@ -359,20 +362,44 @@ export default function PosJogo() {
         scoreB += Number(g?.scoreB ?? 0);
       }
       const top = topScorers[0];
-      const blob = await generateResultImage({
-        title: data.title || "Pelada",
-        dateLabel: new Date(data.savedAt || data.createdAt || Date.now()).toLocaleDateString(
-          "pt-PT",
-          { weekday: "long", day: "numeric", month: "long" },
-        ),
-        teamAName: teamA,
-        teamBName: teamB,
-        scoreA,
-        scoreB,
-        gamesCount: games.length,
-        topScorerName: top?.name,
-        topScorerGoals: top?.goals,
-      });
+
+      const playerPro = hasPlayerPro(profile?.entitlements);
+      let pixelRatio = 1;
+      let watermark = true;
+      let clubLogoUrl: string | undefined;
+
+      if (playerPro) {
+        pixelRatio = 3;
+        watermark = false;
+      } else if (data.communityId) {
+        const community = await loadCommunity(data.communityId, userId);
+        if (
+          isOrganizerProForCommunity(profile?.entitlements, data.communityId) &&
+          community?.branding?.logoUrl
+        ) {
+          pixelRatio = 3;
+          watermark = false;
+          clubLogoUrl = community.branding.logoUrl;
+        }
+      }
+
+      const blob = await generateResultImage(
+        {
+          title: data.title || "Pelada",
+          dateLabel: new Date(data.savedAt || data.createdAt || Date.now()).toLocaleDateString(
+            "pt-PT",
+            { weekday: "long", day: "numeric", month: "long" },
+          ),
+          teamAName: teamA,
+          teamBName: teamB,
+          scoreA,
+          scoreB,
+          gamesCount: games.length,
+          topScorerName: top?.name,
+          topScorerGoals: top?.goals,
+        },
+        { pixelRatio, watermark, clubLogoUrl },
+      );
       await shareOrDownloadPng(
         blob,
         "resultado-joga-ai.png",
@@ -1068,15 +1095,29 @@ export default function PosJogo() {
           Partilhar evolução
         </JogaButton>
 
-        <button
-          type="button"
-          onClick={() => void handleShareResult()}
-          className="mt-2 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-          style={{ background: "#10b981" }}
-          data-testid="button-share-result"
-        >
-          📤 Partilhar resultado no grupo
-        </button>
+        <TooltipProvider delayDuration={200}>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleShareResult()}
+              className="flex-1 rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+              style={{ background: "#10b981" }}
+              data-testid="button-share-result"
+            >
+              📤 Partilhar resultado no grupo
+            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-help">
+                  <ProFeatureBadge tier="player" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[200px] text-center">
+                PRO: alta resolução e sem marca de água.
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
 
         <JogaButton
           variant="gold"
@@ -1237,15 +1278,29 @@ export default function PosJogo() {
         </section>
       )}
 
-      <button
-        type="button"
-        onClick={() => void handleShareResult()}
-        className="mt-4 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-        style={{ background: "#10b981" }}
-        data-testid="button-share-result"
-      >
-        📤 Partilhar resultado no grupo
-      </button>
+      <TooltipProvider delayDuration={200}>
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleShareResult()}
+            className="flex-1 rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+            style={{ background: "#10b981" }}
+            data-testid="button-share-result"
+          >
+            📤 Partilhar resultado no grupo
+          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help">
+                <ProFeatureBadge tier="player" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[200px] text-center">
+              PRO: alta resolução e sem marca de água.
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
 
       <SponsorSlot className="mt-4" />
 

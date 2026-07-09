@@ -12,8 +12,9 @@ import { summarizeGainsForDisplay } from "@/lib/evolutionDisplay";
 import { loadEvolutionHistory, type EvolutionRecord } from "@/lib/evolutionStorage";
 import { loadEvolutionFromFirestore } from "@/lib/evolutionRepository";
 import { isPostMatchExpired, loadPostMatch } from "@/lib/postMatchStorage";
-import { hasUserVotedInSession, currentMatchUserId, resolveMatchId } from "@/lib/matchFlowStorage";
+import { resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchFromFirestore } from "@/lib/matchRepository";
+import { matchSummaryPath, subscribeHasUserVoted } from "@/lib/voteStatusRepository";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 function formatDate(iso: string) {
@@ -34,10 +35,17 @@ export default function Evolucao() {
   const { userId: authUserId } = useAuth();
   const [history, setHistory] = useState<EvolutionRecord[]>(() => loadEvolutionHistory(authUserId));
   const [pendingMatch, setPendingMatch] = useState(() => loadPostMatch());
-  const matchUserId = currentMatchUserId();
   const pendingMatchId = resolveMatchId({ storedMatchId: pendingMatch?.matchId });
   const pendingExpired = isPostMatchExpired(pendingMatch);
-  const hasVoted = hasUserVotedInSession(matchUserId, pendingMatchId);
+  const [hasVoted, setHasVoted] = useState(false);
+
+  useEffect(() => {
+    if (!authUserId || !pendingMatchId) {
+      setHasVoted(false);
+      return;
+    }
+    return subscribeHasUserVoted(pendingMatchId, authUserId, setHasVoted);
+  }, [authUserId, pendingMatchId]);
   const showPendingVote = Boolean(
     pendingMatch &&
       !pendingExpired &&
@@ -120,9 +128,22 @@ export default function Evolucao() {
           <p className="text-white/50 text-sm mt-2">
             O resumo e a votação ficam no pós-jogo. Depois de votar, os atributos ganhos aparecem aqui no histórico.
           </p>
-          <Link href={`/partida/${pendingMatchId}/pos-jogo`} className="block mt-3">
+          <Link href={matchSummaryPath(pendingMatchId)} className="block mt-3">
             <JogaButton variant="gold" size="md" className="gap-2">
               Ir para resumo / votação
+              <ChevronRight className="w-4 h-4" />
+            </JogaButton>
+          </Link>
+        </JogaCard>
+      )}
+
+      {pendingMatch && !pendingExpired && hasVoted && pendingMatch.status === "aguardando_auditoria" && (
+        <JogaCard variant="arena" className="mb-4 border-emerald-400/20 bg-emerald-400/6">
+          <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-[0.18em]">Voto registado</p>
+          <p className="text-white/55 text-sm mt-2">Já deste a tua nota nesta pelada. Vê o resumo quando quiseres.</p>
+          <Link href={matchSummaryPath(pendingMatchId)} className="block mt-3">
+            <JogaButton variant="ghost" size="md" className="gap-2">
+              Ver resumo da pelada
               <ChevronRight className="w-4 h-4" />
             </JogaButton>
           </Link>

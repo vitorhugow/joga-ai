@@ -217,7 +217,7 @@ export async function notifyMatchPlayersToVote(
   match: Record<string, unknown>,
 ): Promise<void> {
   const title = String(match.title ?? "Pelada");
-  const targets = linkedPlayerIdsForMatch(match, true);
+  const targets = linkedPlayerIdsForMatch(match, false);
   if (!targets.length) return;
 
   await notifyUsers(targets, {

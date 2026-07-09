@@ -28,9 +28,7 @@ service cloud.firestore {
 
     function liveControllerId(matchId) {
       let data = matchDoc(matchId);
-      return data.liveControllerId != null
-        ? data.liveControllerId
-        : data.organizerId;
+      return data.get('liveControllerId', data.organizerId);
     }
 
     function isLiveController(matchId) {

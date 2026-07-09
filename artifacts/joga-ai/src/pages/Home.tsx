@@ -3,7 +3,17 @@ import { Link } from "wouter";
 import { Plus, Search, ChevronRight, Trophy, Flame } from "lucide-react";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { calculateOverall } from "@/lib/cardUtils";
-import { loadCommunities, loadMyCommunities, loadAvailableMatches, type Community, type MatchListing } from "@/lib/communityRepository";
+import { loadCommunities, loadMyCommunities, loadAvailableMatches, loadMyMatches, type Community, type MatchListing } from "@/lib/communityRepository";
+import {
+  computeMatchPriority,
+  fetchLiveClockStatus,
+  matchCardEmphasis,
+  sortEnrichedMatches,
+  type EnrichedMatchListing,
+} from "@/lib/matchDisplayUtils";
+import { hasUserVoted } from "@/lib/voteStatusRepository";
+import { getMatchRoutePath } from "@/lib/matchRepository";
+import { matchSummaryPath } from "@/lib/voteStatusRepository";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -74,11 +84,13 @@ export default function Home() {
 
   const [communities, setCommunities] = useState<Community[]>([]);
   const [available, setAvailable] = useState<MatchListing[]>([]);
+  const [myMatches, setMyMatches] = useState<EnrichedMatchListing[]>([]);
 
   // Hidrata comunidades e partidas do Firestore em background
   useEffect(() => {
     if (!userId) {
       loadCommunities().then(setCommunities);
+      setMyMatches([]);
     } else {
       Promise.all([loadCommunities(userId), loadMyCommunities(userId)]).then(([all, mine]) => {
         const mineIds = new Set(mine.map((c) => c.id));
@@ -87,6 +99,32 @@ export default function Home() {
           ...all.filter((c) => !mineIds.has(c.id) && c.isMember),
         ];
         setCommunities(merged.length > 0 ? merged : all.filter((c) => c.isMember).slice(0, 6));
+      });
+
+      void loadMyMatches(userId).then(async (matches) => {
+        const enriched = await Promise.all(
+          matches.map(async (match) => {
+            const liveClockStatus =
+              match.status === "ao_vivo" ? await fetchLiveClockStatus(match.id) : null;
+            const voted =
+              match.status === "aguardando_auditoria"
+                ? await hasUserVoted(match.id, userId)
+                : false;
+            const { priority, label } = computeMatchPriority(match, {
+              liveClockStatus,
+              pendingVote: match.status === "aguardando_auditoria" && !voted,
+            });
+            return {
+              ...match,
+              priority,
+              priorityLabel: label,
+              liveClockStatus,
+              pendingVote: match.status === "aguardando_auditoria" && !voted,
+              voted,
+            } satisfies EnrichedMatchListing;
+          }),
+        );
+        setMyMatches(sortEnrichedMatches(enriched));
       });
     }
     loadAvailableMatches().then((matches) => {
@@ -116,7 +154,15 @@ export default function Home() {
 
   const ranking = rankingSets[rankingTab];
 
-  const nextMatch = available[0] ?? null;
+    const m = match as EnrichedMatchListing;
+    if (m.voted && match.status === "aguardando_auditoria") {
+      return matchSummaryPath(match.id);
+    }
+    if (m.pendingVote && match.status === "aguardando_auditoria") {
+      return matchSummaryPath(match.id);
+    }
+    return getMatchRoutePath(match.id, match.status);
+  }
 
   return (
     <JogaPage theme="dark" padded={false} bottomSpace>
@@ -284,34 +330,107 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* PRÓXIMO JOGO */}
+        {/* AS MINHAS PARTIDAS */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">Próximo Jogo</h2>
-            <Link href="/jogos"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todos <ChevronRight className="w-3.5 h-3.5" /></span></Link>
+            <h2 className="font-display font-black text-white text-lg">As minhas partidas</h2>
+            <Link href="/jogos"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todas <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
-          {!nextMatch ? (
+          {!isLinked ? (
+            <JogaCard variant="arena" padding="md" className="text-center">
+              <p className="text-white/50 text-sm">Cria conta para veres as tuas partidas.</p>
+            </JogaCard>
+          ) : myMatches.length === 0 ? (
             <JogaCard variant="arena" padding="md" className="text-center">
               <p className="text-white/50 text-sm">Sem jogos agendados.</p>
               <Link href="/jogos" className="inline-block mt-2 text-emerald-400 text-sm font-semibold">Explorar jogos</Link>
             </JogaCard>
           ) : (
-          <Link href={`/partida/${nextMatch.id}/pre-jogo`}>
+            <div className="space-y-3">
+              {myMatches.slice(0, 5).map((match) => {
+                const emphasis = matchCardEmphasis(match.priority);
+                return (
+                  <Link key={match.id} href={matchHref(match)}>
+                    <div
+                      className={`rounded-2xl overflow-hidden joga-tap relative ${emphasis.scale}`}
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        border: emphasis.border,
+                        boxShadow: "0 2px 16px rgba(0,0,0,0.3)",
+                      }}
+                    >
+                      {emphasis.pulse && (
+                        <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-red-400 animate-pulse" />
+                      )}
+                      <div
+                        className="h-1"
+                        style={{
+                          background:
+                            match.priority === 1
+                              ? "linear-gradient(90deg, #ef4444, #f87171)"
+                              : match.priority === 2
+                                ? "linear-gradient(90deg, #ca8a04, #facc15)"
+                                : "linear-gradient(90deg, #16a34a, #059669)",
+                        }}
+                      />
+                      <div className="px-4 pt-3.5 pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+                              {match.priorityLabel}
+                            </p>
+                            <p className="font-display font-black text-white text-lg leading-tight mt-0.5">
+                              {match.title}
+                            </p>
+                            <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                              📍 {match.location || match.city}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0 ml-3">
+                            <p className="font-display font-bold text-white text-sm leading-none">{match.date}</p>
+                            {match.scheduledTime && (
+                              <p className="text-emerald-300 text-xs font-bold mt-1">{match.scheduledTime.slice(0, 5)}</p>
+                            )}
+                          </div>
+                        </div>
+                        {match.pendingVote && (
+                          <p className="text-amber-300 text-xs font-bold mt-2">🗳️ Votar agora</p>
+                        )}
+                        {match.voted && match.status === "aguardando_auditoria" && (
+                          <p className="text-emerald-300/80 text-xs font-semibold mt-2">✓ Voto registado</p>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* PRÓXIMO JOGO (descobrir) */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display font-black text-white text-lg">Descobrir perto</h2>
+            <Link href="/jogos"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todos <ChevronRight className="w-3.5 h-3.5" /></span></Link>
+          </div>
+          {available.length === 0 ? (
+            <JogaCard variant="arena" padding="md" className="text-center">
+              <p className="text-white/50 text-sm">Sem jogos abertos por perto.</p>
+            </JogaCard>
+          ) : (
+          <Link href={`/partida/${available[0].id}/pre-jogo`}>
           <div className="rounded-2xl overflow-hidden joga-tap" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>
             <div className="h-1" style={{ background: "linear-gradient(90deg, #16a34a, #059669, #2563eb)" }} />
             <div className="px-4 pt-3.5 pb-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-display font-black text-white text-lg leading-tight">{nextMatch.title}</p>
-                  <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>📍 {nextMatch.location || nextMatch.city}</p>
+                  <p className="font-display font-black text-white text-lg leading-tight">{available[0].title}</p>
+                  <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>📍 {available[0].location || available[0].city}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <p className="font-display font-bold text-white text-sm leading-none">{nextMatch.date}</p>
+                  <p className="font-display font-bold text-white text-sm leading-none">{available[0].date}</p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 mt-3">
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}>⚽ {nextMatch.gameType}</span>
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg ml-auto" style={{ background: "rgba(96,165,250,0.1)", color: "#60a5fa" }}>{nextMatch.spotsRemaining}</span>
               </div>
             </div>
           </div>

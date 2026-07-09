@@ -39,6 +39,7 @@ import {
   addLiveEventAction,
   undoLastEvent,
   ensureSetupMigrated,
+  requestServerSetupMigration,
   type ParsedMatchLiveState,
   type MatchSetupState,
 } from "@/lib/matchStateRepository";
@@ -190,6 +191,8 @@ export default function AoVivo() {
       setRemoteMatch(meta.match);
       if (meta.organizerId && userId === meta.organizerId) {
         void ensureSetupMigrated(matchId, meta.organizerId, meta.match?.players ?? []);
+      } else if (userId) {
+        void requestServerSetupMigration(matchId).catch(console.warn);
       }
     });
 

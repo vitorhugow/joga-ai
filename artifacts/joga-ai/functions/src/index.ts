@@ -31,10 +31,12 @@ export {
 } from "./mensalistas";
 export { closeExpiredMatches } from "./closeExpiredMatches";
 export { paymentReminders } from "./paymentReminders";
+export { migrateMatchSetup } from "./matchSetup";
 export {
   onMatchCreatedNotifyCommunity,
   onMatchUpdatedNotifyChanges,
   onMatchEnteringVoteNotify,
+  onMatchPlayerJoinedNotify,
   onMatchPromotedFromWaitlistNotify,
   onMatchRatingsReleasedNotify,
   onLiveControllerChangedNotify,

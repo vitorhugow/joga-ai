@@ -14,7 +14,8 @@ import {
   Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
-import { db, isFirebaseConfigured } from "./firebase";
+import app, { db, isFirebaseConfigured } from "./firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { stripUndefined } from "./firestoreUtils";
 import { getCurrentUserId } from "./auth";
 import {
@@ -360,6 +361,28 @@ export async function ensureSetupMigrated(
   );
 
   window.localStorage.setItem(`${MIGRATED_KEY_PREFIX}${matchId}`, "1");
+}
+
+/** Pede à Cloud Function a migração server-side (qualquer participante). */
+export async function requestServerSetupMigration(matchId: string): Promise<void> {
+  if (!isFirebaseConfigured() || !matchId || matchId === "default") return;
+
+  const migratedFlag = window.localStorage.getItem(`${MIGRATED_KEY_PREFIX}${matchId}-server`);
+  if (migratedFlag === "1") return;
+
+  const setupSnap = await getDoc(setupRef(matchId));
+  if (setupSnap.exists()) {
+    window.localStorage.setItem(`${MIGRATED_KEY_PREFIX}${matchId}-server`, "1");
+    return;
+  }
+
+  const functions = getFunctions(app, "europe-west1");
+  const fn = httpsCallable<{ matchId: string }, { migrated: boolean }>(
+    functions,
+    "migrateMatchSetup",
+  );
+  await fn({ matchId });
+  window.localStorage.setItem(`${MIGRATED_KEY_PREFIX}${matchId}-server`, "1");
 }
 
 export async function confirmNextMiniGame(

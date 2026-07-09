@@ -24,7 +24,12 @@ import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
-const MAX_PRICE_EURO = 5;
+const MAX_PRICE_EURO = 10;
+
+const PRICE_OPTIONS = [
+  "Grátis",
+  ...Array.from({ length: 10 }, (_, i) => `${i + 1}€`),
+];
 
 function parsePriceEuro(price: string): number | null {
   const trimmed = price.trim();
@@ -417,12 +422,12 @@ export default function CriarPartida() {
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 min-[375px]:grid-cols-2 gap-3">
           <Field label="Data">
-            <StyledInput type="date" value={form.date} onChange={(e) => set("date", e.target.value)} data-testid="input-date" required />
+            <StyledInput type="date" value={form.date} onChange={(e) => set("date", e.target.value)} data-testid="input-date" required className="min-w-0" />
           </Field>
           <Field label="Hora">
-            <StyledInput type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="input-time" required />
+            <StyledInput type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="input-time" required className="min-w-0" />
           </Field>
         </div>
 
@@ -445,9 +450,26 @@ export default function CriarPartida() {
             <StyledInput type="number" min="4" max="22" value={form.maxPlayers} onChange={(e) => set("maxPlayers", e.target.value)} data-testid="input-max-players" required />
           </Field>
           <Field label="Preço/Jogador" icon={<Euro className="w-3 h-3" />}>
-            <StyledInput type="text" placeholder={paymentsEnabled ? "0,50€ a 5€" : "Grátis ou 10€"} value={form.price} onChange={(e) => set("price", e.target.value)} data-testid="input-price" required />
+            <select
+              value={form.price}
+              onChange={(e) => set("price", e.target.value)}
+              className="w-full rounded-2xl px-4 py-3.5 text-sm text-white bg-[#0f172a] border border-white/20 outline-none focus:border-emerald-500/60 [color-scheme:dark] min-w-0"
+              data-testid="input-price"
+              required
+            >
+              {!PRICE_OPTIONS.includes(form.price) && form.price.trim() && (
+                <option value={form.price} className="bg-[#0f172a] text-white">
+                  {form.price} (atual)
+                </option>
+              )}
+              {PRICE_OPTIONS.map((opt) => (
+                <option key={opt} value={opt} className="bg-[#0f172a] text-white">
+                  {opt}
+                </option>
+              ))}
+            </select>
             {paymentsEnabled && (
-              <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>Com pagamentos online: máx. 5€ por jogador</p>
+              <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>Com pagamentos online: máx. 10€ por jogador</p>
             )}
           </Field>
         </div>

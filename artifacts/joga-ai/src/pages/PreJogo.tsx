@@ -22,6 +22,7 @@ import { savePreMatch } from "@/lib/preMatchStorage";
 import {
   cacheSetupFromSnapshot,
   ensureSetupMigrated,
+  requestServerSetupMigration,
   subscribeToSetup,
   type MatchSetupState,
 } from "@/lib/matchStateRepository";
@@ -515,6 +516,8 @@ export default function PreJogo() {
 
       if (meta.organizerId && userId === meta.organizerId) {
         void ensureSetupMigrated(matchId, meta.organizerId, merged?.players ?? []);
+      } else if (merged && userId) {
+        void requestServerSetupMigration(matchId).catch(console.warn);
       }
 
       setRosterHydrated(true);
@@ -524,7 +527,12 @@ export default function PreJogo() {
     });
 
     const unsubSetup = subscribeToSetup(matchId, (setup: MatchSetupState | null) => {
-      if (cancelled || !setup) return;
+      if (cancelled) return;
+
+      if (!setup) {
+        void requestServerSetupMigration(matchId).catch(console.warn);
+        return;
+      }
 
       skipNextPersist.current = true;
       setGameMode(setup.gameMode);
@@ -593,8 +601,72 @@ export default function PreJogo() {
   const [assignments, setAssignments] = useState<Record<string, string | null>>({});
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
 
+  const teamSetupWarning = useMemo(() => {
+    const emptyTeams = activeTeams.filter(
+      (team) => !players.some((player) => playerTeams[player.id] === team),
+    );
+    if (emptyTeams.length === activeTeams.length) {
+      return "Nenhum jogador está numa equipa — não será possível marcar golos.";
+    }
+    if (emptyTeams.length > 0) {
+      const labels = emptyTeams.map((team) => teamNames[team]).join(", ");
+      return `A equipa ${labels} não tem jogadores — não vais conseguir marcar golos nessa equipa.`;
+    }
+    return null;
+  }, [activeTeams, players, playerTeams]);
+
+  async function handleStartLiveMatch() {
+    if (!isOrganizer || !userId) return;
+
+    if (teamSetupWarning) {
+      const proceed = await confirm({
+        title: "Iniciar sem equipas?",
+        description: `${teamSetupWarning} Queres iniciar mesmo assim?`,
+        confirmLabel: "Iniciar assim",
+        cancelLabel: "Voltar e organizar equipas",
+      });
+      if (!proceed) return;
+    }
+
+    clearPostMatch(matchId);
+    resetMatchFlowSession(matchId);
+    savePreMatch(
+      {
+        version: 1,
+        matchId,
+        gameMode,
+        teamCount,
+        teamNames,
+        players,
+        playerTeams,
+        assignments,
+        savedAt: new Date().toISOString(),
+      },
+      matchId,
+    );
+    await saveMatchRoster(matchId, {
+      gameMode,
+      teamCount,
+      teamNames,
+      players,
+      playerTeams,
+      assignments,
+    });
+    try {
+      await startMatchLive(matchId, userId);
+      setLocation(`/partida/${matchId}/ao-vivo`);
+    } catch (err) {
+      console.warn("[PreJogo] startMatchLive:", err);
+      toast({
+        title: "Não foi possível iniciar a partida.",
+        description: "Verifica a tua ligação e tenta novamente.",
+        variant: "destructive",
+      });
+    }
+  }
+
   const persistRoster = useCallback(() => {
-    if (!matchId || skipNextPersist.current) return;
+    if (!matchId || skipNextPersist.current || !canManageMatch) return;
 
     setSetupSyncState("saving");
     void saveMatchRoster(matchId, {
@@ -606,7 +678,7 @@ export default function PreJogo() {
       assignments,
       waitlist,
     }).then(() => setSetupSyncState("saved"));
-  }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist]);
+  }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist, canManageMatch]);
 
   useEffect(() => {
     if (!rosterHydrated) return;
@@ -834,43 +906,48 @@ export default function PreJogo() {
     }
 
     setRsvpBusy(true);
+    let result: "confirmed" | "waitlist" = "confirmed";
     try {
       const uid = userId;
       const overall = profile.profileComplete
         ? calculateOverall(profile.attributes)
         : 50;
-      const result = await confirmPresence(matchId, uid, {
+      result = await confirmPresence(matchId, uid, {
         displayName,
         position: profile.position || "MEI",
         overall,
       });
       setShowRsvpNameForm(false);
-      const merged = await loadMatchFromFirestore(matchId);
-      if (merged?.waitlist) setWaitlist(merged.waitlist);
-      if (merged?.players) {
-        const mapped = merged.players.map((p) => toPreJogoPlayer(p, uid));
-        setPlayers(linkPlayersInRoster(mapped, uid));
-        setPlayerTeams(merged.playerTeams ?? {});
-      }
-      toast({
-        title: result === "waitlist" ? "Lista de espera" : "Presença confirmada!",
-        description:
-          result === "waitlist"
-            ? `Estás na posição ${waitlist.length + 1} — avisamos se abrir vaga.`
-            : "Entraste no plantel desta pelada.",
-      });
-      if (result !== "waitlist") {
-        trackEvent("match_joined", { matchId });
-        triggerPushSoftPrompt();
-      }
     } catch (err) {
       toast({
         title: "Não foi possível confirmar",
         description: err instanceof Error ? err.message : "Tenta novamente.",
         variant: "destructive",
       });
+      return;
     } finally {
       setRsvpBusy(false);
+    }
+
+    toast({
+      title: result === "waitlist" ? "Lista de espera" : "Presença confirmada!",
+      description:
+        result === "waitlist"
+          ? `Estás na posição ${waitlist.length + 1} — avisamos se abrir vaga.`
+          : "Entraste no plantel desta pelada.",
+    });
+
+    if (result !== "waitlist") {
+      try {
+        trackEvent("match_joined", { matchId });
+      } catch {
+        /* analytics opcional */
+      }
+      try {
+        triggerPushSoftPrompt();
+      } catch {
+        /* push opcional */
+      }
     }
   }
 
@@ -2122,46 +2199,18 @@ export default function PreJogo() {
           </JogaButton>
         )}
 
+        {isOrganizer && teamSetupWarning && (
+          <p className="text-red-400 text-sm font-semibold text-center px-2" role="alert">
+            {teamSetupWarning}
+          </p>
+        )}
+
         <JogaButton
           variant="danger"
           size="lg"
-          className="gap-3"
+          className={`gap-3 ${teamSetupWarning ? "ring-2 ring-red-500/50" : ""}`}
           disabled={!isOrganizer}
-          onClick={async () => {
-            if (!isOrganizer || !userId) return;
-            clearPostMatch(matchId);
-            resetMatchFlowSession(matchId);
-            savePreMatch({
-              version: 1,
-              matchId,
-              gameMode,
-              teamCount,
-              teamNames,
-              players,
-              playerTeams,
-              assignments,
-              savedAt: new Date().toISOString(),
-            }, matchId);
-            await saveMatchRoster(matchId, {
-              gameMode,
-              teamCount,
-              teamNames,
-              players,
-              playerTeams,
-              assignments,
-            });
-            try {
-              await startMatchLive(matchId, userId);
-              setLocation(`/partida/${matchId}/ao-vivo`);
-            } catch (err) {
-              console.warn("[PreJogo] startMatchLive:", err);
-              toast({
-                title: "Não foi possível iniciar a partida.",
-                description: "Verifica a tua ligação e tenta novamente.",
-                variant: "destructive",
-              });
-            }
-          }}
+          onClick={() => void handleStartLiveMatch()}
         >
           <Play className="w-6 h-6 fill-white" />
           {isOrganizer ? "Iniciar Partida" : "Só o organizador inicia"}

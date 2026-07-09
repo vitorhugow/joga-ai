@@ -117,7 +117,30 @@ function detectPromotedFromWaitlist(
   return null;
 }
 
-/** Pelada entra em votação → avisa jogadores com conta (exceto organizador). */
+function detectNewPlayerJoin(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): { userId: string; name: string } | null {
+  const organizerId = String(after.organizerId ?? "");
+  const beforePlayers = playerUserIds(before);
+  const afterPlayers: Array<{ userId?: string; id?: string; name?: string }> = Array.isArray(
+    after.players,
+  )
+    ? after.players
+    : [];
+  const beforeWaitlist = waitlistUserIds(before);
+
+  for (const player of afterPlayers) {
+    const uid = String(player.userId ?? player.id ?? "");
+    if (!uid || uid === organizerId) continue;
+    if (beforePlayers.has(uid)) continue;
+    if (beforeWaitlist.has(uid)) continue;
+    return { userId: uid, name: String(player.name ?? "Jogador") };
+  }
+  return null;
+}
+
+/** Pelada entra em votação → avisa todos os jogadores com conta (incl. banco e organizador). */
 export const onMatchEnteringVoteNotify = onDocumentUpdated(
   { document: "matches/{matchId}", region: REGION },
   async (event) => {
@@ -131,6 +154,36 @@ export const onMatchEnteringVoteNotify = onDocumentUpdated(
     if (prevStatus === "aguardando_auditoria") return;
 
     await notifyMatchPlayersToVote(event.params.matchId, after);
+  },
+);
+
+/** Jogador entra no plantel → notifica o organizador (exceto promoção waitlist). */
+export const onMatchPlayerJoinedNotify = onDocumentUpdated(
+  { document: "matches/{matchId}", region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    const joined = detectNewPlayerJoin(before, after);
+    if (!joined) return;
+
+    const organizerId = String(after.organizerId ?? "");
+    if (!organizerId || organizerId === joined.userId) return;
+
+    const matchId = event.params.matchId;
+    const title = String(after.title ?? "pelada");
+    const players: Array<{ userId?: string }> = Array.isArray(after.players) ? after.players : [];
+    const maxPlayers = Number(after.maxPlayers ?? players.length) || players.length;
+
+    await notifyUser(organizerId, {
+      id: `joined-${matchId}-${joined.userId}`,
+      type: "match",
+      priority: "center",
+      title: "Novo jogador",
+      body: `${joined.name} entrou em «${title}» (${players.length}/${maxPlayers})`,
+      link: `/partida/${matchId}/pre-jogo`,
+    });
   },
 );
 

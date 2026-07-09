@@ -42,6 +42,7 @@ import type { WaitlistEntry } from "./matchRsvpRepository";
 import { checkAndUnlockBadges } from "./badgeService";
 import type { MatchAccessMode } from "./matchAccess";
 import { openToExternalFromAccessMode } from "./matchAccess";
+import { getCurrentUserId } from "./auth";
 import {
   ensureLiveDoc,
   setupFromRoster,
@@ -603,7 +604,15 @@ export async function saveMatchRoster(
   };
   savePreMatch(preMatch, matchId);
 
-  const existing = loadPostMatch(matchId) ?? (await loadMatchFromFirestore(matchId));
+  let existing = loadPostMatch(matchId);
+  if (!existing) {
+    try {
+      existing = await loadMatchFromFirestore(matchId);
+    } catch (err) {
+      console.warn("[matchRepository] saveMatchRoster load:", err);
+    }
+  }
+
   const currentPlayerId =
     existing?.currentPlayerId ??
     roster.players.find((player) => player.isMe)?.id ??
@@ -634,7 +643,14 @@ export async function saveMatchRoster(
 
   await saveMatchToFirestore(matchId, updated);
 
-  await updateSetup(matchId, setupFromRoster(roster));
+  const uid = getCurrentUserId();
+  if (uid && existing?.organizerId === uid) {
+    try {
+      await updateSetup(matchId, setupFromRoster(roster));
+    } catch (err) {
+      console.warn("[matchRepository] updateSetup:", err);
+    }
+  }
 }
 
 /**

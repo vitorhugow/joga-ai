@@ -82,8 +82,21 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid));
     }
 
+    function communityDoc(communityId) {
+      return get(/databases/$(database)/documents/communities/$(communityId)).data;
+    }
+
+    function isCommunityOpenToExternal(communityId) {
+      return communityDoc(communityId).openToExternal == true
+        && communityDoc(communityId).proActive == true;
+    }
+
     function isMatchRsvpUpdate() {
+      let data = resource.data;
       return isSignedIn()
+        && (!('communityId' in data) || data.communityId == null
+            || isCommunityOpenToExternal(data.communityId)
+            || isCommunityMatchMember(data.communityId))
         && request.resource.data.organizerId == resource.data.organizerId
         && request.resource.data.status == resource.data.status
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -350,6 +363,12 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if isCommunityMatchMember(communityId)
           || isCommunityAdmin(communityId);
+      }
+
+      match /mensalistas/{mensalistaUid} {
+        allow read: if isSignedIn()
+          && (isCommunityMatchMember(communityId) || isCommunityAdmin(communityId));
+        allow write: if false;
       }
     }
   }

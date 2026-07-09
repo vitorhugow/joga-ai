@@ -54,6 +54,9 @@ async function assertMatchAccess(
   if (!communityId) {
     throw new Error("Esta pelada é só para membros da comunidade.");
   }
+  const community = await loadCommunity(communityId);
+  if (community?.openToExternal && community.proActive) return;
+
   const members = await loadCommunityMembers(communityId);
   if (!members.some((m) => m.userId === userId)) {
     throw new Error("Esta pelada é só para membros da comunidade.");

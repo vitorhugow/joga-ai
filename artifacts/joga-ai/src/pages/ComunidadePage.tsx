@@ -37,6 +37,8 @@ import { imageDisplaySrc } from "@/lib/imageUtils";
 import { loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository";
 import { loadBlockedIds, filterBlocked } from "@/lib/blockRepository";
 import { ReportBlockActions } from "@/components/ReportBlockActions";
+import { MensalistaCard } from "@/components/MensalistaCard";
+import { isOrganizerProForCommunity } from "@/lib/entitlements";
 import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -196,7 +198,12 @@ export default function ComunidadePage() {
   const isAdmin = community.adminId === userId;
   const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
   const hasAccess = isMember || isAdmin;
-  const coverSrc = imageDisplaySrc(community.coverImage);
+  const coverSrc = imageDisplaySrc(community.branding?.bannerUrl || community.coverImage);
+  const brandColor =
+    community.proActive && community.branding?.primaryColor
+      ? community.branding.primaryColor
+      : undefined;
+  const orgPro = isOrganizerProForCommunity(profile?.entitlements, id);
   const displayMemberCount = visibleMembers.length > 0 ? visibleMembers.length : community.memberCount;
 
   async function handleRequestJoin() {
@@ -275,7 +282,10 @@ export default function ComunidadePage() {
 
   return (
     <JogaPage theme="dark" padded={false}>
-      <div className="relative h-44 joga-hero-arena overflow-hidden">
+      <div
+        className="relative h-44 joga-hero-arena overflow-hidden"
+        style={brandColor ? { boxShadow: `inset 0 -40px 60px ${brandColor}33` } : undefined}
+      >
         {coverSrc ? (
           <img
             src={coverSrc}
@@ -283,7 +293,16 @@ export default function ComunidadePage() {
             className="w-full h-full object-cover opacity-60"
           />
         ) : (
-          <div className="w-full h-full bg-linear-to-br from-emerald-900 to-emerald-950" />
+          <div
+            className="w-full h-full"
+            style={{
+              background: brandColor
+                ? `linear-gradient(135deg, ${brandColor}88, #052010)`
+                : undefined,
+            }}
+          >
+            {!brandColor && <div className="w-full h-full bg-linear-to-br from-emerald-900 to-emerald-950" />}
+          </div>
         )}
         <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
         <Link
@@ -298,7 +317,19 @@ export default function ComunidadePage() {
             <div className="min-w-0">
               <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">
                 {community.name}
+                {community.proActive && (
+                  <span className="ml-2 align-middle inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide bg-amber-400/15 text-amber-300 border border-amber-400/35">
+                    ✦ Clube PRO
+                  </span>
+                )}
               </h1>
+              {community.branding?.logoUrl && community.proActive && (
+                <img
+                  src={community.branding.logoUrl}
+                  alt=""
+                  className="h-8 w-8 rounded-lg object-cover mt-2 border border-white/20"
+                />
+              )}
             </div>
             {userId && community.adminId !== userId ? (
               <ReportBlockActions
@@ -332,10 +363,26 @@ export default function ComunidadePage() {
 
       <div className="px-4 pt-4 space-y-4">
         {isAdmin && (
-          <Link href={`/comunidades/${id}/configuracoes`}>
-            <JogaButton variant="ghost" size="sm" className="w-full">⚙️ Configurar comunidade</JogaButton>
-          </Link>
+          <div className="flex gap-2">
+            <Link href={`/comunidades/${id}/configuracoes`} className="flex-1">
+              <JogaButton variant="ghost" size="sm" className="w-full">⚙️ Configurar</JogaButton>
+            </Link>
+            {(orgPro || community.proActive) && (
+              <Link href={`/comunidades/${id}/dashboard`} className="flex-1">
+                <JogaButton
+                  variant="gold"
+                  size="sm"
+                  className="w-full"
+                  style={brandColor ? { background: brandColor } : undefined}
+                >
+                  📊 Dashboard
+                </JogaButton>
+              </Link>
+            )}
+          </div>
         )}
+
+        {hasAccess && <MensalistaCard community={community} userId={userId} />}
 
         {isAdmin && isMember && (
           <p className="text-emerald-400 text-xs font-semibold text-center mt-5 pt-1">

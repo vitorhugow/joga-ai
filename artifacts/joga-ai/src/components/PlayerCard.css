@@ -574,6 +574,77 @@
   opacity: 1;
 }
 
+.joga-new-player-card--skin-oceano {
+  --skin-text: #a5f3fc;
+  --skin-text-strong: #cffafe;
+  --skin-inner-border: rgba(34, 211, 238, 0.75);
+  --skin-glow-a: rgba(34, 211, 238, 0.26);
+  --skin-glow-b: rgba(14, 165, 233, 0.22);
+  --skin-glow-c: rgba(6, 182, 212, 0.20);
+  --skin-sheen: rgba(103, 232, 249, 0.18);
+  --skin-line: rgba(165, 243, 252, 0.85);
+  --skin-badge-a: #ecfeff;
+  --skin-badge-b: #0891b2;
+  --skin-badge-c: #164e63;
+  background: linear-gradient(155deg, #ecfeff 0%, #22d3ee 24%, #0369a1 50%, #0c4a6e 76%, #67e8f9 100%);
+  box-shadow: 0 0 34px rgba(34, 211, 238, 0.35);
+}
+
+.joga-new-player-card--skin-veneno {
+  --skin-text: #d9f99d;
+  --skin-text-strong: #ecfccb;
+  --skin-inner-border: rgba(163, 230, 53, 0.75);
+  --skin-glow-a: rgba(132, 204, 22, 0.26);
+  --skin-glow-b: rgba(101, 163, 13, 0.22);
+  --skin-glow-c: rgba(190, 242, 100, 0.18);
+  --skin-sheen: rgba(163, 230, 53, 0.18);
+  --skin-line: rgba(217, 249, 158, 0.85);
+  --skin-badge-a: #f7fee7;
+  --skin-badge-b: #65a30d;
+  --skin-badge-c: #365314;
+  background: linear-gradient(150deg, #ecfccb 0%, #a3e635 22%, #4d7c0f 48%, #1a2e05 74%, #bef264 100%);
+  box-shadow: 0 0 34px rgba(163, 230, 53, 0.38);
+}
+
+.joga-new-player-card--skin-real {
+  --skin-text: #e9d5ff;
+  --skin-text-strong: #fae8ff;
+  --skin-inner-border: rgba(192, 132, 252, 0.75);
+  --skin-glow-a: rgba(168, 85, 247, 0.26);
+  --skin-glow-b: rgba(251, 191, 36, 0.22);
+  --skin-glow-c: rgba(192, 132, 252, 0.20);
+  --skin-sheen: rgba(233, 213, 255, 0.18);
+  --skin-line: rgba(250, 232, 255, 0.85);
+  --skin-badge-a: #fef9c3;
+  --skin-badge-b: #a855f7;
+  --skin-badge-c: #581c87;
+  background: linear-gradient(145deg, #fef9c3 0%, #fbbf24 16%, #a855f7 42%, #581c87 70%, #e9d5ff 100%);
+  box-shadow: 0 0 34px rgba(168, 85, 247, 0.38);
+}
+
+.joga-new-player-card--skin-oceano .joga-new-card-inner::after {
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 110%, rgba(34, 211, 238, 0.30), transparent 70%),
+    repeating-linear-gradient(-12deg, rgba(165, 243, 252, 0.06) 0 2px, transparent 2px 18px);
+  opacity: 1;
+}
+
+.joga-new-player-card--skin-veneno .joga-new-card-inner::after {
+  background:
+    radial-gradient(circle at 20% 80%, rgba(163, 230, 53, 0.28), transparent 45%),
+    radial-gradient(circle at 80% 20%, rgba(190, 242, 100, 0.20), transparent 40%),
+    repeating-linear-gradient(45deg, rgba(132, 204, 22, 0.05) 0 3px, transparent 3px 12px);
+  opacity: 1;
+}
+
+.joga-new-player-card--skin-real .joga-new-card-inner::after {
+  background:
+    radial-gradient(ellipse 60% 30% at 50% 0%, rgba(251, 191, 36, 0.22), transparent 70%),
+    conic-gradient(from 200deg at 70% 60%, transparent 0 300deg, rgba(233, 213, 255, 0.14) 300deg 320deg, transparent 320deg),
+    radial-gradient(circle at 30% 40%, rgba(168, 85, 247, 0.14), transparent 48%);
+  opacity: 1;
+}
+
 /* Símbolos também nos cantos inferiores, mais presentes */
 .joga-new-card-skin-decor--bl { bottom: 13%; left: 8%; font-size: 5cqw; opacity: 0.75; }
 .joga-new-card-skin-decor--br { bottom: 13%; right: 8%; font-size: 5cqw; opacity: 0.75; }

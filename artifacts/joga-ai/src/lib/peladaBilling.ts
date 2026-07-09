@@ -110,19 +110,30 @@ export async function leavePeladaMatch(matchId: string): Promise<{ creditedCents
   return { creditedCents: result.data?.creditedCents ?? 0 };
 }
 
-export type PayPeladaResult = "balance" | "stripe" | "error";
+export type PayPeladaResult = "balance" | "stripe" | "mensalista" | "error";
 
-/** Jogador: paga a pelada (saldo primeiro, depois Stripe) */
+/** Jogador: paga a pelada (mensalista → saldo → Stripe) */
 export async function payPelada(matchId: string): Promise<PayPeladaResult> {
   if (!isFirebaseConfigured()) return "error";
 
   try {
-    const balanceFn = httpsCallable<{ matchId: string }, { paid: boolean }>(
+    const balanceFn = httpsCallable<
+      { matchId: string },
+      { paid: boolean; mensalista?: boolean }
+    >(
       getFunctions(app, "europe-west1"),
       "payPeladaWithBalance",
     );
     const balanceResult = await balanceFn({ matchId });
     if (balanceResult.data?.paid) {
+      if (balanceResult.data.mensalista) {
+        trackEvent("payment_started", { matchId, method: "mensalista" });
+        toast({
+          title: "Mensalista ✓",
+          description: "Presença confirmada — estás isento nesta comunidade.",
+        });
+        return "mensalista";
+      }
       trackEvent("payment_started", { matchId, method: "balance" });
       toast({
         title: "Pago com saldo ✓",
@@ -145,9 +156,17 @@ export async function payPelada(matchId: string): Promise<PayPeladaResult> {
   try {
     const fn = httpsCallable<
       { matchId: string; origin: string },
-      { url: string }
+      { url: string; mensalista?: boolean; paid?: boolean }
     >(getFunctions(app, "europe-west1"), "createPeladaCheckout");
     const result = await fn({ matchId, origin: window.location.origin });
+    if (result.data?.mensalista && result.data?.paid) {
+      trackEvent("payment_started", { matchId, method: "mensalista" });
+      toast({
+        title: "Mensalista ✓",
+        description: "Presença confirmada — estás isento nesta comunidade.",
+      });
+      return "mensalista";
+    }
     if (!result.data?.url) throw new Error("sem URL");
     trackEvent("payment_started", { matchId, method: "card" });
     openStripeUrl(result.data.url);

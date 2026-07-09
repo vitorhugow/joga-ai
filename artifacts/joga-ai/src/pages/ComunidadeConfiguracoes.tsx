@@ -28,6 +28,11 @@ import {
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { isOrganizerProForCommunity } from "@/lib/entitlements";
+import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
+import { saveCommunityClubSettings } from "@/lib/mensalistaRepository";
 
 const GAME_TYPES = [
   { value: "fut7", label: "Fut 7" },
@@ -54,6 +59,16 @@ export default function ComunidadeConfiguracoes() {
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { profile } = useUserProfile();
+  const [proDialogOpen, setProDialogOpen] = useState(false);
+  const [mensalistaEnabled, setMensalistaEnabled] = useState(false);
+  const [mensalistaPrice, setMensalistaPrice] = useState("10");
+  const [mensalistaSlots, setMensalistaSlots] = useState("");
+  const [openToExternal, setOpenToExternal] = useState(false);
+  const [brandColor, setBrandColor] = useState("#16a34a");
+  const [clubSaving, setClubSaving] = useState(false);
+
+  const orgPro = isOrganizerProForCommunity(profile?.entitlements, id);
 
   const isAdmin = community?.adminId === userId;
 
@@ -67,6 +82,15 @@ export default function ComunidadeConfiguracoes() {
       setGameType(c.gameType);
       setIsPrivate(c.isPrivate);
       setCoverImage(c.coverImage ?? "");
+      setMensalistaEnabled(c.mensalista?.enabled === true);
+      setMensalistaPrice(
+        c.mensalista?.priceCents ? String(c.mensalista.priceCents / 100) : "10",
+      );
+      setMensalistaSlots(
+        c.mensalista?.maxSlots != null ? String(c.mensalista.maxSlots) : "",
+      );
+      setOpenToExternal(c.openToExternal === true);
+      setBrandColor(c.branding?.primaryColor ?? "#16a34a");
     });
     loadCommunityMembers(id).then(setMembers);
     loadPendingJoinRequests(id).then(setPending);
@@ -256,6 +280,118 @@ export default function ComunidadeConfiguracoes() {
           </label>
           <JogaButton type="submit" variant="primary" disabled={saving}>{saving ? "A guardar…" : "Guardar"}</JogaButton>
         </form>
+      </JogaCard>
+
+      <JogaCard variant="arena" padding="md">
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="font-display font-black text-white text-lg">Clube PRO</h2>
+          <ProFeatureBadge tier="organizer" />
+        </div>
+        {!orgPro && community.proActive !== true ? (
+          <div className="text-center py-4">
+            <p className="text-white/50 text-sm mb-3">Mensalistas, peladas públicas e branding do clube.</p>
+            <JogaButton variant="gold" size="sm" onClick={() => setProDialogOpen(true)}>
+              Desbloquear Clube PRO
+            </JogaButton>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <label className="flex items-center gap-2 text-sm text-white/70">
+              <input
+                type="checkbox"
+                checked={mensalistaEnabled}
+                onChange={(e) => setMensalistaEnabled(e.target.checked)}
+                className="accent-emerald-500"
+              />
+              Activar passe mensal (mensalistas)
+            </label>
+            {mensalistaEnabled && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-white/40">Preço/mês (€)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    step={0.5}
+                    value={mensalistaPrice}
+                    onChange={(e) => setMensalistaPrice(e.target.value)}
+                    className="mt-1 w-full rounded-xl px-3 py-2 bg-white/6 border border-white/10 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-white/40">Vagas (opcional)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={mensalistaSlots}
+                    onChange={(e) => setMensalistaSlots(e.target.value)}
+                    placeholder="∞"
+                    className="mt-1 w-full rounded-xl px-3 py-2 bg-white/6 border border-white/10 text-white text-sm"
+                  />
+                </div>
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm text-white/70">
+              <input
+                type="checkbox"
+                checked={openToExternal}
+                onChange={(e) => setOpenToExternal(e.target.checked)}
+                className="accent-emerald-500"
+              />
+              Peladas visíveis no Encontrar Jogos (não-membros)
+            </label>
+            <div>
+              <label className="text-[10px] font-bold uppercase text-white/40">Cor do clube</label>
+              <input
+                type="color"
+                value={brandColor}
+                onChange={(e) => setBrandColor(e.target.value)}
+                className="mt-1 h-10 w-full rounded-xl cursor-pointer"
+              />
+            </div>
+            <JogaButton
+              variant="primary"
+              size="sm"
+              disabled={clubSaving}
+              onClick={() => void (async () => {
+                setClubSaving(true);
+                try {
+                  const priceCents = Math.round(parseFloat(mensalistaPrice.replace(",", ".")) * 100);
+                  await saveCommunityClubSettings({
+                    communityId: id,
+                    mensalista: {
+                      enabled: mensalistaEnabled,
+                      priceCents: mensalistaEnabled ? priceCents : 0,
+                      maxSlots: mensalistaSlots ? Number(mensalistaSlots) : null,
+                    },
+                    openToExternal,
+                    branding: { primaryColor: brandColor },
+                  });
+                  const refreshed = await loadCommunity(id, userId);
+                  if (refreshed) setCommunity(refreshed);
+                  toast({ title: "Definições Clube PRO guardadas" });
+                } catch (err) {
+                  toast({
+                    title: "Erro ao guardar",
+                    description: err instanceof Error ? err.message : "Tenta novamente.",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setClubSaving(false);
+                }
+              })()}
+            >
+              {clubSaving ? "A guardar…" : "Guardar Clube PRO"}
+            </JogaButton>
+          </div>
+        )}
+        <ProUpgradeDialog
+          open={proDialogOpen}
+          onOpenChange={setProDialogOpen}
+          tier="organizer"
+          featureTitle="Clube PRO"
+          featureDescription="Mensalistas, peladas públicas e branding exclusivo."
+        />
       </JogaCard>
 
       {pending.length > 0 && (

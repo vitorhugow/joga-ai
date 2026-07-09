@@ -1,4 +1,4 @@
-import { Crown, Sparkles, Share2, BarChart3, Star, Shield, Check } from "lucide-react";
+import { Crown, Sparkles, Share2, BarChart3, Star, History, TrendingUp, Check } from "lucide-react";
 import { startCheckout, openBillingPortal, type BillingInterval } from "@/lib/billing";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,12 +15,12 @@ import { ProCheckoutSuccessDialog } from "@/components/ProCheckoutSuccessDialog"
 import { toast } from "@/hooks/use-toast";
 
 const benefits = [
-  { icon: Star,     label: "Cartas Premium",       desc: "Skins exclusivas ouro, prata, diamante e élite" },
-  { icon: Share2,   label: "Exportar para Story",   desc: "Partilha a tua carta no Instagram com estilo" },
-  { icon: BarChart3,label: "Estatísticas Avançadas",desc: "Análise detalhada do teu desempenho" },
-  { icon: Crown,    label: "Perfil em Destaque",    desc: "Apareces em primeiro nos rankings e buscas" },
-  { icon: Shield,   label: "Prioridade em Jogos",   desc: "Garantia de vaga nos jogos públicos" },
-  { icon: Sparkles, label: "Título Personalizado",  desc: '"Matador", "Maestro", "Muralha" e mais' },
+  { icon: Star,      label: "Skins exclusivas",        desc: "Fogo, Raio e Diamante para a tua carta" },
+  { icon: BarChart3, label: "Stats avançadas",         desc: "Compara-te com a média da pelada pós-jogo" },
+  { icon: History,   label: "Histórico completo",      desc: "Todas as partidas com filtros por comunidade" },
+  { icon: TrendingUp,label: "Evolução ilimitada",      desc: "Sem limite de 90 dias no gráfico de evolução" },
+  { icon: Sparkles,  label: "Título e Instagram",      desc: "Alcunha na carta e link do Instagram no perfil" },
+  { icon: Share2,    label: "Carta em HD",             desc: "Download da carta em alta resolução (4x)" },
 ];
 
 const premiumSkins = [
@@ -40,11 +40,12 @@ const planFeatures = {
     "Inclui tudo do PRO Jogador",
   ],
   jogador: [
-    "Skins premium da carta: Fogo, Raio e Diamante",
-    "Histórico de evolução completo (grátis: últimos 3 meses)",
-    "Instagram visível no teu perfil",
-    "Download da carta em alta resolução (4x)",
-    "Estatísticas avançadas — mais por vir",
+    "Skins de carta exclusivas: Fogo, Raio e Diamante",
+    "Estatísticas avançadas pós-jogo",
+    "Histórico completo de partidas com filtros",
+    "Evolução sem limite de 90 dias",
+    "Título/alcunha e campo Instagram na carta",
+    "Download da carta em HD (4x)",
   ],
 };
 

@@ -53,6 +53,19 @@ export type Community = {
   memberCount: number;
   coverImage?: string;
   adminId?: string;
+  proActive?: boolean;
+  openToExternal?: boolean;
+  mensalista?: {
+    enabled: boolean;
+    priceCents: number;
+    maxSlots?: number | null;
+  };
+  branding?: {
+    primaryColor?: string;
+    logoUrl?: string;
+    bannerUrl?: string;
+  };
+  createdAt?: string;
 };
 
 export type MatchListing = {
@@ -153,9 +166,24 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
         memberCount: Number(data.memberCount ?? 1),
         coverImage: data.coverImage,
         adminId: data.adminId,
+        proActive: data.proActive === true,
+        openToExternal: data.openToExternal === true,
+        mensalista: data.mensalista,
+        branding: data.branding,
+        createdAt: data.createdAt && typeof data.createdAt.toDate === "function"
+          ? data.createdAt.toDate().toISOString()
+          : undefined,
         isMember: memberIds.has(d.id) || (userId ? data.adminId === userId : false),
         joinPending: pendingIds.has(d.id),
       } as Community & { joinPending?: boolean };
+    }).sort((a, b) => {
+      const proDiff = Number(b.proActive) - Number(a.proActive);
+      if (proDiff !== 0) return proDiff;
+      const countDiff = b.memberCount - a.memberCount;
+      if (countDiff !== 0) return countDiff;
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
     });
   } catch (err) {
     console.warn("[communityRepository] loadCommunities:", err);
@@ -168,6 +196,8 @@ function mapCommunityDoc(
   data: Record<string, unknown>,
   isMember = true,
 ): Community {
+  const mensalistaRaw = data.mensalista as Record<string, unknown> | undefined;
+  const brandingRaw = data.branding as Record<string, unknown> | undefined;
   return {
     id,
     name: String(data.name ?? "Comunidade"),
@@ -178,6 +208,26 @@ function mapCommunityDoc(
     coverImage: data.coverImage ? String(data.coverImage) : undefined,
     adminId: data.adminId ? String(data.adminId) : undefined,
     isMember,
+    proActive: data.proActive === true,
+    openToExternal: data.openToExternal === true,
+    mensalista: mensalistaRaw
+      ? {
+          enabled: mensalistaRaw.enabled === true,
+          priceCents: Number(mensalistaRaw.priceCents) || 0,
+          maxSlots:
+            mensalistaRaw.maxSlots != null ? Number(mensalistaRaw.maxSlots) : null,
+        }
+      : undefined,
+    branding: brandingRaw
+      ? {
+          primaryColor: brandingRaw.primaryColor ? String(brandingRaw.primaryColor) : undefined,
+          logoUrl: brandingRaw.logoUrl ? String(brandingRaw.logoUrl) : undefined,
+          bannerUrl: brandingRaw.bannerUrl ? String(brandingRaw.bannerUrl) : undefined,
+        }
+      : undefined,
+    createdAt: data.createdAt && typeof (data.createdAt as { toDate?: () => Date }).toDate === "function"
+      ? (data.createdAt as { toDate: () => Date }).toDate().toISOString()
+      : undefined,
   };
 }
 
@@ -312,18 +362,13 @@ export async function loadCommunity(
     const isMemberDirect = userId ? await isCommunityMember(snap.id, userId) : false;
 
     return {
-      id: snap.id,
-      name: data.name ?? "Comunidade",
-      city: data.city ?? "",
-      gameType: data.gameType ?? "fut7",
-      isPrivate: Boolean(data.isPrivate),
-      memberCount: Number(data.memberCount ?? 1),
-      coverImage: data.coverImage,
-      adminId: data.adminId,
-      isMember:
+      ...mapCommunityDoc(
+        snap.id,
+        data as Record<string, unknown>,
         isMemberDirect ||
-        memberIds.has(snap.id) ||
-        (userId ? data.adminId === userId : false),
+          memberIds.has(snap.id) ||
+          (userId ? data.adminId === userId : false),
+      ),
       joinPending: pendingIds.has(snap.id),
     };
   } catch (err) {
@@ -626,8 +671,35 @@ export async function deleteCommunity(communityId: string): Promise<void> {
   await batch.commit();
 }
 
-function isOpenPublicMatch(m: MatchListing): boolean {
-  return isListedInPublicBrowse(m);
+function isOpenPublicMatch(m: MatchListing, communityFlags?: Map<string, { openToExternal: boolean; proActive: boolean }>): boolean {
+  const flags = m.communityId ? communityFlags?.get(m.communityId) : undefined;
+  return isListedInPublicBrowse({
+    accessMode: m.accessMode,
+    openToExternal: m.openToExternal,
+    communityId: m.communityId,
+    communityOpenToExternal: flags?.openToExternal,
+    communityProActive: flags?.proActive,
+    status: m.status,
+  });
+}
+
+async function loadCommunityFlagsForMatches(
+  matches: MatchListing[],
+): Promise<Map<string, { openToExternal: boolean; proActive: boolean }>> {
+  const map = new Map<string, { openToExternal: boolean; proActive: boolean }>();
+  const ids = [...new Set(matches.map((m) => m.communityId).filter(Boolean))] as string[];
+  await Promise.all(
+    ids.map(async (id) => {
+      const c = await loadCommunity(id);
+      if (c) {
+        map.set(id, {
+          openToExternal: c.openToExternal === true,
+          proActive: c.proActive === true,
+        });
+      }
+    }),
+  );
+  return map;
 }
 
 /**
@@ -642,10 +714,10 @@ function isOpenPublicMatch(m: MatchListing): boolean {
  * aberta mesmo depois de terminada/votada por todos.
  */
 
-/** Partidas públicas (Firestore) — exclui peladas de comunidade */
+/** Partidas públicas (Firestore) — inclui peladas de comunidade abertas */
 export async function loadAvailableMatches(limitCount = 10): Promise<MatchListing[]> {
   if (!isFirebaseConfigured()) {
-    return readLocalMatchListings().filter(isOpenPublicMatch).slice(0, limitCount);
+    return readLocalMatchListings().filter((m) => isOpenPublicMatch(m)).slice(0, limitCount);
   }
 
   try {
@@ -653,18 +725,24 @@ export async function loadAvailableMatches(limitCount = 10): Promise<MatchListin
       collection(db, "matches"),
       where("status", "in", [...OPEN_MATCH_STATUSES]),
       orderBy("createdAt", "desc"),
-      limit(limitCount * 3),
+      limit(limitCount * 4),
     );
     const snap = await getDocs(q);
 
-    const remote = snap.docs
-      .map((d) => mapMatchDoc(d.id, d.data()))
-      .filter(isOpenPublicMatch);
+    const mapped = snap.docs.map((d) => mapMatchDoc(d.id, d.data()));
+    const flags = await loadCommunityFlagsForMatches(mapped);
+    const remote = mapped
+      .filter((m) => isOpenPublicMatch(m, flags))
+      .sort((a, b) => {
+        const proDiff = Number(b.proBadge) - Number(a.proBadge);
+        if (proDiff !== 0) return proDiff;
+        return 0;
+      });
 
     return remote.slice(0, limitCount);
   } catch (err) {
     console.warn("[communityRepository] loadAvailableMatches:", err);
-    return readLocalMatchListings().filter(isOpenPublicMatch).slice(0, limitCount);
+    return readLocalMatchListings().filter((m) => isOpenPublicMatch(m)).slice(0, limitCount);
   }
 }
 

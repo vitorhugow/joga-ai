@@ -32,6 +32,7 @@ const Evolucao = lazyRoute(() => import("@/pages/Evolucao"));
 const Ranking = lazyRoute(() => import("@/pages/Ranking"));
 const Login = lazyRoute(() => import("@/pages/Login"));
 const ComunidadeConfiguracoes = lazyRoute(() => import("@/pages/ComunidadeConfiguracoes"));
+const ClubeDashboard = lazyRoute(() => import("@/pages/ClubeDashboard"));
 const CriarComunidade = lazyRoute(() => import("@/pages/CriarComunidade"));
 const Privacidade = lazyRoute(() => import("@/pages/Privacidade"));
 const Termos = lazyRoute(() => import("@/pages/Termos"));
@@ -68,6 +69,7 @@ function AnimatedRoutes() {
             <Route path="/jogador/:id" component={Perfil} />
             <Route path="/comunidades/criar" component={CriarComunidade} />
             <Route path="/comunidades/:id/configuracoes" component={ComunidadeConfiguracoes} />
+            <Route path="/comunidades/:id/dashboard" component={ClubeDashboard} />
             <Route path="/comunidades" component={Comunidades} />
             <Route path="/comunidades/:id" component={ComunidadePage} />
             <Route path="/criar-partida" component={CriarPartida} />

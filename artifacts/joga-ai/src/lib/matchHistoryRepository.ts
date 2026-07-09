@@ -57,6 +57,9 @@ export type UserMatchHistoryEntry = {
   voteEvolutionApplied?: boolean;
 };
 
+/** Limite de partidas visíveis no Perfil sem PRO Jogador (gate de leitura apenas). */
+export const FREE_HISTORY_LIMIT = 10;
+
 const LOCAL_HISTORY_PREFIX = "joga-ai-match-history-v1";
 
 function localHistoryKey(userId: string) {

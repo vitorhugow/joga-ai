@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isCommunityAdmin(communityId) {
+      return isSignedIn()
+        && firestore.get(/databases/(default)/documents/communities/$(communityId)).data.adminId == request.auth.uid;
+    }
+
+    function isValidBrandingImage() {
+      return request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType in ['image/png', 'image/jpeg', 'image/webp'];
+    }
+
+    match /communities/{communityId}/branding/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isCommunityAdmin(communityId) && isValidBrandingImage();
+      allow delete: if isCommunityAdmin(communityId);
+    }
+  }
+}

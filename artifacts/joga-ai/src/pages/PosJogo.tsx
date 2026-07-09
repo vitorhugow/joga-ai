@@ -73,6 +73,7 @@ import { trackEvent } from "@/lib/analytics";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { SponsorSlot } from "@/components/SponsorSlot";
+import { MatchStatsSections } from "@/components/MatchStatsSections";
 import { generateResultImage } from "@/lib/resultImage";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 
@@ -1022,6 +1023,15 @@ export default function PosJogo() {
           <EvolutionGainsSummary items={evolutionItems} />
         </div>
 
+        <MatchStatsSections
+          players={players}
+          events={allEvents}
+          currentPlayer={currentPlayer}
+          profile={profile}
+          matchId={data?.matchId ?? matchId}
+          receivedRating={receivedRating}
+        />
+
         <div
           ref={evolutionCardRef}
           className="fixed left-0 top-0 -z-50 opacity-0 pointer-events-none w-[340px]"
@@ -1358,6 +1368,15 @@ export default function PosJogo() {
           </div>
         ))}
       </section>
+
+      <MatchStatsSections
+        players={players}
+        events={allEvents}
+        currentPlayer={currentPlayer}
+        profile={profile}
+        matchId={data?.matchId ?? matchId}
+        receivedRating={receivedRating}
+      />
 
       {editMode && mustAuditBeforeVote && (
         <section className="mt-4 rounded-3xl p-4" style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.20)" }}>

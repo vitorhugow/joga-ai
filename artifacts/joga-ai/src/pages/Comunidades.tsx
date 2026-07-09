@@ -45,6 +45,7 @@ function CommunityCard({
   gameType,
   coverImage,
   joined,
+  proActive,
 }: {
   id: string;
   name: string;
@@ -53,6 +54,7 @@ function CommunityCard({
   gameType: string;
   coverImage?: string;
   joined?: boolean;
+  proActive?: boolean;
 }) {
   const accent = gameTypeAccent[gameType] || { color: "#9ca3af", bg: "rgba(156,163,175,0.2)" };
   const abbr = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -86,7 +88,12 @@ function CommunityCard({
               {abbr}
             </div>
             <div>
-              <h3 className="font-display font-black text-white text-base leading-tight drop-shadow">{name}</h3>
+              <h3 className="font-display font-black text-white text-base leading-tight drop-shadow">
+                {name}
+                {proActive && (
+                  <span className="ml-1.5 text-[9px] font-black uppercase text-amber-300">✦ PRO</span>
+                )}
+              </h3>
               <p className="text-white/55 text-xs font-medium">📍 {city}</p>
             </div>
           </div>

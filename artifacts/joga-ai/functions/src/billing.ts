@@ -24,6 +24,7 @@ import {
   notifyPromotedFromWaitlist,
   notifyUser,
 } from "./notify";
+import { isUserMensalistaActive, scheduleMensalistaCancellations } from "./mensalistas";
 import { callableBase, REGION } from "./callableOptions";
 import { assertRateLimit } from "./rateLimit";
 import { stripeSecretKey, createStripeClient } from "./stripeClient";
@@ -346,6 +347,7 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
         },
         { merge: true },
       );
+      await scheduleMensalistaCancellations(communityId, "pro_revoked");
     }
   }
 
@@ -647,6 +649,11 @@ export const createPeladaCheckout = onCall(
     if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
 
     const db = getFirestore();
+
+    if (await tryApplyMensalistaPeladaPayment(db, matchId, uid)) {
+      return { url: "", mensalista: true, paid: true };
+    }
+
     const matchSnap = await db.doc(`matches/${matchId}`).get();
     const match = matchSnap.data();
     if (!match) throw new HttpsError("not-found", "Pelada não encontrada.");
@@ -735,11 +742,12 @@ type PeladaPayInput = {
   sessionId: string;
   paymentIntentId: string;
   amountCents: number;
-  paidVia: "app" | "balance";
+  paidVia: "app" | "balance" | "mensalista";
   stripeTransferId?: string;
   organizerPriceCents?: number;
   releasedToOrganizer?: boolean;
   organizerAccountId?: string;
+  method?: "mensalista";
 };
 
 function applyPeladaPlayerPaidInTx(
@@ -770,6 +778,7 @@ function applyPeladaPlayerPaidInTx(
       amountCents: payment.amountCents,
       paidAt: new Date().toISOString(),
       paidVia: payment.paidVia,
+      ...(payment.method ? { method: payment.method } : {}),
       ...(payment.stripeTransferId ? { stripeTransferId: payment.stripeTransferId } : {}),
       ...(payment.organizerPriceCents != null
         ? { organizerPriceCents: payment.organizerPriceCents }
@@ -777,6 +786,22 @@ function applyPeladaPlayerPaidInTx(
       releasedToOrganizer: payment.releasedToOrganizer === true,
       ...(payment.organizerAccountId ? { organizerAccountId: payment.organizerAccountId } : {}),
     });
+  } else if (payment.paidVia === "mensalista" && payment.method === "mensalista") {
+    const already = peladaPayments.some(
+      (p) => p.userId === uid && p.method === "mensalista" && p.paidVia === "mensalista",
+    );
+    if (!already) {
+      peladaPayments.push({
+        userId: uid,
+        sessionId: "",
+        paymentIntentId: `mensalista_${uid}_${Date.now()}`,
+        amountCents: 0,
+        paidAt: new Date().toISOString(),
+        paidVia: "mensalista",
+        method: "mensalista",
+        releasedToOrganizer: true,
+      });
+    }
   }
 
   const paidAt = new Date().toISOString();
@@ -924,6 +949,42 @@ function assertPeladaPayable(
   }
 
   return { priceCents, totalCents: priceCents + PLAYER_FEE_CENTS };
+}
+
+/** Marca jogador como pago via mensalista (sem cobrança avulsa). */
+async function tryApplyMensalistaPeladaPayment(
+  db: Firestore,
+  matchId: string,
+  uid: string,
+): Promise<boolean> {
+  const matchSnap = await db.doc(`matches/${matchId}`).get();
+  const match = matchSnap.data();
+  if (!match) return false;
+
+  const communityId = String(match.communityId ?? "");
+  if (!communityId) return false;
+
+  const isMensalista = await isUserMensalistaActive(db, communityId, uid);
+  if (!isMensalista) return false;
+
+  const userSnap = await db.doc(`users/${uid}`).get();
+  const user = userSnap.data() ?? {};
+
+  await db.runTransaction(async (tx) => {
+    const ref = db.doc(`matches/${matchId}`);
+    const snap = await tx.get(ref);
+    applyPeladaPlayerPaidInTx(tx, ref, snap, uid, user, {
+      sessionId: "",
+      paymentIntentId: `mensalista_${uid}_${Date.now()}`,
+      amountCents: 0,
+      paidVia: "mensalista",
+      method: "mensalista",
+      releasedToOrganizer: true,
+    });
+  });
+
+  console.log(`[mensalista] pelada ${matchId}: ${uid} isento (passe mensal).`);
+  return true;
 }
 
 async function loadOrganizerStripeAccount(db: Firestore, organizerId: string): Promise<string> {
@@ -1194,6 +1255,11 @@ export const payPeladaWithBalance = onCall(
     if (!matchId) throw new HttpsError("invalid-argument", "matchId em falta.");
 
     const db = getFirestore();
+
+    if (await tryApplyMensalistaPeladaPayment(db, matchId, uid)) {
+      return { paid: true, mensalista: true, balanceUsedCents: 0, remainingBalanceCents: 0 };
+    }
+
     const matchRef = db.doc(`matches/${matchId}`);
     const userRef = db.doc(`users/${uid}`);
     const matchSnap = await matchRef.get();
@@ -1485,6 +1551,7 @@ async function cancelPeladaWithBalanceCreditsHandler(
   for (let i = 0; i < payments.length; i++) {
     const payment = payments[i];
     if (payment.refunded === true || payment.creditedToBalance === true) continue;
+    if (payment.paidVia === "mensalista" || payment.method === "mensalista") continue;
 
     const payerId = String(payment.userId ?? "");
     const priceCents = peladaPriceFromPayment(payment, match.price);

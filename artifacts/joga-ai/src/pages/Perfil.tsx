@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Share2, TrendingUp, ChevronRight, ChevronLeft, Shield, LogOut, Link2 } from "lucide-react";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link, useRoute } from "wouter";
@@ -13,7 +13,8 @@ import { ProfilePeladaSaldoCard } from "@/components/ProfilePeladaSaldoCard";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
-import { loadUserMatchHistory, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
+import { loadUserMatchHistory, FREE_HISTORY_LIMIT, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
+import { ProLockedOverlay } from "@/components/ProLockedOverlay";
 import { calculateOverall } from "@/lib/cardUtils";
 import { useUserId, useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
@@ -31,6 +32,13 @@ import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 import { DeleteAccountSection } from "@/components/DeleteAccountSection";
 import { ReportBlockActions } from "@/components/ReportBlockActions";
 import { loadBlockedIds } from "@/lib/blockRepository";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /* ─── Pitch SVG texture ─── */
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
@@ -117,6 +125,23 @@ function BadgeTile({ b }: { b: BadgeItem }) {
       <p className="font-bold text-white/85 text-[10px] text-center leading-tight">{b.name}</p>
       <div className="h-1 w-8 rounded-full" style={{ background: grad }} />
     </div>
+  );
+}
+
+/* ─── Match history row ─── */
+function MatchHistoryRow({ m }: { m: UserMatchHistoryEntry }) {
+  return (
+    <JogaCard variant="arena" className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-white font-semibold text-sm truncate">{m.title}</p>
+        <p className="text-white/40 text-xs mt-0.5">
+          {new Date(m.date).toLocaleDateString("pt-PT")} · {m.goals}G · {m.assists}A
+        </p>
+      </div>
+      <span className="font-display font-black text-emerald-400 text-lg shrink-0">
+        {m.rating > 0 ? m.rating.toFixed(1) : "—"}
+      </span>
+    </JogaCard>
   );
 }
 
@@ -207,6 +232,8 @@ export default function Perfil() {
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [targetBlocked, setTargetBlocked] = useState(false);
   const [matchHistory, setMatchHistory] = useState<UserMatchHistoryEntry[]>([]);
+  const [historyCommunityFilter, setHistoryCommunityFilter] = useState("all");
+  const [historyPeriodFilter, setHistoryPeriodFilter] = useState<"30d" | "90d" | "season" | "all">("all");
   const cardExportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -226,6 +253,37 @@ export default function Perfil() {
   const [skinOverride, setSkinOverride] = useState<string | null>(null);
   const player = profileToPlayerCard(activeProfile);
   const playerPro = hasPlayerPro(activeProfile?.entitlements);
+
+  const historyCommunityOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of matchHistory) {
+      if (m.communityId) ids.add(m.communityId);
+    }
+    return [...ids].map((id) => {
+      const name = myCommunities.find((c) => c.id === id)?.name ?? id.slice(0, 8);
+      return { id, name };
+    });
+  }, [matchHistory, myCommunities]);
+
+  const proFilteredHistory = useMemo(() => {
+    if (!playerPro) return matchHistory;
+    const now = Date.now();
+    const seasonStart = new Date(new Date().getFullYear(), 0, 1).getTime();
+    return matchHistory.filter((m) => {
+      const t = new Date(m.date).getTime();
+      if (historyCommunityFilter !== "all" && m.communityId !== historyCommunityFilter) {
+        return false;
+      }
+      if (historyPeriodFilter === "30d") return now - t <= 30 * 24 * 60 * 60 * 1000;
+      if (historyPeriodFilter === "90d") return now - t <= 90 * 24 * 60 * 60 * 1000;
+      if (historyPeriodFilter === "season") return t >= seasonStart;
+      return true;
+    });
+  }, [matchHistory, playerPro, historyCommunityFilter, historyPeriodFilter]);
+
+  const visibleFreeHistory = matchHistory.slice(0, FREE_HISTORY_LIMIT);
+  const lockedPreviewHistory = matchHistory.slice(FREE_HISTORY_LIMIT, FREE_HISTORY_LIMIT + 3);
+  const hiddenHistoryCount = Math.max(0, matchHistory.length - FREE_HISTORY_LIMIT);
   const orgPro = isOrganizerPro(activeProfile?.entitlements);
 
   const overall = calculateOverall(player.attributes);
@@ -760,22 +818,64 @@ export default function Perfil() {
           <h2 className="font-display font-black text-white text-lg mb-3">Peladas anteriores</h2>
           {matchHistory.length === 0 ? (
             <p className="text-white/40 text-sm">Ainda não jogaste peladas registadas.</p>
+          ) : playerPro ? (
+            <>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {historyCommunityOptions.length > 0 && (
+                  <Select value={historyCommunityFilter} onValueChange={setHistoryCommunityFilter}>
+                    <SelectTrigger className="w-[160px] h-9 bg-white/5 border-white/10 text-white text-xs">
+                      <SelectValue placeholder="Comunidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as comunidades</SelectItem>
+                      {historyCommunityOptions.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Select
+                  value={historyPeriodFilter}
+                  onValueChange={(v) => setHistoryPeriodFilter(v as typeof historyPeriodFilter)}
+                >
+                  <SelectTrigger className="w-[140px] h-9 bg-white/5 border-white/10 text-white text-xs">
+                    <SelectValue placeholder="Período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30d">Últimos 30 dias</SelectItem>
+                    <SelectItem value="90d">Últimos 90 dias</SelectItem>
+                    <SelectItem value="season">Época atual</SelectItem>
+                    <SelectItem value="all">Tudo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {proFilteredHistory.length === 0 ? (
+                <p className="text-white/40 text-sm">Nenhuma partida com estes filtros.</p>
+              ) : (
+                <div className="space-y-2">
+                  {proFilteredHistory.map((m) => <MatchHistoryRow key={m.matchId} m={m} />)}
+                </div>
+              )}
+            </>
           ) : (
-            <div className="space-y-2">
-              {matchHistory.slice(0, 5).map((m) => (
-                <JogaCard key={m.matchId} variant="arena" className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-white font-semibold text-sm truncate">{m.title}</p>
-                    <p className="text-white/40 text-xs mt-0.5">
-                      {new Date(m.date).toLocaleDateString("pt-PT")} · {m.goals}G · {m.assists}A
-                    </p>
-                  </div>
-                  <span className="font-display font-black text-emerald-400 text-lg shrink-0">
-                    {m.rating > 0 ? m.rating.toFixed(1) : "—"}
-                  </span>
-                </JogaCard>
-              ))}
-            </div>
+            <>
+              <div className="space-y-2">
+                {visibleFreeHistory.map((m) => <MatchHistoryRow key={m.matchId} m={m} />)}
+              </div>
+              {hiddenHistoryCount > 0 && (
+                <div className="mt-3">
+                  <ProLockedOverlay
+                    feature="full_match_history"
+                    title="Histórico completo"
+                    subtitle={`Tens mais ${hiddenHistoryCount} partidas no teu arquivo.`}
+                  >
+                    <div className="space-y-2">
+                      {lockedPreviewHistory.map((m) => <MatchHistoryRow key={m.matchId} m={m} />)}
+                    </div>
+                  </ProLockedOverlay>
+                </div>
+              )}
+            </>
           )}
         </div>
         )}

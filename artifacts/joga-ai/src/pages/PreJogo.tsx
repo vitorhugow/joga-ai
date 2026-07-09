@@ -28,6 +28,7 @@ import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding
 import { formatCentsEuro, peladaCheckoutTotalCents, peladaPriceCents } from "@/lib/peladaWallet";
 import { createIncompleteSeedProfile, getWhatsappUrl, loadUserProfile } from "@/lib/userRepository";
 import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
+import { loadMensalistaStatus } from "@/lib/mensalistaRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import {
   confirmPresence,
@@ -401,10 +402,21 @@ export default function PreJogo() {
   const [organizerCaixaReady, setOrganizerCaixaReady] = useState(false);
   const [organizerWhatsapp, setOrganizerWhatsapp] = useState<string | null>(null);
   const [paidUserIds, setPaidUserIds] = useState<string[]>([]);
+  const [mensalistaActive, setMensalistaActive] = useState(false);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
   );
+
+  useEffect(() => {
+    if (!matchCommunityId || !userId) {
+      setMensalistaActive(false);
+      return;
+    }
+    void loadMensalistaStatus(matchCommunityId, userId).then((s) => {
+      setMensalistaActive(s?.active === true);
+    });
+  }, [matchCommunityId, userId]);
 
   useEffect(() => {
     const details = loadMatchDetails(matchId);
@@ -1338,7 +1350,7 @@ export default function PreJogo() {
       setRsvpBusy(true);
       try {
         const result = await payPelada(matchId);
-        if (result === "balance") {
+        if (result === "balance" || result === "mensalista") {
           trackEvent("match_joined", { matchId });
           triggerPushSoftPrompt();
           void refresh();
@@ -1611,16 +1623,23 @@ export default function PreJogo() {
                     autoFocus
                   />
                 )}
+                {mensalistaActive && paymentsOn && (
+                  <p className="text-cyan-200/90 text-xs mt-2 font-semibold">
+                    ✓ Mensalista — isento de pagamento nesta comunidade
+                  </p>
+                )}
                 <JogaButton
                   variant="primary"
                   size="md"
                   className="mt-3 w-full"
-                  disabled={rsvpBusy || (paymentsOn && !organizerCaixaReady)}
+                  disabled={rsvpBusy || (paymentsOn && !organizerCaixaReady && !mensalistaActive)}
                   onClick={handleRsvpClick}
                   data-testid={paymentsOn ? "button-pay-pelada" : "button-confirm-rsvp"}
                 >
                   {paymentsOn
-                    ? canPayWithSaldo
+                    ? mensalistaActive
+                      ? "✓ Mensalista — confirmar presença"
+                      : canPayWithSaldo
                       ? `💰 Usar saldo (${formatCentsEuro(peladaPriceOnlyCents ?? 0)}) e confirmar presença`
                       : `💳 Pagar ${formatMatchPriceAmount(matchDetails?.price) ?? ""} e confirmar presença`
                     : "Confirmar presença"}

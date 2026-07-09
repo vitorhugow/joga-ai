@@ -23,8 +23,15 @@ export function isListedInPublicBrowse(input: {
   accessMode?: MatchAccessMode;
   openToExternal?: boolean;
   communityId?: string;
+  communityOpenToExternal?: boolean;
+  communityProActive?: boolean;
   status?: string;
 }): boolean {
+  if (input.communityId) {
+    if (input.communityOpenToExternal && input.communityProActive) {
+      return !input.status || ["configurando", "ao_vivo", "aguardando_auditoria", "auditada"].includes(input.status);
+    }
+  }
   const mode = resolveAccessMode(input);
   if (mode !== "public") return false;
   if (input.communityId) return true;

@@ -118,7 +118,10 @@ async function releaseRatingForUser(
   if (rating > 0) {
     await applyDelayedRatingToProfile(userId, rating, matchId);
     await checkAndUnlockBadges(userId, { lastRating: rating });
-    await addNotification(userId, ratingReleasedNotification(title, rating));
+    await addNotification(userId, {
+      id: `evo-${matchId}`,
+      ...ratingReleasedNotification(title, rating),
+    });
   }
 
   if (entry) {
@@ -200,7 +203,10 @@ export async function releaseMatchRatings(
           player.rating,
         );
       } else if (player.rating > 0) {
-        await addNotification(player.userId, ratingReleasedNotification(result.title, player.rating));
+        await addNotification(player.userId, {
+          id: `evo-${matchId}`,
+          ...ratingReleasedNotification(result.title, player.rating),
+        });
       }
     } catch (err) {
       console.warn(`[ratingsRelease] falha ao processar jogador ${player.userId}:`, err);

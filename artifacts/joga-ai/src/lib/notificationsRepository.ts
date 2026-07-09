@@ -19,6 +19,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "./firebase";
+import { stripUndefined } from "./firestoreUtils";
 import { getVotes } from "./auditRepository";
 import { loadMatchFromFirestore } from "./matchRepository";
 import { loadUserMatchHistory } from "./matchHistoryRepository";
@@ -154,18 +155,21 @@ export async function addNotification(
   if (!isFirebaseConfigured()) return;
 
   try {
+    const ref = doc(db, "users", userId, "notifications", id);
+    const existing = await getDoc(ref);
+    if (existing.exists()) return;
+
     await setDoc(
-      doc(db, "users", userId, "notifications", id),
-      {
+      ref,
+      stripUndefined({
         title: entry.title,
         body: entry.body,
         type: entry.type,
         link: entry.link,
-        ...(entry.priority ? { priority: entry.priority } : {}),
+        priority: entry.priority,
         read: false,
         createdAt: serverTimestamp(),
-      },
-      { merge: true },
+      }),
     );
   } catch (err) {
     console.warn("[notifications] add:", err);

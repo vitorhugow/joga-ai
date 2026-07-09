@@ -62,13 +62,94 @@ export function canOfferPushPrompt(): boolean {
   return !wasDismissedRecently();
 }
 
+async function waitForServiceWorkerActivation(
+  reg: ServiceWorkerRegistration,
+): Promise<ServiceWorkerRegistration> {
+  if (reg.active) return reg;
+
+  const sw = reg.installing ?? reg.waiting;
+  if (!sw) return reg;
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("SW activate timeout")), 10000);
+
+    const onStateChange = () => {
+      if (sw.state === "activated") {
+        clearTimeout(timeout);
+        sw.removeEventListener("statechange", onStateChange);
+        resolve();
+      }
+      if (sw.state === "redundant") {
+        clearTimeout(timeout);
+        sw.removeEventListener("statechange", onStateChange);
+        reject(new Error("SW redundant"));
+      }
+    };
+
+    sw.addEventListener("statechange", onStateChange);
+
+    if (sw.state === "activated") {
+      clearTimeout(timeout);
+      sw.removeEventListener("statechange", onStateChange);
+      resolve();
+    } else if (sw.state === "redundant") {
+      clearTimeout(timeout);
+      sw.removeEventListener("statechange", onStateChange);
+      reject(new Error("SW redundant"));
+    }
+  });
+
+  return reg;
+}
+
 async function registerMessagingServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
+
   try {
-    return await navigator.serviceWorker.register(FCM_SW_URL, { scope: FCM_SW_SCOPE });
+    const reg = await navigator.serviceWorker.register(FCM_SW_URL, { scope: FCM_SW_SCOPE });
+    return await waitForServiceWorkerActivation(reg);
   } catch (err) {
     console.warn("[push] SW register:", err);
     return null;
+  }
+}
+
+async function getMessagingToken(
+  messaging: import("firebase/messaging").Messaging,
+  swReg: ServiceWorkerRegistration,
+): Promise<string | null> {
+  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+  if (!vapidKey) return null;
+
+  const { getToken } = await import("firebase/messaging");
+  return getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg });
+}
+
+async function getMessagingTokenWithRetry(
+  messaging: import("firebase/messaging").Messaging,
+): Promise<string | null> {
+  let swReg = await registerMessagingServiceWorker();
+  if (!swReg?.active) {
+    console.warn("[push] FCM service worker não ficou activo");
+    return null;
+  }
+
+  try {
+    return await getMessagingToken(messaging, swReg);
+  } catch (err) {
+    console.warn("[push] getToken (tentativa 1):", err);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    swReg = await registerMessagingServiceWorker();
+    if (!swReg?.active) {
+      console.warn("[push] getToken retry abortado — SW inactivo após 2s");
+      return null;
+    }
+    try {
+      return await getMessagingToken(messaging, swReg);
+    } catch (retryErr) {
+      console.warn("[push] getToken (tentativa 2):", retryErr);
+      return null;
+    }
   }
 }
 
@@ -79,23 +160,18 @@ export async function requestPushPermission(userId: string): Promise<boolean> {
   trackEvent("push_permission", { granted: permission === "granted" });
   if (permission !== "granted") return false;
 
-  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-  if (!vapidKey) {
+  if (!import.meta.env.VITE_FIREBASE_VAPID_KEY) {
     console.warn("[push] VITE_FIREBASE_VAPID_KEY em falta");
     return false;
   }
 
   try {
-    const { isSupported, getMessaging, getToken } = await import("firebase/messaging");
+    const { isSupported, getMessaging } = await import("firebase/messaging");
     const supported = await isSupported();
     if (!supported) return false;
 
     const messaging = getMessaging(app);
-    const swReg = await registerMessagingServiceWorker();
-    const token = await getToken(messaging, {
-      vapidKey,
-      ...(swReg ? { serviceWorkerRegistration: swReg } : {}),
-    });
+    const token = await getMessagingTokenWithRetry(messaging);
     if (!token) return false;
 
     await setDoc(
@@ -117,18 +193,17 @@ export async function requestPushPermission(userId: string): Promise<boolean> {
 
 export async function removePushToken(userId: string): Promise<void> {
   if (!userId || !isFirebaseConfigured()) return;
-  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-  if (!vapidKey) return;
+  if (!import.meta.env.VITE_FIREBASE_VAPID_KEY) return;
 
   try {
-    const { isSupported, getMessaging, getToken, deleteToken } = await import("firebase/messaging");
+    const { isSupported, getMessaging, deleteToken } = await import("firebase/messaging");
     if (!(await isSupported())) return;
+
     const messaging = getMessaging(app);
     const swReg = await registerMessagingServiceWorker();
-    const token = await getToken(messaging, {
-      vapidKey,
-      ...(swReg ? { serviceWorkerRegistration: swReg } : {}),
-    });
+    if (!swReg?.active) return;
+
+    const token = await getMessagingToken(messaging, swReg);
     if (token) {
       await deleteToken(messaging);
       await deleteDoc(doc(db, "users", userId, "fcmTokens", token));
@@ -144,12 +219,12 @@ export async function setupForegroundPushListener(
   onToast: (payload: { title: string; body: string; notifId?: string }) => void,
 ): Promise<void> {
   if (foregroundListenerReady || !isFirebaseConfigured() || !isPushSupportedPlatform()) return;
-  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-  if (!vapidKey) return;
+  if (!import.meta.env.VITE_FIREBASE_VAPID_KEY) return;
 
   try {
     const { isSupported, getMessaging, onMessage } = await import("firebase/messaging");
     if (!(await isSupported())) return;
+
     const messaging = getMessaging(app);
     onMessage(messaging, (payload) => {
       const notifId = payload.data?.notifId;

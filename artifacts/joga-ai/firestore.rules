@@ -60,7 +60,9 @@ service cloud.firestore {
     function canCreateClientNotification(ownerId, notifId) {
       return isOwner(ownerId)
         || notifId.matches('^vote-.+')
-        || notifId.matches('^promoted-.+');
+        || notifId.matches('^promoted-.+')
+        || notifId.matches('^evo-.+')
+        || notifId.matches('^badge-.+');
     }
 
     /** Alinha com .where('userId', '==', auth.uid) nas collection-group queries. */

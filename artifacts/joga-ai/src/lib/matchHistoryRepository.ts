@@ -16,6 +16,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { stripUndefined } from "./firestoreUtils";
 
 export type MatchPlayerResult = {
   playerId: string;
@@ -83,10 +84,13 @@ export async function saveMatchResult(result: MatchResult): Promise<void> {
   if (!isFirebaseConfigured()) return;
 
   try {
-    await setDoc(doc(db, "matches", result.matchId, "summary", "result"), {
-      ...result,
-      savedAt: serverTimestamp(),
-    });
+    await setDoc(
+      doc(db, "matches", result.matchId, "summary", "result"),
+      stripUndefined({
+        ...result,
+        savedAt: serverTimestamp(),
+      }),
+    );
   } catch (err) {
     console.warn("[matchHistory] saveMatchResult:", err);
   }
@@ -166,10 +170,13 @@ export async function saveUserMatchHistory(
   if (!isFirebaseConfigured() || !userId) return;
 
   try {
-    await setDoc(doc(db, "users", userId, "matchHistory", entry.matchId), {
-      ...entry,
-      savedAt: serverTimestamp(),
-    });
+    await setDoc(
+      doc(db, "users", userId, "matchHistory", entry.matchId),
+      stripUndefined({
+        ...entry,
+        savedAt: serverTimestamp(),
+      }),
+    );
   } catch (err) {
     console.warn("[matchHistory] saveUserMatchHistory:", err);
   }

@@ -47,7 +47,7 @@ export function isFirebaseConfigured(): boolean {
 
 /** App Check (reCAPTCHA v3) — só com VITE_RECAPTCHA_SITE_KEY definida. */
 export function initAppCheck(): void {
-  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY?.trim();
   if (!siteKey || !isFirebaseConfigured()) return;
 
   if (import.meta.env.DEV) {

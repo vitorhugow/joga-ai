@@ -63,17 +63,17 @@ service cloud.firestore {
         || notifId.matches('^promoted-.+');
     }
 
-    // Collection-group queries (loadMyCommunities, pedidos pendentes)
-    // Apenas leitura: este wildcard existe para as collection-group queries.
-    // Criação/remoção de membros acontece SÓ no bloco communities/{id}/members.
+    // Collection-group queries (loadMyCommunities, pedidos pendentes).
+    // A condição DEVE alinhar com o filtro da query (userId == auth.uid) — regras
+    // com OR (memberId || userId) falham na análise estática do Firestore.
     match /{path=**}/members/{memberId} {
       allow read: if isSignedIn()
-        && (memberId == request.auth.uid
-          || resource.data.userId == request.auth.uid);
+        && resource.data.userId == request.auth.uid;
     }
 
     match /{path=**}/joinRequests/{requestUserId} {
-      allow read: if isSignedIn() && requestUserId == request.auth.uid;
+      allow read: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && requestUserId == request.auth.uid;
     }
 

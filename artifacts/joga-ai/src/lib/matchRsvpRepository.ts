@@ -15,7 +15,6 @@ import type { LivePlayer } from "./preMatchStorage";
 import { loadCommunityMembers, loadCommunity, isCommunityOrganizerPro } from "./communityRepository";
 import { loadMatchDetails } from "./matchRepository";
 import { resolveAccessMode } from "./matchAccess";
-import { addNotification } from "./notificationsRepository";
 import { OPEN_MATCH_STATUSES, type MatchStatus } from "./matchRepository";
 
 /** uids únicos dos jogadores com conta — usado pelas rules para validar
@@ -299,18 +298,6 @@ export async function promoteFromWaitlist(matchId: string): Promise<WaitlistEntr
   };
 
   await persistRsvpState(matchId, match, roster, waitlist);
-
-  await addNotification(promoted.userId, {
-    id: `promoted-${matchId}-${promoted.userId}`,
-    priority: "popup",
-    title: "Entraste na pelada!",
-    body:
-      match.paymentsEnabled && details?.price
-        ? `Estás confirmado em «${match.title ?? "pelada"}» — falta pagar ${details.price} para garantir.`
-        : `Saiu uma vaga em «${match.title ?? "pelada"}» — estás confirmado.`,
-    type: "match",
-    link: `/partida/${matchId}/pre-jogo`,
-  });
 
   return promoted;
 }

@@ -34,9 +34,13 @@ export { paymentReminders } from "./paymentReminders";
 export {
   onMatchCreatedNotifyCommunity,
   onMatchUpdatedNotifyChanges,
+  onMatchEnteringVoteNotify,
+  onMatchPromotedFromWaitlistNotify,
+  onMatchRatingsReleasedNotify,
 } from "./matchNotifications";
 export {
   onJoinRequestCreatedNotifyAdmin,
   onCommunityMemberRemovedNotify,
 } from "./communityNotifications";
+export { onUserBadgesUpdatedNotify } from "./userNotifications";
 export { deleteMyAccount } from "./account";

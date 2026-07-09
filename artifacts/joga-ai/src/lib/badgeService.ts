@@ -5,8 +5,6 @@
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 import { loadUserProfile, type UserProfile } from "./userRepository";
-import { addNotification } from "./notificationsRepository";
-import { getBadgeById } from "./badgeCatalog";
 
 function readLocalProfile(userId: string): UserProfile | null {
   try {
@@ -82,18 +80,6 @@ export async function checkAndUnlockBadges(
     } catch (err) {
       console.warn("[badgeService] persist:", err);
     }
-  }
-
-  for (const id of newlyUnlocked) {
-    const badge = getBadgeById(id);
-    if (!badge) continue;
-    await addNotification(userId, {
-      id: `badge-${id}`,
-      title: "Novo distintivo!",
-      body: `Desbloqueaste «${badge.name}» — ${badge.desc}`,
-      type: "system",
-      link: "/perfil",
-    });
   }
 
   return newlyUnlocked;

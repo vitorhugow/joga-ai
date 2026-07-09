@@ -23,7 +23,6 @@ import { stripUndefined } from "./firestoreUtils";
 import { getVotes } from "./auditRepository";
 import { loadMatchFromFirestore } from "./matchRepository";
 import { loadUserMatchHistory } from "./matchHistoryRepository";
-import { collectLinkedPlayerUserIds } from "./evolutionUtils";
 
 export type NotificationPriority = "popup" | "center";
 
@@ -154,6 +153,12 @@ export async function addNotification(
 
   if (!isFirebaseConfigured()) return;
 
+  const uid = auth.currentUser?.uid;
+  if (!uid || uid !== userId) {
+    // Cross-user: Cloud Functions (admin SDK) — ver matchNotifications / userNotifications.
+    return;
+  }
+
   try {
     const ref = doc(db, "users", userId, "notifications", id);
     const existing = await getDoc(ref);
@@ -203,26 +208,6 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
   await Promise.all(
     unread.map((n) =>
       updateDoc(doc(db, "users", userId, "notifications", n.id), { read: true }).catch(() => {}),
-    ),
-  );
-}
-
-export async function notifyMatchPlayersToVote(
-  matchId: string,
-  players: Array<{ id: string; userId?: string }>,
-  title: string,
-  organizerId?: string,
-): Promise<void> {
-  const userIds = collectLinkedPlayerUserIds(players, organizerId);
-  await Promise.all(
-    userIds.map((userId) =>
-      addNotification(userId, {
-        id: `vote-${matchId}`,
-        title: "A tua pelada terminou — hora de votar!",
-        body: `Confere o resumo de «${title}» e dá a tua nota aos colegas.`,
-        type: "match",
-        link: `/partida/${matchId}/pos-jogo`,
-      }),
     ),
   );
 }

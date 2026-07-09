@@ -57,12 +57,10 @@ service cloud.firestore {
           || request.resource.data.priority in ['popup', 'center']);
     }
 
-    function canCreateClientNotification(ownerId, notifId) {
-      return isOwner(ownerId)
-        || notifId.matches('^vote-.+')
-        || notifId.matches('^promoted-.+')
-        || notifId.matches('^evo-.+')
-        || notifId.matches('^badge-.+');
+    function canCreateClientNotification(ownerId) {
+      // Notificações cross-user são criadas exclusivamente por Cloud Functions (admin SDK).
+      // Clientes só escrevem na própria caixa de entrada.
+      return isOwner(ownerId);
     }
 
     /** Alinha com .where('userId', '==', auth.uid) nas collection-group queries. */
@@ -248,7 +246,7 @@ service cloud.firestore {
         allow read, update, delete: if isOwner(userId);
         allow create: if isSignedIn()
           && validNotificationCreate()
-          && canCreateClientNotification(userId, notifId);
+          && canCreateClientNotification(userId);
       }
 
       match /fcmTokens/{tokenId} {

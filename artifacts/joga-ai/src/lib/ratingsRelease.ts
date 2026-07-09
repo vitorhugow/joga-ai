@@ -10,7 +10,6 @@ import {
   type UserMatchHistoryEntry,
 } from "./matchHistoryRepository";
 import { loadMatchFromFirestore, updateMatchStatus } from "./matchRepository";
-import { addNotification } from "./notificationsRepository";
 import { applyDelayedRatingToProfile } from "./userRepository";
 import { checkAndUnlockBadges } from "./badgeService";
 import { trackRivalriesFromMatchResult } from "./communityStatsRepository";
@@ -88,15 +87,6 @@ export async function buildMatchResultPayload(input: {
   };
 }
 
-function ratingReleasedNotification(title: string, rating: number) {
-  return {
-    title: "A tua nota saiu!",
-    body: `Recebeste ${rating.toFixed(1)} na pelada «${title}». Vê a tua evolução.`,
-    type: "match" as const,
-    link: "/perfil/evolucao",
-  };
-}
-
 /**
  * Escreve a nota/badges/histórico no PRÓPRIO perfil do utilizador. Só pode
  * ser chamado para o utilizador actualmente autenticado — escrever no doc
@@ -118,10 +108,6 @@ async function releaseRatingForUser(
   if (rating > 0) {
     await applyDelayedRatingToProfile(userId, rating, matchId);
     await checkAndUnlockBadges(userId, { lastRating: rating });
-    await addNotification(userId, {
-      id: `evo-${matchId}`,
-      ...ratingReleasedNotification(title, rating),
-    });
   }
 
   if (entry) {
@@ -202,11 +188,6 @@ export async function releaseMatchRatings(
           result.title,
           player.rating,
         );
-      } else if (player.rating > 0) {
-        await addNotification(player.userId, {
-          id: `evo-${matchId}`,
-          ...ratingReleasedNotification(result.title, player.rating),
-        });
       }
     } catch (err) {
       console.warn(`[ratingsRelease] falha ao processar jogador ${player.userId}:`, err);

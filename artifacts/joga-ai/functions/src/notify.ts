@@ -211,3 +211,40 @@ export async function notifyPromotedFromWaitlist(
     link: `/partida/${matchId}/pre-jogo`,
   });
 }
+
+export async function notifyMatchPlayersToVote(
+  matchId: string,
+  match: Record<string, unknown>,
+): Promise<void> {
+  const title = String(match.title ?? "Pelada");
+  const targets = linkedPlayerIdsForMatch(match, true);
+  if (!targets.length) return;
+
+  await notifyUsers(targets, {
+    id: `vote-${matchId}`,
+    type: "match",
+    title: "A tua pelada terminou — hora de votar!",
+    body: `Confere o resumo de «${title}» e dá a tua nota aos colegas.`,
+    link: `/partida/${matchId}/pos-jogo`,
+  });
+}
+
+function linkedPlayerIdsForMatch(match: Record<string, unknown>, excludeOrganizer = true): string[] {
+  const organizerId = String(match.organizerId ?? "");
+  const ids = new Set<string>();
+
+  const players: Array<{ userId?: string }> = Array.isArray(match.players) ? match.players : [];
+  for (const player of players) {
+    if (player.userId) ids.add(player.userId);
+  }
+
+  const participantUserIds: string[] = Array.isArray(match.participantUserIds)
+    ? match.participantUserIds
+    : [];
+  for (const id of participantUserIds) {
+    if (id) ids.add(id);
+  }
+
+  if (excludeOrganizer && organizerId) ids.delete(organizerId);
+  return [...ids];
+}

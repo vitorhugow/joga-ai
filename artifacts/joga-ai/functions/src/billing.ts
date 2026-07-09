@@ -21,7 +21,6 @@ import {
   formatEuroCents,
   loadUserDisplayName,
   notifyOrganizerPaymentReceived,
-  notifyPromotedFromWaitlist,
   notifyUser,
 } from "./notify";
 import { isUserMensalistaActive, scheduleMensalistaCancellations } from "./mensalistas";
@@ -914,11 +913,6 @@ async function promoteWaitlistAfterLeave(
   });
 
   if (promotedUid) {
-    const matchSnap = await db.doc(`matches/${matchId}`).get();
-    const match = matchSnap.data();
-    if (match) {
-      await notifyPromotedFromWaitlist(matchId, promotedUid, match);
-    }
     return { uid: promotedUid };
   }
 

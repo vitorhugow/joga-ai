@@ -38,7 +38,6 @@ import { applyParticipationForMatchRoster, revertMatchStatsForPlayers } from "./
 import { deleteMatchResult, loadMatchResult } from "./matchHistoryRepository";
 import { getVotes } from "./auditRepository";
 import { collectAllEvents, computeTopScorers, collectLinkedPlayerUserIds } from "./evolutionUtils";
-import { notifyMatchPlayersToVote } from "./notificationsRepository";
 import type { WaitlistEntry } from "./matchRsvpRepository";
 import { checkAndUnlockBadges } from "./badgeService";
 import type { MatchAccessMode } from "./matchAccess";
@@ -657,10 +656,7 @@ function applyLocalMatchUpdate(matchId: string, data: SavedPostMatch) {
     })
       .then(() => {
         const userIds = collectLinkedPlayerUserIds(data.players ?? [], data.organizerId);
-        return Promise.all([
-          notifyMatchPlayersToVote(matchId, data.players ?? [], data.title ?? "Pelada", data.organizerId),
-          ...userIds.map((uid) => checkAndUnlockBadges(uid)),
-        ]);
+        return Promise.all(userIds.map((uid) => checkAndUnlockBadges(uid)));
       })
       .catch((err) => console.warn("[matchRepository] participation:", err));
   }

@@ -6,6 +6,8 @@ import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/fire
 import { getFirestore } from "firebase-admin/firestore";
 import {
   formatMatchSchedule,
+  notifyMatchPlayersToVote,
+  notifyPromotedFromWaitlist,
   notifyUser,
   notifyUsers,
   shortContentHash,
@@ -75,6 +77,105 @@ export const onMatchCreatedNotifyCommunity = onDocumentCreated(
       body: `${title} — ${schedule}. Garante a tua vaga!`,
       link: `/partida/${matchId}/pre-jogo`,
     });
+  },
+);
+
+function playerUserIds(match: Record<string, unknown>): Set<string> {
+  const ids = new Set<string>();
+  const players: Array<{ userId?: string; id?: string }> = Array.isArray(match.players)
+    ? match.players
+    : [];
+  for (const player of players) {
+    const uid = player.userId ?? player.id;
+    if (uid) ids.add(String(uid));
+  }
+  return ids;
+}
+
+function waitlistUserIds(match: Record<string, unknown>): Set<string> {
+  const ids = new Set<string>();
+  const waitlist: Array<{ userId?: string }> = Array.isArray(match.waitlist) ? match.waitlist : [];
+  for (const entry of waitlist) {
+    if (entry.userId) ids.add(String(entry.userId));
+  }
+  return ids;
+}
+
+function detectPromotedFromWaitlist(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): string | null {
+  const beforePlayers = playerUserIds(before);
+  const afterPlayers = playerUserIds(after);
+  const beforeWaitlist = waitlistUserIds(before);
+
+  for (const uid of afterPlayers) {
+    if (!beforePlayers.has(uid) && beforeWaitlist.has(uid)) {
+      return uid;
+    }
+  }
+  return null;
+}
+
+/** Pelada entra em votação → avisa jogadores com conta (exceto organizador). */
+export const onMatchEnteringVoteNotify = onDocumentUpdated(
+  { document: "matches/{matchId}", region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    const prevStatus = String(before.status ?? "");
+    const nextStatus = String(after.status ?? "");
+    if (prevStatus === nextStatus || nextStatus !== "aguardando_auditoria") return;
+    if (prevStatus === "aguardando_auditoria") return;
+
+    await notifyMatchPlayersToVote(event.params.matchId, after);
+  },
+);
+
+/** Promoção da lista de espera → popup ao jogador promovido. */
+export const onMatchPromotedFromWaitlistNotify = onDocumentUpdated(
+  { document: "matches/{matchId}", region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    const promotedUid = detectPromotedFromWaitlist(before, after);
+    if (!promotedUid) return;
+
+    await notifyPromotedFromWaitlist(event.params.matchId, promotedUid, after);
+  },
+);
+
+/** Notas publicadas → notificação evo-{matchId} para cada jogador com nota. */
+export const onMatchRatingsReleasedNotify = onDocumentUpdated(
+  { document: "matches/{matchId}/summary/result", region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!after?.ratingsReleased) return;
+    if (before?.ratingsReleased === true) return;
+
+    const matchId = event.params.matchId;
+    const title = String(after.title ?? "pelada");
+    const players: Array<{ userId?: string; rating?: number }> = Array.isArray(after.players)
+      ? after.players
+      : [];
+
+    const targets = players.filter((p) => p.userId && Number(p.rating) > 0);
+    await Promise.allSettled(
+      targets.map((player) =>
+        notifyUser(String(player.userId), {
+          id: `evo-${matchId}`,
+          type: "match",
+          title: "A tua nota saiu!",
+          body: `Recebeste ${Number(player.rating).toFixed(1)} na pelada «${title}». Vê a tua evolução.`,
+          link: "/perfil/evolucao",
+        }),
+      ),
+    );
   },
 );
 

@@ -17,6 +17,7 @@ import {
 import app, { db, isFirebaseConfigured } from "./firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { stripUndefined } from "./firestoreUtils";
+import { findRecentDuplicateEvent } from "./liveControllerUtils";
 import { getCurrentUserId } from "./auth";
 import {
   loadPreMatch,
@@ -510,11 +511,14 @@ export type AddEventInput = {
   miniGameId: string;
 };
 
-/** Idempotente: ignora se o eventId já existir no estado. */
-export async function addLiveEventAction(matchId: string, input: AddEventInput): Promise<boolean> {
-  if (!isFirebaseConfigured()) return false;
+/** Idempotente: ignora se o eventId já existir ou houver duplicado recente. */
+export async function addLiveEventAction(
+  matchId: string,
+  input: AddEventInput,
+): Promise<"added" | "duplicate" | "skipped"> {
+  if (!isFirebaseConfigured()) return "skipped";
 
-  let added = false;
+  let result: "added" | "duplicate" | "skipped" = "skipped";
   await runTransaction(db, async (tx) => {
     const ref = liveRef(matchId);
     const snap = await tx.get(ref);
@@ -523,6 +527,11 @@ export async function addLiveEventAction(matchId: string, input: AddEventInput):
     const live = parseLiveState(snap.data() as MatchLiveState)!;
     if (live.status !== "running") return;
     if (live.events.some((e) => e.id === input.eventId)) return;
+
+    if (findRecentDuplicateEvent(live.events, input)) {
+      result = "duplicate";
+      return;
+    }
 
     const event: LiveEventRecord = {
       id: input.eventId,
@@ -541,7 +550,7 @@ export async function addLiveEventAction(matchId: string, input: AddEventInput):
       if (input.team === live.activeAwayTeam) scoreB += 1;
     }
 
-    added = true;
+    result = "added";
     tx.set(
       ref,
       stripUndefined({
@@ -555,7 +564,7 @@ export async function addLiveEventAction(matchId: string, input: AddEventInput):
     );
   });
 
-  return added;
+  return result;
 }
 
 export async function undoLastEvent(matchId: string): Promise<void> {

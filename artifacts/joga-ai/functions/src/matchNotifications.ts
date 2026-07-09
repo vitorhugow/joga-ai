@@ -232,7 +232,7 @@ export const onMatchRatingsReleasedNotify = onDocumentUpdated(
   },
 );
 
-/** Controlador ao vivo alterado → notifica o novo controlador. */
+/** Controladores ao vivo adicionados → notifica cada novo uid. */
 export const onLiveControllerChangedNotify = onDocumentUpdated(
   { document: "matches/{matchId}", region: REGION },
   async (event) => {
@@ -240,22 +240,39 @@ export const onLiveControllerChangedNotify = onDocumentUpdated(
     const after = event.data?.after.data();
     if (!before || !after) return;
 
-    const prevController = String(before.liveControllerId ?? before.organizerId ?? "");
-    const nextController = String(after.liveControllerId ?? after.organizerId ?? "");
-    if (!nextController || prevController === nextController) return;
-    if (nextController === String(after.organizerId ?? "")) return;
+    const organizerId = String(after.organizerId ?? "");
+
+    function resolveIds(data: Record<string, unknown>): string[] {
+      if (Array.isArray(data.liveControllerIds) && data.liveControllerIds.length > 0) {
+        return data.liveControllerIds.map(String);
+      }
+      if (data.liveControllerId) return [String(data.liveControllerId)];
+      return organizerId ? [organizerId] : [];
+    }
+
+    const prevSet = new Set(resolveIds(before));
+    const nextIds = resolveIds(after);
+    const added = nextIds.filter((uid) => uid && !prevSet.has(uid));
+
+    if (!added.length) return;
 
     const matchId = event.params.matchId;
     const title = String(after.title ?? "pelada");
 
-    await notifyUser(nextController, {
-      id: `livectl-${matchId}-${nextController}`,
-      type: "match",
-      priority: "center",
-      title: "Comando ao vivo",
-      body: `És o controlador de «${title}» — podes iniciar o jogo.`,
-      link: `/partida/${matchId}/ao-vivo`,
-    });
+    await Promise.allSettled(
+      added
+        .filter((uid) => uid !== organizerId)
+        .map((uid) =>
+          notifyUser(uid, {
+            id: `controller-${matchId}-${uid}`,
+            type: "match",
+            priority: "center",
+            title: "Controlo do jogo",
+            body: `Podes registar golos e gerir «${title}» ao vivo.`,
+            link: `/partida/${matchId}/ao-vivo`,
+          }),
+        ),
+    );
   },
 );
 

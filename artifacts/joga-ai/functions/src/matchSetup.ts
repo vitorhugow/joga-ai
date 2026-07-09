@@ -71,8 +71,24 @@ export const migrateMatchSetup = onCall({ region: REGION }, async (request) => {
   });
 
   const patch: Record<string, unknown> = { savedAt: FieldValue.serverTimestamp() };
-  if (!match.liveControllerId && match.organizerId) {
-    patch.liveControllerId = match.organizerId;
+  const organizerId = String(match.organizerId ?? "");
+  if (organizerId) {
+    const existingIds: string[] = Array.isArray(match.liveControllerIds)
+      ? (match.liveControllerIds as string[])
+      : [];
+    const legacyId = match.liveControllerId ? String(match.liveControllerId) : null;
+
+    if (!existingIds.length) {
+      const ids = legacyId && legacyId !== organizerId
+        ? [organizerId, legacyId]
+        : [organizerId];
+      patch.liveControllerIds = ids;
+      if (legacyId) patch.liveControllerId = FieldValue.delete();
+    } else if (!existingIds.includes(organizerId)) {
+      patch.liveControllerIds = FieldValue.arrayUnion(organizerId);
+    } else if (legacyId) {
+      patch.liveControllerId = FieldValue.delete();
+    }
   }
   if (Object.keys(patch).length > 1) {
     await matchRef.set(patch, { merge: true });

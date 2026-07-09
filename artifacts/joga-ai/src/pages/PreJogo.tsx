@@ -17,6 +17,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { loadMatchFromFirestore, saveMatchRoster, cancelMatch, startMatchLive, subscribeToMatch } from "@/lib/matchRepository";
+import { ManageLiveControllersDialog } from "@/components/ManageLiveControllersDialog";
 import { loadPreMatch } from "@/lib/preMatchStorage";
 import { savePreMatch } from "@/lib/preMatchStorage";
 import {
@@ -411,6 +412,8 @@ export default function PreJogo() {
   const [organizerWhatsapp, setOrganizerWhatsapp] = useState<string | null>(null);
   const [paidUserIds, setPaidUserIds] = useState<string[]>([]);
   const [mensalistaActive, setMensalistaActive] = useState(false);
+  const [liveControllerIds, setLiveControllerIds] = useState<string[]>([]);
+  const [controllersDialogOpen, setControllersDialogOpen] = useState(false);
 
   const [matchCommunityId, setMatchCommunityId] = useState<string | undefined>(
     () => loadMatchDetails(matchId)?.communityId,
@@ -492,6 +495,7 @@ export default function PreJogo() {
         const paidOrganizer = merged.players.find((p) => p.paid && p.userId);
         if (paidOrganizer?.userId) setOrganizerId(paidOrganizer.userId);
       }
+      setLiveControllerIds(meta.liveControllerIds);
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
       setMatchStatus(merged?.status ?? "configurando");
       setPaidUserIds(merged?.paidUserIds ?? []);
@@ -2207,6 +2211,21 @@ export default function PreJogo() {
           </p>
         )}
 
+        {isOrganizer && resolvedOrganizerId && (
+          <JogaButton
+            variant="ghost"
+            size="md"
+            className="gap-2"
+            onClick={() => setControllersDialogOpen(true)}
+          >
+            <Users className="w-4 h-4" />
+            Gerir controladores
+            {liveControllerIds.length > 0 && (
+              <span className="text-white/40 text-xs">({liveControllerIds.length})</span>
+            )}
+          </JogaButton>
+        )}
+
         <JogaButton
           variant="danger"
           size="lg"
@@ -2279,6 +2298,17 @@ export default function PreJogo() {
         }}
         onClose={() => setPickerSlot(null)}
       />
+
+      {resolvedOrganizerId && (
+        <ManageLiveControllersDialog
+          open={controllersDialogOpen}
+          onOpenChange={setControllersDialogOpen}
+          matchId={matchId}
+          organizerId={resolvedOrganizerId}
+          liveControllerIds={liveControllerIds}
+          players={players}
+        />
+      )}
 
       {ConfirmDialog}
     </JogaPage>

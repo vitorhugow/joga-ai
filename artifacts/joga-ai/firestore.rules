@@ -32,20 +32,27 @@ service cloud.firestore {
     }
 
     function isLiveController(matchId) {
+      let data = matchDoc(matchId);
       return isSignedIn()
         && exists(/databases/$(database)/documents/matches/$(matchId))
-        && liveControllerId(matchId) == request.auth.uid;
+        && (
+          request.auth.uid == data.organizerId
+          || request.auth.uid in data.get('liveControllerIds', [])
+          || request.auth.uid == liveControllerId(matchId)
+        );
     }
 
     function isMatchOrganizerOrLiveController(matchId) {
       return isMatchOrganizer(matchId) || isLiveController(matchId);
     }
 
-    function isLiveControllerIdUpdate(matchId) {
+    function isLiveControllerIdsUpdate(matchId) {
+      let organizer = resource.data.organizerId;
       return isMatchOrganizer(matchId)
         && request.resource.data.organizerId == resource.data.organizerId
+        && organizer in request.resource.data.liveControllerIds
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['liveControllerId', 'savedAt']);
+          .hasOnly(['liveControllerIds', 'savedAt']);
     }
 
     // Administradores da app (painel /admin — PRO manual sem Stripe)
@@ -323,7 +330,7 @@ service cloud.firestore {
         || isMatchLiveEndUpdate(matchId)
         || isMatchVotingFinalizeUpdate(matchId)
         || isMatchVoteMarkUpdate()
-        || isLiveControllerIdUpdate(matchId)
+        || isLiveControllerIdsUpdate(matchId)
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;

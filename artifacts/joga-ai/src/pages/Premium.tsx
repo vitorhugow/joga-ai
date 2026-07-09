@@ -32,12 +32,12 @@ const premiumSkins = [
 
 const planFeatures = {
   organizador: [
-    "Mensalistas: define o teu preço mensal e gere quem está em dia",
-    "Selo ✦ Clube PRO nas tuas peladas + destaque no Encontrar Jogos",
-    "Marca do clube na convocatória e na imagem de resultado",
+    "Inclui tudo do PRO Jogador ✦",
     "Painel do clube: pagamentos, presenças e estatísticas da época",
-    "Recorrentes, lembretes automáticos e histórico ilimitado",
-    "Inclui tudo do PRO Jogador",
+    "Branding do clube (cor, logo e banner)",
+    "Mensalistas: define o teu preço mensal e gere quem está em dia",
+    "Prioridade no Encontrar Jogos + selo ✦ Clube PRO",
+    "Peladas abertas a jogadores externos",
   ],
   jogador: [
     "Skins de carta exclusivas: Fogo, Raio e Diamante",
@@ -408,7 +408,11 @@ export default function Premium() {
                     <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(251,191,36,0.2)" }}>
                       <Check className="w-3 h-3 text-amber-400" strokeWidth={3} />
                     </div>
-                    <span className="text-white/75 text-sm leading-snug">{f}</span>
+                    <span
+                      className={`text-sm leading-snug ${i === 0 ? "text-amber-300 font-semibold" : "text-white/75"}`}
+                    >
+                      {f}
+                    </span>
                   </div>
                 ))}
               </div>

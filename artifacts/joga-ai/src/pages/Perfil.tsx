@@ -5,7 +5,7 @@ import { Link, useRoute } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
 import { ReferralCard } from "@/components/ReferralCard";
 import { SkinPicker } from "@/components/SkinPicker";
-import { hasPlayerPro, isOrganizerPro, hasPlayerProOnly } from "@/lib/entitlements";
+import { hasPlayerPro, isOrganizerPro } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { trackEvent } from "@/lib/analytics";
@@ -320,7 +320,7 @@ export default function Perfil() {
       return;
     }
 
-    if (!hasPlayerProOnly(activeProfile?.entitlements)) {
+    if (!playerPro) {
       trackEvent("pro_gate_clicked", { feature: "card_download" });
       setCardDownloadProOpen(true);
       return;

@@ -9,6 +9,10 @@ import { trackEvent } from "./analytics";
 const DISMISS_KEY = "joga-ai-push-dismissed-at";
 const DISMISS_DAYS = 30;
 
+/** Scope isolado — não colidir com o Workbox PWA em "/". */
+export const FCM_SW_SCOPE = "/firebase-cloud-messaging-push-scope";
+const FCM_SW_URL = "/firebase-messaging-sw.js";
+
 const shownPopupIds = new Set<string>();
 
 export function isIOSDevice(): boolean {
@@ -61,7 +65,7 @@ export function canOfferPushPrompt(): boolean {
 async function registerMessagingServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
-    return await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    return await navigator.serviceWorker.register(FCM_SW_URL, { scope: FCM_SW_SCOPE });
   } catch (err) {
     console.warn("[push] SW register:", err);
     return null;

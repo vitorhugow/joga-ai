@@ -43,6 +43,8 @@ async function sendPushToUser(uid: string, payload: NotifyPayload): Promise<void
       },
       data: {
         notifId: payload.id,
+        title: payload.title.slice(0, 80),
+        body: payload.body.slice(0, 240),
         ...(payload.link ? { link: payload.link } : {}),
       },
       webpush: payload.link

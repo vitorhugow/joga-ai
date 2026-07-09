@@ -24,7 +24,24 @@ function firebaseMessagingSwPlugin(): Plugin {
 importScripts('https://www.gstatic.com/firebasejs/11.4.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.4.0/firebase-messaging-compat.js');
 firebase.initializeApp(${JSON.stringify(firebaseConfig)});
-firebase.messaging();`;
+const messaging = firebase.messaging();
+messaging.onBackgroundMessage((payload) => {
+  const title = payload.notification?.title ?? payload.data?.title ?? "Joga AI";
+  const body = payload.notification?.body ?? payload.data?.body ?? "";
+  const link = payload.data?.link ?? "/";
+  self.registration.showNotification(title, {
+    body,
+    icon: "/pwa-192.png",
+    badge: "/pwa-192.png",
+    data: { link },
+    tag: payload.data?.notifId,
+  });
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = event.notification.data?.link ?? "/";
+  event.waitUntil(clients.openWindow(link));
+});`;
       fs.writeFileSync(path.resolve(config.root, "public/firebase-messaging-sw.js"), sw);
     },
   };
@@ -56,6 +73,7 @@ export default defineConfig({
         theme_color: "#0a0f1a",
         background_color: "#0a0f1a",
         display: "standalone",
+        orientation: "portrait",
         start_url: basePath,
         scope: basePath,
         lang: "pt",
@@ -77,6 +95,7 @@ export default defineConfig({
         // nativa do SDK (persistentLocalCache); o service worker só cacheia
         // os assets estáticos da app (JS/CSS/imagens/fontes).
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        globIgnores: ["**/firebase-messaging-sw.js", "firebase-messaging-sw.js"],
       },
     }),
     ...(process.env.NODE_ENV !== "production" &&

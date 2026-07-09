@@ -1,0 +1,39 @@
+{
+  "packageId": "pt.jogaai.app",
+  "host": "jogaai.pt",
+  "name": "Joga AI",
+  "launcherName": "Joga AI",
+  "display": "standalone",
+  "themeColor": "#0A0F1A",
+  "themeColorDark": "#0A0F1A",
+  "navigationColor": "#0A0F1A",
+  "navigationColorDark": "#0A0F1A",
+  "navigationDividerColor": "#0A0F1A",
+  "navigationDividerColorDark": "#0A0F1A",
+  "backgroundColor": "#0A0F1A",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://jogaai.pt/pwa-512.png",
+  "maskableIconUrl": "https://jogaai.pt/pwa-512.png",
+  "monochromeIconUrl": "https://jogaai.pt/pwa-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://jogaai.pt/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": false,
+    "locationDelegation": false
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": []
+}

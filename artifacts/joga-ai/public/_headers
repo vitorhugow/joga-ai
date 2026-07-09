@@ -4,5 +4,12 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(self)
 
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+
+/firebase-messaging-sw.js
+  Service-Worker-Allowed: /firebase-cloud-messaging-push-scope
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

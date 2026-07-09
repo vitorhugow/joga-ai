@@ -3,8 +3,8 @@
 > A app já é uma PWA completa (manifest ✓, service worker ✓, offline ✓).
 > Android embrulha a PWA num TWA (leve, 1-2 dias até aprovar).
 > iOS exige um wrapper Capacitor (mais trabalhoso + risco de review).
-> **Ordem recomendada: Android primeiro** — mais barato (23€ únicos),
-> review mais rápida, e valida o processo antes de pagar os 92€/ano da Apple.
+> **Ordem recomendada: Android primeiro** — mais barato (25€ únicos),
+> review mais rápida, e valida o processo antes de pagar os 99€/ano da Apple.
 
 ---
 
@@ -13,52 +13,146 @@
 O TWA (Trusted Web Activity) mostra o site em Chrome fullscreen — a app
 É o site, atualiza com cada deploy do Cloudflare, zero manutenção nativa.
 
+### A0. Estado no repo (antes do primeiro build)
+
+| Ficheiro | Caminho | Notas |
+|----------|---------|-------|
+| PWA manifest | gerado em build → `dist/public/manifest.webmanifest` | Fonte: `vite.config.ts` (VitePWA) |
+| Link no HTML | `artifacts/joga-ai/index.html` | `<link rel="manifest" href="/manifest.webmanifest">` |
+| Digital Asset Links (placeholder) | `artifacts/joga-ai/public/.well-known/assetlinks.json` | Conteúdo actual: `[]` — ver A5 |
+| Template Bubblewrap | `artifacts/joga-ai/twa-manifest.json` | Referência; o `bubblewrap init` gera outro na pasta Android |
+| Este guia | `docs/MOBILE.md` | |
+
+**packageId proposto:** `pt.jogaai.app` — **confirmar com o Vitor antes da
+primeira publicação**. O packageId **nunca pode mudar** depois de subir à Play Store.
+
+O `twa-manifest.json` de referência no repo tem:
+- `host`: `jogaai.pt`
+- `startUrl`: `/`
+- `name` / `launcherName`: `Joga AI`
+- `themeColor` / `backgroundColor`: `#0A0F1A` (coerente com o manifest PWA)
+- `orientation`: `portrait`
+- `webManifestUrl`: `https://jogaai.pt/manifest.webmanifest`
+
 ### A1. Pré-requisitos (uma vez)
 - Node instalado (já tens) · JDK 17: `brew install openjdk@17`
 - Conta Google Play Console: https://play.google.com/console (25 USD únicos)
 - `npm i -g @bubblewrap/cli`
 
-### A2. Gerar o projeto
+### A2. Sequência real (runbook)
+
 ```bash
+# a) Inicializar o projecto TWA (numa pasta à parte, ex. joga-ai-android)
 mkdir joga-ai-android && cd joga-ai-android
-bubblewrap init --manifest https://jogaai.pt/manifest.webmanifest
+npx @bubblewrap/cli init --manifest https://jogaai.pt/manifest.webmanifest
 ```
+
 Respostas ao wizard:
-- Package name: `pt.jogaai.app`  (tem de bater com o assetlinks.json!)
-- App name / short name: Joga AI
-- Display: standalone · Status bar: `#0a0f1a`
-- Signing key: deixa o Bubblewrap CRIAR (guarda a keystore + passwords
-  num sítio seguro — perdê-la = nunca mais atualizar a app)
+- Package name: `pt.jogaai.app` (tem de bater com o `assetlinks.json`!)
+- App name / short name: **Joga AI**
+- Display: standalone · Status bar / theme: `#0a0f1a`
+- Signing key: deixa o Bubblewrap **CRIAR** (não versionar no git)
 
-### A3. Build
 ```bash
-bubblewrap build
+# b) Build local (gera .aab + keystore na pasta do projecto)
+npx @bubblewrap/cli build
 ```
-Gera `app-release-bundle.aab` (para a Play Store) e um `.apk` de teste
-(`adb install app-release-signed.apk` num Android para experimentar).
 
-### A4. Play Console
+**c) Guardar keystore + passwords** num gestor de passwords + backup offline.
+Perder a keystore = **nunca mais** actualizar a app na Play Store.
+
+**d)** Upload do `app-release-bundle.aab` no Play Console → **Closed testing**
+(ou Internal testing para começar).
+
+**e)** Play Console → **App integrity** → **App signing** → copiar o
+**SHA-256 fingerprint** do "App signing key certificate".
+
+```bash
+# f) Gerar o JSON de Digital Asset Links
+npx @bubblewrap/cli fingerprint generateAssetLinks
+# (ou montar manualmente com o SHA-256 do passo e)
+```
+
+**g)** Substituir `artifacts/joga-ai/public/.well-known/assetlinks.json` pelo
+conteúdo real (array com `package_name` + `sha256_cert_fingerprints`), commit, push.
+
+**h)** Verificar **antes** de convidar testers:
+
+```bash
+curl -sI https://jogaai.pt/.well-known/assetlinks.json | grep -i content-type
+curl -s https://jogaai.pt/.well-known/assetlinks.json
+```
+
+Tem de devolver **HTTP 200** e `Content-Type: application/json`.
+Sem isto a app abre com barra de browser no topo — é o erro nº1.
+
+> **Placeholder actual:** `public/.well-known/assetlinks.json` contém `[]`.
+> Isto é intencional até ao primeiro upload ao Play Console. O conteúdo real
+> só existe depois de obteres o SHA-256 (passo e). Se assinaste localmente
+> **e** o Play re-assina, podes precisar dos **dois** fingerprints no array.
+
+### A3. Build de teste local
+```bash
+# APK para instalar num Android físico
+adb install app-release-signed.apk
+```
+
+### A4. Play Console (ficha da loja)
 1. Create app → App name "Joga AI", idioma pt-PT, Free.
-2. Sobe o `.aab` em Production → Create release.
-3. Preenche a ficha: descrição, ícone 512, feature graphic 1024×500,
+2. Preenche a ficha: descrição, ícone 512, feature graphic 1024×500,
    2+ screenshots de telemóvel (usa as do site!), privacy policy:
    https://jogaai.pt/privacidade
-4. Data safety form: declara Firebase Auth/Firestore (conta, email,
+3. Data safety form: declara Firebase Auth/Firestore (conta, email,
    conteúdo do utilizador; sem venda de dados).
 
-### A5. Digital Asset Links (remove a barra de URL do Chrome)
-1. Play Console → Setup → App signing → copia o **SHA-256** do
-   "App signing key certificate".
-2. Cola em `artifacts/joga-ai/public/.well-known/assetlinks.json` (substitui o placeholder),
-   commit + push.
-3. Valida: https://jogaai.pt/.well-known/assetlinks.json tem de servir o
-   JSON. Sem isto a app abre com barra de browser no topo — é o erro nº1.
-4. Se assinaste localmente E o Play re-assina, podes precisar dos DOIS
-   fingerprints no array (o teu + o do Play).
+### A5. Digital Asset Links — detalhe técnico
 
-### A6. Review
-Primeira review: 1-7 dias. Atualizações do SITE não precisam de nova
-release — só mudanças ao wrapper (ícone, nome, cor).
+O ficheiro vive em `artifacts/joga-ai/public/.well-known/assetlinks.json`.
+O Vite copia `public/` para `dist/public/` no build — pastas com ponto
+(`.well-known`) **não são ignoradas** pelo `publicDir` default.
+
+O `_headers` do Cloudflare Pages força:
+```
+/.well-known/assetlinks.json
+  Content-Type: application/json
+```
+
+O Workbox PWA exclui `/.well-known/` do `navigateFallback` para não
+interceptar este path.
+
+### A6. Service workers (PWA + FCM push)
+
+Dois service workers no **mesmo origin**, scopes **diferentes** (obrigatório):
+
+| SW | Path | Scope |
+|----|------|-------|
+| Workbox (PWA offline) | `/sw.js` | `/` |
+| Firebase Cloud Messaging | `/firebase-messaging-sw.js` | `/firebase-cloud-messaging-push-scope` |
+
+O cliente regista o FCM com scope isolado (`pushNotifications.ts`).
+O `_headers` do Cloudflare envia `Service-Worker-Allowed` no script FCM
+para permitir scope mais estreito que o path do ficheiro.
+
+O Workbox **não** pré-cacheia `firebase-messaging-sw.js` (`globIgnores`).
+
+#### Testar push em background (após deploy)
+
+Tokens antigos em `users/{uid}/fcmTokens` podem ter sido gerados contra
+a registration errada (scope `/` do Workbox). Para testar de raiz:
+
+1. DevTools → **Application** → **Service Workers** → **Unregister** em
+   **ambos** (`sw.js` e `firebase-messaging-sw.js`).
+2. Apagar documentos em `users/{teuUid}/fcmTokens` (ou desactivar push no perfil).
+3. Recarregar o site, aceitar push de novo (gera token novo + SW FCM no scope certo).
+4. Confirmar em DevTools dois registos com scopes **diferentes**.
+5. Enviar mensagem de teste no Firebase Console com o site **fechado**.
+
+Se o push em foreground funciona mas em background não, o scope ou o SW
+do FCM ainda está errado — rever passos 1–4.
+
+### A7. Review
+Primeira review: 1-7 dias. Atualizações do **site** não precisam de nova
+release — só mudanças ao wrapper (ícone, nome, cor, packageId).
 
 ---
 
@@ -132,9 +226,12 @@ dados do Android). Review: 1-3 dias tipicamente.
 ---
 
 ## CHECKLIST FINAL PRÉ-LOJAS
-- [ ] jogaai.pt nos Authorized domains do Firebase Auth (senão o login
+- [ ] `jogaai.pt` nos Authorized domains do Firebase Auth (senão o login
       falha DENTRO das apps também!)
-- [ ] assetlinks.json com SHA-256 real publicado (Android)
+- [ ] `assetlinks.json` com SHA-256 real publicado (Android) — não `[]`
+- [ ] `https://jogaai.pt/.well-known/assetlinks.json` → 200 + `application/json`
+- [ ] packageId `pt.jogaai.app` confirmado antes do primeiro upload
+- [ ] Keystore guardada em local seguro (fora do git)
 - [ ] Login Google testado dentro do wrapper (iOS e Android)
 - [ ] Botões de compra PRO escondidos no wrapper iOS (B5)
 - [ ] Privacy policy e Termos acessíveis sem login
@@ -147,8 +244,15 @@ dados do Android). Review: 1-3 dias tipicamente.
 | Ficheiro | Caminho |
 |----------|---------|
 | Digital Asset Links | `artifacts/joga-ai/public/.well-known/assetlinks.json` |
+| Template TWA (referência) | `artifacts/joga-ai/twa-manifest.json` |
+| PWA manifest (fonte) | `artifacts/joga-ai/vite.config.ts` → build gera `manifest.webmanifest` |
+| Ícones PWA | `artifacts/joga-ai/public/pwa-192.png`, `pwa-512.png` |
+| FCM service worker | `artifacts/joga-ai/public/firebase-messaging-sw.js` (gerado no build) |
+| Pasta Android local | `artifacts/joga-ai-mobile/` (só README; projecto Bubblewrap fica fora) |
 | Este guia | `docs/MOBILE.md` |
-| PWA manifest | gerado em build → `manifest.webmanifest` |
 
 **Nota:** a pasta `.well-known` começa com ponto — no Finder macOS fica
 oculta. No terminal: `ls -la artifacts/joga-ai/public/.well-known/`
+
+**`.gitignore`:** keystores, `.aab`, `.apk`, pasta `/android/`, `bubblewrap.log`
+e ficheiros com `keystore`/`signing` no nome **nunca** entram no repo.

@@ -57,6 +57,18 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
+# TWA / Bubblewrap — nunca versionar chaves nem artifacts de release Android
+android.keystore
+*.keystore
+*.jks
+twa-manifest.json.bak
+app-release-bundle.aab
+app-release-signed.apk
+/android/
+bubblewrap.log
+*keystore*
+*signing*
+
 # Replit
 .cache/
 .local/

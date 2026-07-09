@@ -89,17 +89,10 @@ export function isOrganizerProForCommunity(
   return orgCommunity === communityId;
 }
 
-/** PRO Jogador (inclui quem tem PRO Organizador — tem tudo do jogador). */
+/** PRO Jogador — Clube PRO inclui todas as features de jogador. */
 export function hasPlayerPro(entitlements?: Entitlements | null): boolean {
   if (entitlements?.playerPro || entitlements?.organizerPro) {
     return slotActive(entitlements.playerPro) || slotActive(entitlements.organizerPro);
   }
   return isProActive(entitlements);
-}
-
-/** Subscrição Jogador PRO activa (exclui só Clube PRO sem Jogador PRO). */
-export function hasPlayerProOnly(entitlements?: Entitlements | null): boolean {
-  if (entitlements?.playerPro) return slotActive(entitlements.playerPro);
-  if (entitlements?.organizerPro) return false;
-  return isProActive(entitlements) && entitlements?.plan === "player_pro";
 }

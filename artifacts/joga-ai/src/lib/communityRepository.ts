@@ -22,7 +22,7 @@ import {
   increment,
   deleteField,
 } from "firebase/firestore";
-import { db, isFirebaseConfigured } from "./firebase";
+import { auth, db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
 import { isListedInPublicBrowse, isListedInCommunityFeed } from "./matchAccess";
 import { MAX_PROFILE_PHOTO_BYTES, loadUserProfile } from "./userRepository";
@@ -123,6 +123,13 @@ export type CreateCommunityInput = {
   adminId: string;
   adminDisplayName: string;
 };
+
+/** Collection-group exige userId == request.auth.uid na query (regras Firestore). */
+function authUidForCollectionGroup(userId: string): string | null {
+  const uid = auth.currentUser?.uid;
+  if (!uid || uid !== userId) return null;
+  return uid;
+}
 
 /**
  * Confirma para cada comunidade se o utilizador é membro, com um pedido
@@ -267,16 +274,19 @@ export async function loadMyCommunities(userId: string): Promise<Community[]> {
   // apanhar comunidades que a leitura directa acima tenha falhado por algum
   // erro pontual.
   try {
-    const memberSnap = await getDocs(
-      query(collectionGroup(db, "members"), where("userId", "==", userId)),
-    );
+    const uid = authUidForCollectionGroup(userId);
+    if (uid) {
+      const memberSnap = await getDocs(
+        query(collectionGroup(db, "members"), where("userId", "==", uid)),
+      );
 
-    for (const memberDoc of memberSnap.docs) {
-      const communityRef = memberDoc.ref.parent.parent;
-      if (!communityRef || byId.has(communityRef.id)) continue;
-      const communitySnap = await getDoc(communityRef);
-      if (!communitySnap.exists()) continue;
-      byId.set(communitySnap.id, mapCommunityDoc(communitySnap.id, communitySnap.data()));
+      for (const memberDoc of memberSnap.docs) {
+        const communityRef = memberDoc.ref.parent.parent;
+        if (!communityRef || byId.has(communityRef.id)) continue;
+        const communitySnap = await getDoc(communityRef);
+        if (!communitySnap.exists()) continue;
+        byId.set(communitySnap.id, mapCommunityDoc(communitySnap.id, communitySnap.data()));
+      }
     }
   } catch (err) {
     console.warn("[communityRepository] loadMyCommunities members:", err);
@@ -304,8 +314,11 @@ async function loadMemberCommunityIds(userId: string): Promise<Set<string>> {
   if (!isFirebaseConfigured() || !userId) return ids;
 
   try {
+    const uid = authUidForCollectionGroup(userId);
+    if (!uid) return ids;
+
     const snap = await getDocs(
-      query(collectionGroup(db, "members"), where("userId", "==", userId)),
+      query(collectionGroup(db, "members"), where("userId", "==", uid)),
     );
     for (const d of snap.docs) {
       const ref = d.ref.parent.parent;
@@ -334,10 +347,13 @@ export async function isCommunityMember(
 
 async function loadPendingRequestCommunityIds(userId: string): Promise<Set<string>> {
   try {
+    const uid = authUidForCollectionGroup(userId);
+    if (!uid) return new Set();
+
     const snap = await getDocs(
       query(
         collectionGroup(db, "joinRequests"),
-        where("userId", "==", userId),
+        where("userId", "==", uid),
         where("status", "==", "pending"),
       ),
     );

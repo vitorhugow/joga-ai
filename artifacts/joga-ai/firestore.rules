@@ -63,17 +63,20 @@ service cloud.firestore {
         || notifId.matches('^promoted-.+');
     }
 
-    // Collection-group queries (loadMyCommunities, pedidos pendentes).
-    // A condição DEVE alinhar com o filtro da query (userId == auth.uid) — regras
-    // com OR (memberId || userId) falham na análise estática do Firestore.
+    /** Alinha com .where('userId', '==', auth.uid) nas collection-group queries. */
+    function isCollectionGroupSelfUserId() {
+      return isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // Collection-group: loadMyCommunities, loadMemberCommunityIds, pedidos pendentes,
+    // notificações (processPendingNotifications / regra F1 join requests).
+    // Sem OR (memberId || userId) — o Firestore rejeita a query na análise estática.
     match /{path=**}/members/{memberId} {
-      allow read: if isSignedIn()
-        && resource.data.userId == request.auth.uid;
+      allow read: if isCollectionGroupSelfUserId();
     }
 
     match /{path=**}/joinRequests/{requestUserId} {
-      allow read: if isSignedIn()
-        && resource.data.userId == request.auth.uid;
+      allow read: if isCollectionGroupSelfUserId();
       allow create: if isSignedIn() && requestUserId == request.auth.uid;
     }
 

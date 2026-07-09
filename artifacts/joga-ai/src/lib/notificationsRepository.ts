@@ -18,7 +18,7 @@ import {
   where,
   type Unsubscribe,
 } from "firebase/firestore";
-import { db, isFirebaseConfigured } from "./firebase";
+import { auth, db, isFirebaseConfigured } from "./firebase";
 import { getVotes } from "./auditRepository";
 import { loadMatchFromFirestore } from "./matchRepository";
 import { loadUserMatchHistory } from "./matchHistoryRepository";
@@ -247,8 +247,11 @@ export async function processPendingNotifications(userId: string): Promise<void>
   // Pedidos de comunidade aprovados/recusados
   if (isFirebaseConfigured()) {
     try {
+      const uid = auth.currentUser?.uid;
+      if (!uid || uid !== userId) return;
+
       const joinSnap = await getDocs(
-        query(collectionGroup(db, "joinRequests"), where("userId", "==", userId)),
+        query(collectionGroup(db, "joinRequests"), where("userId", "==", uid)),
       );
 
       for (const requestDoc of joinSnap.docs) {

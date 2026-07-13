@@ -1607,7 +1607,7 @@ export default function PreJogo() {
           )}
 
           {matchDetails?.organizerName && (
-            <p className="text-white/40 text-xs mt-2">
+            <p className="text-white/40 text-sm mt-2">
               Organizador:{" "}
               {resolvedOrganizerId ? (
                 <Link
@@ -1705,7 +1705,7 @@ export default function PreJogo() {
                 <p className="text-amber-300 text-sm font-bold">
                   Lista de espera — posição {myWaitlistIndex + 1}
                 </p>
-                <p className="text-white/45 text-xs mt-1">Avisamos quando abrir vaga.</p>
+                <p className="text-white/45 text-sm mt-1">Avisamos quando abrir vaga.</p>
                 <JogaButton
                   variant="ghost"
                   size="sm"
@@ -1788,7 +1788,7 @@ export default function PreJogo() {
             {organizerCaixaReady ? (
               <>
                 <p className="text-white text-sm font-bold mt-2">Caixa ligada ✓</p>
-                <p className="text-white/45 text-xs mt-1">
+                <p className="text-white/45 text-sm mt-1">
                   Os jogadores podem pagar online. O valor só entra na tua Caixa quando a pelada termina (concluída).
                 </p>
                 <button
@@ -2172,7 +2172,7 @@ export default function PreJogo() {
                 >
                   <div>
                     <p className="text-white font-bold text-sm">{entry.name}</p>
-                    <p className="text-white/35 text-xs">{entry.position} · OVR {entry.overall}</p>
+                    <p className="text-white/40 text-sm">{entry.position} · OVR {entry.overall}</p>
                   </div>
                   <span className="text-amber-300 font-black text-sm">#{index + 1}</span>
                 </div>

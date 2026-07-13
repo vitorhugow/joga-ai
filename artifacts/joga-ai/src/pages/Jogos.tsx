@@ -1,29 +1,41 @@
-import { useEffect, useState } from "react";
-import { Search, SlidersHorizontal, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, SlidersHorizontal, Plus, X, MapPin } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
 import { loadAvailableMatches, loadMyMatches, type MatchListing } from "@/lib/communityRepository";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { JogaButton, JogaChip, JogaPage } from "@/components/joga";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
-const cities = ["todas", "Lisboa", "Porto", "Braga", "Setúbal"];
-const cityLabels: Record<string, string> = { todas: "Todas", Lisboa: "Lisboa", Porto: "Porto", Braga: "Braga", Setúbal: "Setúbal" };
+const FALLBACK_CITIES = ["Lisboa", "Porto", "Braga", "Setúbal", "Coimbra"];
 const types = ["todos", "futsal", "fut5", "fut7", "futebol11"];
 const typeLabels: Record<string, string> = { todos: "Todos", futsal: "Futsal", fut5: "Fut 5", fut7: "Fut 7", futebol11: "Fut 11" };
+
+function buildCityOptions(matches: MatchListing[], userCity?: string): string[] {
+  const fromMatches = [...new Set(matches.map((m) => m.city).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "pt"),
+  );
+  const merged = new Set<string>(["todas", ...fromMatches]);
+  for (const c of FALLBACK_CITIES) merged.add(c);
+  if (userCity) merged.add(userCity);
+  return [...merged];
+}
 
 export default function Jogos() {
   useDocumentTitle("Jogos");
   const { requireLinked } = useAuthGate();
   const { isLinked, userId } = useAuth();
+  const { profile } = useUserProfile();
   const [view, setView] = useState<"descobrir" | "minhas">("descobrir");
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("todas");
+  const [cityInitialized, setCityInitialized] = useState(false);
   const [typeFilter, setTypeFilter] = useState("todos");
-  const [showFilters, setShowFilters] = useState(false);
+  const [showTypeFilters, setShowTypeFilters] = useState(false);
   const [allMatches, setAllMatches] = useState<MatchListing[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [myMatches, setMyMatches] = useState<MatchListing[]>([]);
@@ -48,6 +60,20 @@ export default function Jogos() {
       .finally(() => setLoadingMyMatches(false));
   }, [userId]);
 
+  const cityOptions = useMemo(
+    () => buildCityOptions(allMatches, profile.city),
+    [allMatches, profile.city],
+  );
+
+  useEffect(() => {
+    if (cityInitialized || loadingMatches) return;
+    const preferred = profile.city?.trim();
+    if (preferred && cityOptions.includes(preferred)) {
+      setCityFilter(preferred);
+    }
+    setCityInitialized(true);
+  }, [cityInitialized, loadingMatches, profile.city, cityOptions]);
+
   const filtered = allMatches.filter((m) => {
     const s = m.title.toLowerCase().includes(search.toLowerCase()) || m.city.toLowerCase().includes(search.toLowerCase());
     const c = cityFilter === "todas" || m.city === cityFilter;
@@ -57,7 +83,7 @@ export default function Jogos() {
 
   const available = filtered.filter((m) => m.spotsRemaining !== "Lotado");
   const full = filtered.filter((m) => m.spotsRemaining === "Lotado");
-  const hasFilters = cityFilter !== "todas" || typeFilter !== "todos";
+  const hasTypeFilter = typeFilter !== "todos";
 
   return (
     <JogaPage theme="dark" padded={false} bottomSpace>
@@ -103,27 +129,20 @@ export default function Jogos() {
             </div>
             <button
               type="button"
-              onClick={() => setShowFilters(!showFilters)}
+              onClick={() => setShowTypeFilters(!showTypeFilters)}
               className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 active:scale-95 transition-all"
-              style={{ background: showFilters ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.09)", border: showFilters ? "1.5px solid rgba(74,222,128,0.4)" : "1px solid rgba(255,255,255,0.14)" }}
+              style={{ background: showTypeFilters ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.09)", border: showTypeFilters ? "1.5px solid rgba(74,222,128,0.4)" : "1px solid rgba(255,255,255,0.14)" }}
               data-testid="button-toggle-filters"
             >
-              {showFilters ? <X className="w-4 h-4 text-emerald-400" /> : <SlidersHorizontal className="w-4 h-4" style={{ color: "rgba(255,255,255,0.5)" }} />}
+              {showTypeFilters ? <X className="w-4 h-4 text-emerald-400" /> : <SlidersHorizontal className="w-4 h-4" style={{ color: "rgba(255,255,255,0.5)" }} />}
             </button>
           </div>
 
-          {showFilters && (
-            <div className="mt-3 space-y-3">
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {cities.map((c) => (
-                  <JogaChip key={c} label={cityLabels[c]} active={cityFilter === c} onClick={() => setCityFilter(c)} />
-                ))}
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {types.map((t) => (
-                  <JogaChip key={t} label={typeLabels[t]} active={typeFilter === t} onClick={() => setTypeFilter(t)} />
-                ))}
-              </div>
+          {showTypeFilters && (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {types.map((t) => (
+                <JogaChip key={t} label={typeLabels[t]} active={typeFilter === t} onClick={() => setTypeFilter(t)} />
+              ))}
             </div>
           )}
         </div>
@@ -196,7 +215,7 @@ export default function Jogos() {
             ) : myMatches.length === 0 ? (
               <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
                 <p className="text-white/50 text-sm">Ainda não entraste em nenhuma partida ativa.</p>
-                <p className="text-white/35 text-xs mt-1">Assim que confirmares presença, ela aparece aqui — mesmo depois de ir para o Ao Vivo.</p>
+                <p className="text-white/40 text-sm mt-1">Assim que confirmares presença, ela aparece aqui — mesmo depois de ir para o Ao Vivo.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -208,9 +227,27 @@ export default function Jogos() {
           </section>
         ) : (
           <>
-            {hasFilters && (
-              <button type="button" onClick={() => { setCityFilter("todas"); setTypeFilter("todos"); }} className="text-emerald-400 text-xs font-semibold">
-                Limpar filtros
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+                <h2 className="font-display font-black text-white text-base">Cidade</h2>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" data-testid="city-filter-jogos">
+                {cityOptions.map((c) => (
+                  <JogaChip
+                    key={c}
+                    label={c === "todas" ? "Todas" : c}
+                    active={cityFilter === c}
+                    onClick={() => setCityFilter(c)}
+                    testId={`city-filter-${c}`}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {hasTypeFilter && (
+              <button type="button" onClick={() => setTypeFilter("todos")} className="text-emerald-400 text-sm font-semibold">
+                Limpar filtro de tipo
               </button>
             )}
 

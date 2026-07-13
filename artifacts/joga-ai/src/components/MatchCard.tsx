@@ -114,16 +114,16 @@ export function MatchCard({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs mb-2 font-bold text-white">
-            <MapPin className="w-3 h-3 shrink-0" style={{ color: "#f87171" }} />
+          <div className="flex items-center gap-1.5 text-sm mb-2 font-bold text-white">
+            <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: "#f87171" }} />
             <span className="truncate">📍 {location}, {city}</span>
           </div>
 
-          <div className="text-xs mb-0.5 font-bold text-white">
+          <div className="text-sm mb-0.5 font-bold text-white">
             📅 {schedule.dateLine}
           </div>
           {schedule.timeLine && (
-            <div className="text-xs mb-3 font-bold text-white/90">
+            <div className="text-sm mb-3 font-bold text-white/90">
               🕐 {schedule.timeLine}
             </div>
           )}

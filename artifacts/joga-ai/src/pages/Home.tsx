@@ -486,8 +486,8 @@ export default function Home() {
                 <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-xl" style={{ background: "rgba(22,163,74,0.1)" }}>⚽</div>
                 <div className="flex-1 min-w-0">
                   <p className="font-display font-bold text-white text-sm leading-tight truncate">{m.title}</p>
-                  <p className="text-[11px] mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.35)" }}>📍 {m.location}, {m.city}</p>
-                  <p className="text-[11px] mt-0.5 font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>{m.date} · {m.gameType} · {m.level}</p>
+                  <p className="text-sm mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.35)" }}>📍 {m.location}, {m.city}</p>
+                  <p className="text-sm mt-0.5 font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>{m.date} · {m.gameType} · {m.level}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}>{m.spotsRemaining}</span>
@@ -503,7 +503,7 @@ export default function Home() {
         {/* RANKING SEMANAL */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">Ranking Semanal</h2>
+            <h2 className="font-display font-black text-white text-lg">Liga Global</h2>
             <Link href="/ranking"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver tudo <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
           <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>
@@ -544,7 +544,7 @@ export default function Home() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate" style={{ color: r.isMe ? "#4ade80" : "rgba(255,255,255,0.85)" }}>{r.name}{r.isMe ? " (Tu)" : ""}</p>
-                    <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>{r.position}</p>
+                    <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>{r.position}</p>
                   </div>
                   <span className="font-display font-black text-xl" style={{ color: r.rank === 1 ? "#fbbf24" : r.isMe ? "#4ade80" : "rgba(255,255,255,0.7)" }}>{r.value}</span>
                 </div>

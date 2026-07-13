@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
+    "prebuild": "bash ../../scripts/sync-field-photos.sh",
     "build": "BASE_PATH=/ vite build --config vite.config.ts",
     "build:pages": "pnpm run build",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",

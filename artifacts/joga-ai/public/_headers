@@ -20,5 +20,8 @@
 /assets/404.html
   Cache-Control: no-store
 
+/fields/*.webp
+  Cache-Control: public, max-age=86400
+
 /fields/404.html
   Cache-Control: no-store

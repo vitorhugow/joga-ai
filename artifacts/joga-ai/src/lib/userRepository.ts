@@ -93,6 +93,13 @@ export type UserProfile = {
   email?: string;
   /** PRO — leitura no cliente; escrito por Stripe (Functions) ou admin */
   entitlements?: import("./entitlements").Entitlements;
+  /** Apelido automático da última pelada (só PRO — escrito por Cloud Functions) */
+  lastMatchNickname?: {
+    label: string;
+    emoji?: string;
+    matchId: string;
+    earnedAt: string;
+  };
   /** Conta Stripe Connect do organizador — escrito só por Functions */
   stripeAccountId?: string;
   /** Saldo em cêntimos para pagar peladas futuras — escrito só por Functions */
@@ -319,6 +326,16 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
     stripeAccountId: data.stripeAccountId ? String(data.stripeAccountId) : undefined,
     peladaBalanceCents: Number.isFinite(Number(data.peladaBalanceCents))
       ? Number(data.peladaBalanceCents)
+      : undefined,
+    lastMatchNickname: data.lastMatchNickname
+      ? {
+          label: String((data.lastMatchNickname as Record<string, unknown>).label ?? ""),
+          emoji: (data.lastMatchNickname as Record<string, unknown>).emoji
+            ? String((data.lastMatchNickname as Record<string, unknown>).emoji)
+            : undefined,
+          matchId: String((data.lastMatchNickname as Record<string, unknown>).matchId ?? ""),
+          earnedAt: String((data.lastMatchNickname as Record<string, unknown>).earnedAt ?? ""),
+        }
       : undefined,
     updatedAt: parseUpdatedAt(data.updatedAt),
   };

@@ -223,9 +223,10 @@ export const onMatchRatingsReleasedNotify = onDocumentUpdated(
         notifyUser(String(player.userId), {
           id: `evo-${matchId}`,
           type: "match",
+          priority: "popup",
           title: "A tua nota saiu!",
           body: `Recebeste ${Number(player.rating).toFixed(1)} na pelada «${title}». Vê a tua evolução.`,
-          link: "/perfil/evolucao",
+          link: `/partida/${matchId}/pos-jogo?view=summary`,
         }),
       ),
     );

@@ -56,11 +56,13 @@ function Field({
   label,
   icon,
   proBadge,
+  required,
   children,
 }: {
   label: string;
   icon?: React.ReactNode;
   proBadge?: "player" | "organizer";
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -68,6 +70,7 @@ function Field({
       <label className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] mb-2" style={{ color: "rgba(255,255,255,0.35)" }}>
         {icon}
         {label}
+        {required && <span className="text-amber-400/90" aria-hidden>*</span>}
         {proBadge && <ProFeatureBadge tier={proBadge} />}
       </label>
       {children}
@@ -166,7 +169,7 @@ export default function CriarPartida() {
     date: "",
     time: "",
     maxPlayers: "14",
-    price: "",
+    price: "Grátis",
     notes: "",
   });
 
@@ -181,8 +184,6 @@ export default function CriarPartida() {
     if (!form.date.trim()) return "Preenche a data.";
     if (!form.time.trim()) return "Preenche a hora.";
     if (!form.maxPlayers.trim() || Number(form.maxPlayers) < 4) return "Indica o número de jogadores (mín. 4).";
-    if (!form.price.trim()) return "Preenche o preço (podes escrever Grátis).";
-    if (!form.notes.trim()) return "Preenche as observações.";
     if (accessMode === "community" && !(selectedCommunityId || communityId)) {
       return "Escolhe a comunidade para o modo «Apenas da comunidade».";
     }
@@ -375,8 +376,8 @@ export default function CriarPartida() {
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 pt-5 space-y-5 pb-8">
-        <Field label="Nome da Partida">
-          <StyledInput type="text" placeholder="Ex: Peladinha de Sexta" value={form.title} onChange={(e) => set("title", e.target.value)} data-testid="input-match-title" required />
+        <Field label="Nome da Partida" required>
+          <StyledInput type="text" placeholder="Ex: Peladinha de Sexta" value={form.title} onChange={(e) => set("title", e.target.value)} data-testid="input-match-title" />
         </Field>
 
         <Field label="Tipo de Futebol">
@@ -414,20 +415,20 @@ export default function CriarPartida() {
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Cidade" icon={<MapPin className="w-3 h-3" />}>
-            <StyledInput type="text" placeholder="Lisboa" value={form.city} onChange={(e) => set("city", e.target.value)} data-testid="input-city" required />
+          <Field label="Cidade" icon={<MapPin className="w-3 h-3" />} required>
+            <StyledInput type="text" placeholder="Lisboa" value={form.city} onChange={(e) => set("city", e.target.value)} data-testid="input-city" />
           </Field>
-          <Field label="Campo">
-            <StyledInput type="text" placeholder="Nome do campo" value={form.location} onChange={(e) => set("location", e.target.value)} data-testid="input-location" required />
+          <Field label="Campo" required>
+            <StyledInput type="text" placeholder="Nome do campo" value={form.location} onChange={(e) => set("location", e.target.value)} data-testid="input-location" />
           </Field>
         </div>
 
         <div className="grid grid-cols-1 min-[375px]:grid-cols-2 gap-3">
-          <Field label="Data">
-            <StyledInput type="date" value={form.date} onChange={(e) => set("date", e.target.value)} data-testid="input-date" required className="min-w-0" />
+          <Field label="Data" required>
+            <StyledInput type="date" value={form.date} onChange={(e) => set("date", e.target.value)} data-testid="input-date" className="min-w-0" />
           </Field>
-          <Field label="Hora">
-            <StyledInput type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="input-time" required className="min-w-0" />
+          <Field label="Hora" required>
+            <StyledInput type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="input-time" className="min-w-0" />
           </Field>
         </div>
 
@@ -446,16 +447,15 @@ export default function CriarPartida() {
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Nº Jogadores" icon={<Users className="w-3 h-3" />}>
-            <StyledInput type="number" min="4" max="22" value={form.maxPlayers} onChange={(e) => set("maxPlayers", e.target.value)} data-testid="input-max-players" required />
+          <Field label="Nº Jogadores" icon={<Users className="w-3 h-3" />} required>
+            <StyledInput type="number" min="4" max="22" value={form.maxPlayers} onChange={(e) => set("maxPlayers", e.target.value)} data-testid="input-max-players" />
           </Field>
-          <Field label="Preço/Jogador" icon={<Euro className="w-3 h-3" />}>
+          <Field label="Preço/Jogador" icon={<Euro className="w-3 h-3" />} required>
             <select
               value={form.price}
               onChange={(e) => set("price", e.target.value)}
               className="w-full rounded-2xl px-4 py-3.5 text-sm text-white bg-[#0f172a] border border-white/20 outline-none focus:border-emerald-500/60 [color-scheme:dark] min-w-0"
               data-testid="input-price"
-              required
             >
               {!PRICE_OPTIONS.includes(form.price) && form.price.trim() && (
                 <option value={form.price} className="bg-[#0f172a] text-white">
@@ -559,7 +559,7 @@ export default function CriarPartida() {
         </Field>
 
         <Field label="Observações" icon={<FileText className="w-3 h-3" />}>
-          <StyledTextarea placeholder="Informações adicionais sobre a partida..." value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} data-testid="input-notes" required />
+          <StyledTextarea placeholder="Informações adicionais (opcional)…" value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} data-testid="input-notes" />
         </Field>
 
         <JogaButton type="submit" variant="primary" size="lg" className="gap-3" data-testid="button-submit-match" disabled={submitting}>

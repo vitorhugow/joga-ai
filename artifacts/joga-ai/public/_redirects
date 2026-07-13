@@ -4,4 +4,5 @@
 /sw.js          /sw.js               200
 /workbox-*      /workbox-:splat      200
 /registerSW.js  /registerSW.js       200
+/og/partida/:id  https://europe-west1-joga-ai-f7622.cloudfunctions.net/matchOgPreview?matchId=:id  302
 /*              /index.html          200

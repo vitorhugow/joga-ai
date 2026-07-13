@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
-import { isListedInPublicBrowse, isListedInCommunityFeed } from "./matchAccess";
+import { isListedInPublicBrowse, isListedInCommunityFeed, isPublicSchedulingStatus } from "./matchAccess";
 import { MAX_PROFILE_PHOTO_BYTES, loadUserProfile } from "./userRepository";
 import { isOrganizerProForCommunity } from "./entitlements";
 import { loadAllPostMatches } from "./postMatchStorage";
@@ -759,6 +759,27 @@ async function loadCommunityFlagsForMatches(
   return map;
 }
 
+/** Exclui partidas cujo relógio ao vivo já arrancou (mesmo que status local esteja desatualizado). */
+async function excludeMatchesWithActiveLiveSession(matches: MatchListing[]): Promise<MatchListing[]> {
+  if (!isFirebaseConfigured() || matches.length === 0) return matches;
+
+  const liveChecks = await Promise.all(
+    matches.map(async (match) => {
+      if (!isPublicSchedulingStatus(match.status)) return false;
+      try {
+        const snap = await getDoc(doc(db, "matches", match.id, "state", "live"));
+        if (!snap.exists()) return true;
+        const liveStatus = String(snap.data()?.status ?? "");
+        return !["running", "paused", "ended"].includes(liveStatus);
+      } catch {
+        return true;
+      }
+    }),
+  );
+
+  return matches.filter((_, index) => liveChecks[index]);
+}
+
 /**
  * Nota importante: quando o Firebase está configurado, a query remota é
  * SEMPRE a única fonte de verdade sobre quais partidas continuam "activas"
@@ -774,7 +795,8 @@ async function loadCommunityFlagsForMatches(
 /** Partidas públicas (Firestore) — inclui peladas de comunidade abertas */
 export async function loadAvailableMatches(limitCount = 10): Promise<MatchListing[]> {
   if (!isFirebaseConfigured()) {
-    return readLocalMatchListings().filter((m) => isOpenPublicMatch(m)).slice(0, limitCount);
+    const fallback = readLocalMatchListings().filter((m) => isOpenPublicMatch(m));
+    return (await excludeMatchesWithActiveLiveSession(fallback)).slice(0, limitCount);
   }
 
   try {
@@ -796,10 +818,12 @@ export async function loadAvailableMatches(limitCount = 10): Promise<MatchListin
         return 0;
       });
 
-    return remote.slice(0, limitCount);
+    const withoutLive = await excludeMatchesWithActiveLiveSession(remote);
+    return withoutLive.slice(0, limitCount);
   } catch (err) {
     console.warn("[communityRepository] loadAvailableMatches:", err);
-    return readLocalMatchListings().filter((m) => isOpenPublicMatch(m)).slice(0, limitCount);
+    const fallback = readLocalMatchListings().filter((m) => isOpenPublicMatch(m));
+    return (await excludeMatchesWithActiveLiveSession(fallback)).slice(0, limitCount);
   }
 }
 

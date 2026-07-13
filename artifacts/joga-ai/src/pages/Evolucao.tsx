@@ -14,8 +14,12 @@ import { loadEvolutionFromFirestore } from "@/lib/evolutionRepository";
 import { isPostMatchExpired, loadPostMatch } from "@/lib/postMatchStorage";
 import { resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchFromFirestore } from "@/lib/matchRepository";
+import { loadMatchResult } from "@/lib/matchHistoryRepository";
 import { matchSummaryPath, subscribeHasUserVoted } from "@/lib/voteStatusRepository";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
+const VOTING_STATUSES = new Set(["aguardando_auditoria", "auditada"]);
+const POST_GAME_STATUSES = new Set(["aguardando_auditoria", "auditada", "concluida"]);
 
 function formatDate(iso: string) {
   try {
@@ -38,6 +42,8 @@ export default function Evolucao() {
   const pendingMatchId = resolveMatchId({ storedMatchId: pendingMatch?.matchId });
   const pendingExpired = isPostMatchExpired(pendingMatch);
   const [hasVoted, setHasVoted] = useState(false);
+  const [remoteStatus, setRemoteStatus] = useState<string | null>(null);
+  const [ratingsReleased, setRatingsReleased] = useState(false);
 
   useEffect(() => {
     if (!authUserId || !pendingMatchId) {
@@ -46,12 +52,50 @@ export default function Evolucao() {
     }
     return subscribeHasUserVoted(pendingMatchId, authUserId, setHasVoted);
   }, [authUserId, pendingMatchId]);
+
+  useEffect(() => {
+    if (!pendingMatchId) {
+      setRemoteStatus(null);
+      setRatingsReleased(false);
+      return;
+    }
+    let cancelled = false;
+    void loadMatchFromFirestore(pendingMatchId).then((remote) => {
+      if (cancelled || !remote) return;
+      setRemoteStatus(remote.status);
+      setPendingMatch((current) =>
+        current && current.matchId === remote.matchId
+          ? { ...current, status: remote.status }
+          : current,
+      );
+    });
+    void loadMatchResult(pendingMatchId).then((result) => {
+      if (!cancelled) setRatingsReleased(Boolean(result?.ratingsReleased));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingMatchId]);
+
+  const effectiveStatus = remoteStatus ?? pendingMatch?.status;
+  const isVotingPhase = Boolean(effectiveStatus && VOTING_STATUSES.has(effectiveStatus));
   const showPendingVote = Boolean(
     pendingMatch &&
+      pendingMatchId &&
       !pendingExpired &&
       !hasVoted &&
-      pendingMatch.status !== "expirada" &&
-      pendingMatch.status !== "concluida",
+      !ratingsReleased &&
+      isVotingPhase &&
+      effectiveStatus !== "expirada" &&
+      effectiveStatus !== "concluida",
+  );
+  const showVotedSummary = Boolean(
+    pendingMatch &&
+      pendingMatchId &&
+      !pendingExpired &&
+      (hasVoted || ratingsReleased) &&
+      effectiveStatus &&
+      POST_GAME_STATUSES.has(effectiveStatus),
   );
 
   const { profile: ownProfile } = useUserProfile();
@@ -81,28 +125,6 @@ export default function Evolucao() {
       if (remote.length > 0) setHistory(remote);
     });
   }, [authUserId]);
-
-  // O cache local pode ficar desatualizado (ex.: a pelada foi finalizada
-  // noutro dispositivo, ou pelo organizador, entretanto). Antes de convidar
-  // o utilizador a "votar", confirma o status real no Firestore — depois
-  // de concluída, ninguém deve ver este convite nem conseguir votar.
-  useEffect(() => {
-    if (!pendingMatch || pendingMatch.status === "concluida" || pendingMatch.status === "expirada") return;
-    let cancelled = false;
-    // loadMatchFromFirestore já mescla e regrava o cache local com o
-    // status mais recente — só precisamos de refletir isso no estado.
-    loadMatchFromFirestore(pendingMatch.matchId).then((remote) => {
-      if (cancelled || !remote) return;
-      setPendingMatch((current) =>
-        current && current.matchId === remote.matchId && current.status !== remote.status
-          ? { ...current, status: remote.status }
-          : current,
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [pendingMatch?.matchId, pendingMatch?.status]);
 
   return (
     <JogaPage theme="dark" className="py-5 pb-28">
@@ -137,11 +159,17 @@ export default function Evolucao() {
         </JogaCard>
       )}
 
-      {pendingMatch && !pendingExpired && hasVoted && pendingMatch.status === "aguardando_auditoria" && (
+      {showVotedSummary && (
         <JogaCard variant="arena" className="mb-4 border-emerald-400/20 bg-emerald-400/6">
-          <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-[0.18em]">Voto registado</p>
-          <p className="text-white/55 text-sm mt-2">Já deste a tua nota nesta pelada. Vê o resumo quando quiseres.</p>
-          <Link href={matchSummaryPath(pendingMatchId)} className="block mt-3">
+          <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-[0.18em]">
+            {ratingsReleased ? "Notas publicadas" : "Voto registado"}
+          </p>
+          <p className="text-white/55 text-sm mt-2">
+            {ratingsReleased
+              ? "A tua nota já saiu — vê o resumo completo da pelada."
+              : "Já deste a tua nota nesta pelada. Vê o resumo quando quiseres."}
+          </p>
+          <Link href={matchSummaryPath(pendingMatchId, { view: "summary" })} className="block mt-3">
             <JogaButton variant="ghost" size="md" className="gap-2">
               Ver resumo da pelada
               <ChevronRight className="w-4 h-4" />

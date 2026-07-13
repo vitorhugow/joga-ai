@@ -77,6 +77,8 @@ export function subscribeHasUserVoted(
 }
 
 /** Link para o resumo pós-jogo (nunca pré-jogo / ao-vivo). */
-export function matchSummaryPath(matchId: string): string {
-  return `/partida/${matchId}/pos-jogo`;
+export function matchSummaryPath(matchId: string, options?: { view?: "summary" }): string {
+  const base = `/partida/${matchId}/pos-jogo`;
+  if (options?.view === "summary") return `${base}?view=summary`;
+  return base;
 }

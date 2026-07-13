@@ -27,7 +27,7 @@ import {
   buildEvolutionRecord,
   saveEvolutionRecord,
 } from "@/lib/evolutionStorage";
-import { applyMatchResultToProfile } from "@/lib/userRepository";
+import { applyMatchResultToProfile, loadUserProfile } from "@/lib/userRepository";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   saveMatchResult,
@@ -72,6 +72,9 @@ import { toast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { subscribeHasUserVoted } from "@/lib/voteStatusRepository";
+import { resolveImageSrc } from "@/lib/imageUtils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SponsorSlot } from "@/components/SponsorSlot";
 import { MatchStatsSections } from "@/components/MatchStatsSections";
 import { generateResultImage } from "@/lib/resultImage";
@@ -223,6 +226,7 @@ export default function PosJogo() {
   const { userId: authUserId } = useAuth();
   const userId = authUserId || currentMatchUserId();
   const matchId = resolveMatchId({ routeMatchId: params?.id });
+  const summaryViewOnly = new URLSearchParams(window.location.search).get("view") === "summary";
   useMatchPhaseGuard(matchId, "pos-jogo");
   const [data, setData] = useState<SavedPostMatch | null>(() => {
     const local = loadPostMatch(matchId);
@@ -293,10 +297,12 @@ export default function PosJogo() {
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [voteMode, setVoteMode] = useState(false);
+  const [hasVotedRemote, setHasVotedRemote] = useState(false);
   const [gainsMode, setGainsMode] = useState(() => {
     const id = resolveMatchId({ routeMatchId: params?.id });
     return hasUserVotedInSession(currentMatchUserId(), id);
   });
+  const [playerPhotos, setPlayerPhotos] = useState<Record<string, string>>({});
   const [displayGains, setDisplayGains] = useState<EvolutionGain[] | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>(() => {
     const id = resolveMatchId({ routeMatchId: params?.id });
@@ -433,21 +439,58 @@ export default function PosJogo() {
       }),
     [data, topScorers, players, allEvents, games],
   );
-  const hasVoted = hasUserVotedInSession(userId, matchId);
+  const hasVoted = hasUserVotedInSession(userId, matchId) || hasVotedRemote;
+
+  useEffect(() => {
+    if (!authUserId || !matchId) {
+      setHasVotedRemote(false);
+      return;
+    }
+    return subscribeHasUserVoted(matchId, authUserId, (voted) => {
+      setHasVotedRemote(voted);
+      if (voted) {
+        setGainsMode(true);
+        setVoteMode(false);
+      }
+    });
+  }, [authUserId, matchId]);
+
+  useEffect(() => {
+    if (!voteMode || players.length === 0) return;
+    let cancelled = false;
+    void Promise.all(
+      players.map(async (player: { id: string; userId?: string }) => {
+        if (!player.userId) return { id: player.id, photo: undefined as string | undefined };
+        const profile = await loadUserProfile(player.userId);
+        return { id: player.id, photo: resolveImageSrc(profile?.photoUrl) };
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      results.forEach((entry) => {
+        if (entry.photo) next[entry.id] = entry.photo;
+      });
+      setPlayerPhotos(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [voteMode, players]);
 
   useEffect(() => {
     if (!data) return;
     const isVoting =
       data.status === "aguardando_auditoria" || data.status === "auditada";
-    // Organizador e admin da comunidade também têm de votar primeiro, como
-    // qualquer outro jogador — só depois de votarem (gainsMode) é que veem
-    // o painel de administração da votação no resumo. Antes disto, o
-    // organizador via logo o painel "Finalizar pelada e votação" ao abrir a
-    // partida, sem nunca ser convidado a votar.
-    if (isVoting && !gainsMode && !hasUserVotedInSession(userId, matchId)) {
+    if (
+      isVoting &&
+      !gainsMode &&
+      !hasVoted &&
+      !summaryViewOnly &&
+      !ratingsReleased
+    ) {
       setVoteMode(true);
     }
-  }, [data, gainsMode, userId, matchId]);
+  }, [data, gainsMode, hasVoted, userId, matchId, summaryViewOnly, ratingsReleased]);
 
   // Se a pelada for finalizada (por outra pessoa, noutro dispositivo, ou
   // por expiração de 24h) enquanto este utilizador está no ecrã de
@@ -1156,11 +1199,21 @@ export default function PosJogo() {
             return (
               <JogaCard key={player.id} variant="arena">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-display font-black text-white text-lg">{player.name}</p>
-                    <p className="text-white/35 text-xs">{player.position} · OVER {player.overall || 50}</p>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar className="w-11 h-11 shrink-0 border border-white/12">
+                      {playerPhotos[player.id] ? (
+                        <AvatarImage src={playerPhotos[player.id]} alt={player.name} />
+                      ) : null}
+                      <AvatarFallback className="bg-white/8 text-white font-black text-sm">
+                        {String(player.name || "?").charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="font-display font-black text-white text-lg truncate">{player.name}</p>
+                      <p className="text-white/35 text-xs">{player.position} · OVER {player.overall || 50}</p>
+                    </div>
                   </div>
-                  <p className="text-amber-300 font-display font-black text-2xl">{rating ?? "—"}/10</p>
+                  <p className="text-amber-300 font-display font-black text-2xl shrink-0">{rating ?? "—"}/10</p>
                 </div>
 
                 <div className="grid grid-cols-10 gap-1.5 mt-4">

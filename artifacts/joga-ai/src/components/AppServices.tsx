@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
 import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
+import { MatchRatingReleasedModal } from "@/components/MatchRatingReleasedModal";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { PushPermissionPrompt } from "@/components/PushPermissionPrompt";
 import { initAppCheck } from "@/lib/firebase";
@@ -35,6 +36,7 @@ function AppServicesInner() {
     <>
       <ProfileSetupGate />
       <MatchVoteReminderModal />
+      <MatchRatingReleasedModal />
       <PushPermissionPrompt userId={userId} trigger={0} />
       <ConsentBanner />
     </>

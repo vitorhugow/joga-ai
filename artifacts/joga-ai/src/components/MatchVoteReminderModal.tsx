@@ -16,6 +16,7 @@ import { loadMatchFromFirestore } from "@/lib/matchRepository";
 type PopupKind = "vote" | "pay" | "generic";
 
 function isPopupNotification(n: AppNotification): boolean {
+  if (n.id.startsWith("evo-")) return false;
   return (
     n.priority === "popup" ||
     n.id.startsWith("vote-") ||

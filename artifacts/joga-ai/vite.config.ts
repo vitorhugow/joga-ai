@@ -86,7 +86,7 @@ export default defineConfig({
       workbox: {
         // SPA: qualquer rota (/admin, /premium, …) serve index.html
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/\.well-known\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/\.well-known\//, /^\/assets\//, /\.(?:js|css|mjs)(?:\?.*)?$/],
         // Novo deploy substitui o SW de imediato (evita router antigo em cache)
         skipWaiting: true,
         clientsClaim: true,
@@ -95,7 +95,7 @@ export default defineConfig({
         // nativa do SDK (persistentLocalCache); o service worker só cacheia
         // os assets estáticos da app (JS/CSS/imagens/fontes).
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        globIgnores: ["**/firebase-messaging-sw.js", "firebase-messaging-sw.js"],
+        globIgnores: ["**/firebase-messaging-sw.js", "firebase-messaging-sw.js", "deploy-recovery.js"],
       },
     }),
     ...(process.env.NODE_ENV !== "production" &&

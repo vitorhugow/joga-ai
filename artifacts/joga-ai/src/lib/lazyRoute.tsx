@@ -12,7 +12,15 @@ export function lazyRoute<T extends ComponentType<unknown>>(
     factory().catch((err) => {
       if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
         sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
-        window.location.reload();
+        const reload = () => window.location.reload();
+        if ("serviceWorker" in navigator) {
+          void navigator.serviceWorker
+            .getRegistrations()
+            .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+            .finally(reload);
+        } else {
+          reload();
+        }
         return new Promise<{ default: T }>(() => {});
       }
       sessionStorage.removeItem(CHUNK_RELOAD_KEY);

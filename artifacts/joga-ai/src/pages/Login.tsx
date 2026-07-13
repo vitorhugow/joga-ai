@@ -60,7 +60,6 @@ type FeatureSectionData = {
     src: string;
     alt: string;
     label: string;
-    objectPosition?: string;
     maxWidth?: string;
   };
   reverse?: boolean;
@@ -91,7 +90,6 @@ const FEATURE_SECTIONS: FeatureSectionData[] = [
       src: "/screenshots/02-pre-jogo.png",
       alt: "Pré-Jogo — equipas e campo",
       label: "Pré-Jogo",
-      objectPosition: "top center",
       maxWidth: "200px",
     },
   },
@@ -405,13 +403,11 @@ function PhoneScreenshot({
   src,
   alt,
   label,
-  objectPosition = "top center",
   maxWidth,
 }: {
   src: string;
   alt: string;
   label: string;
-  objectPosition?: string;
   maxWidth?: string;
 }) {
   const [failed, setFailed] = useState(false);
@@ -431,12 +427,9 @@ function PhoneScreenshot({
             className="relative rounded-[1.35rem] p-[2px] bg-linear-to-b from-white/14 to-white/4 transition-transform duration-200 group-hover:scale-[1.02] group-focus-visible:scale-[1.02]"
             style={{ boxShadow: "0 16px 40px rgba(0,0,0,0.5)" }}
           >
-            <div
-              className="relative overflow-hidden rounded-[1.2rem] bg-[#0a0f1a]"
-              style={{ aspectRatio: "9 / 19.5" }}
-            >
+            <div className="relative overflow-hidden rounded-[1.2rem] bg-[#0a0f1a]">
               {failed ? (
-                <div className="absolute inset-0 flex items-center justify-center text-white/30 text-sm font-bold p-4 text-center">
+                <div className="flex min-h-[200px] items-center justify-center text-white/30 text-sm font-bold p-4 text-center">
                   {label}
                 </div>
               ) : (
@@ -444,8 +437,7 @@ function PhoneScreenshot({
                   <img
                     src={src}
                     alt={alt}
-                    className="block w-full h-full object-contain select-none"
-                    style={{ objectPosition }}
+                    className="block w-full h-auto select-none"
                     loading="lazy"
                     draggable={false}
                     onError={() => setFailed(true)}
@@ -478,8 +470,7 @@ function PhoneScreenshot({
             <img
               src={src}
               alt={alt}
-              className="w-full max-h-[78vh] object-contain"
-              style={{ objectPosition }}
+              className="block w-full h-auto max-h-[78vh] select-none"
               draggable={false}
             />
           </div>
@@ -570,7 +561,6 @@ function FeatureSection({
       src={section.screenshot.src}
       alt={section.screenshot.alt}
       label={section.screenshot.label}
-      objectPosition={section.screenshot.objectPosition}
       maxWidth={section.screenshot.maxWidth}
     />
   );

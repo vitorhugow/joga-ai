@@ -3,6 +3,9 @@ import { Link } from "wouter";
 import { getMatchRoutePath, getMatchStatusLabel } from "@/lib/matchRepository";
 import { formatMatchPriceChip } from "@/lib/formatMatchPrice";
 import { getMatchScheduleLines } from "@/lib/formatMatchSchedule";
+import { FieldTypeIllustration } from "@/components/FieldTypeIllustration";
+import { imageDisplaySrc } from "@/lib/imageUtils";
+import type { KnownGoingDisplay } from "@/lib/matchSocialUtils";
 
 interface MatchCardProps {
   id: string;
@@ -12,6 +15,7 @@ interface MatchCardProps {
   city: string;
   location: string;
   gameType: string;
+  fieldType?: string;
   level: string;
   date: string;
   scheduledDate?: string;
@@ -20,6 +24,7 @@ interface MatchCardProps {
   price?: string;
   status?: string;
   returnTo?: string;
+  knownGoing?: KnownGoingDisplay | null;
 }
 
 const gameTypeMeta: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
@@ -44,6 +49,42 @@ const statusBadgeStyle: Record<string, { background: string; color: string; emoj
   auditada: { background: "rgba(250,204,21,0.15)", color: "#facc15", emoji: "✅" },
 };
 
+function KnownGoingRow({ knownGoing }: { knownGoing: KnownGoingDisplay }) {
+  if (knownGoing.mode === "count") {
+    return (
+      <p className="text-white/45 text-sm mb-2" data-testid="match-known-going">
+        {knownGoing.label}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 mb-2" data-testid="match-known-going">
+      <div className="flex -space-x-2">
+        {knownGoing.avatars.slice(0, 3).map((a, i) => (
+          a.photoUrl ? (
+            <img
+              key={`${a.name}-${i}`}
+              src={imageDisplaySrc(a.photoUrl)}
+              alt={a.name}
+              className="w-6 h-6 rounded-full border-2 border-[#0a0f1a] object-cover"
+            />
+          ) : (
+            <div
+              key={`${a.name}-${i}`}
+              className="w-6 h-6 rounded-full border-2 border-[#0a0f1a] flex items-center justify-center text-[9px] font-black text-white"
+              style={{ background: "rgba(74,222,128,0.35)" }}
+            >
+              {a.name.charAt(0)}
+            </div>
+          )
+        ))}
+      </div>
+      <p className="text-white/55 text-sm font-medium truncate">{knownGoing.label}</p>
+    </div>
+  );
+}
+
 export function MatchCard({
   id,
   title,
@@ -52,6 +93,7 @@ export function MatchCard({
   city,
   location,
   gameType,
+  fieldType,
   level,
   date,
   scheduledDate,
@@ -60,6 +102,7 @@ export function MatchCard({
   price,
   status,
   returnTo,
+  knownGoing,
 }: MatchCardProps) {
   const isActiveMatch = status ? ACTIVE_STATUSES.has(status) : false;
   const isLotado = spotsRemaining === "Lotado";
@@ -91,7 +134,11 @@ export function MatchCard({
       >
         <div className="w-1.5 shrink-0" style={{ background: lvl.strip, borderRadius: "0 4px 4px 0" }} />
 
-        <div className="flex-1 px-4 py-3.5">
+        <div className="shrink-0 flex items-center justify-center px-2 py-3" style={{ background: "rgba(0,0,0,0.15)" }}>
+          <FieldTypeIllustration fieldType={fieldType ?? gameType} compact />
+        </div>
+
+        <div className="flex-1 px-3 py-3.5 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-2">
             <h3 className="font-display font-bold text-white text-base leading-tight">
               {title}
@@ -114,16 +161,18 @@ export function MatchCard({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs mb-2 font-bold text-white">
-            <MapPin className="w-3 h-3 shrink-0" style={{ color: "#f87171" }} />
+          {knownGoing && <KnownGoingRow knownGoing={knownGoing} />}
+
+          <div className="flex items-center gap-1.5 text-sm mb-2 font-bold text-white">
+            <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: "#f87171" }} />
             <span className="truncate">📍 {location}, {city}</span>
           </div>
 
-          <div className="text-xs mb-0.5 font-bold text-white">
+          <div className="text-sm mb-0.5 font-bold text-white">
             📅 {schedule.dateLine}
           </div>
           {schedule.timeLine && (
-            <div className="text-xs mb-3 font-bold text-white/90">
+            <div className="text-sm mb-3 font-bold text-white/90">
               🕐 {schedule.timeLine}
             </div>
           )}
@@ -164,7 +213,7 @@ export function MatchCard({
           <div className="flex items-center justify-end">
             {isActiveMatch ? (
               <div
-                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full shrink-0"
+                className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full shrink-0"
                 style={{ background: badgeStyle.background, color: badgeStyle.color }}
                 data-testid={`match-spots-${id}`}
               >
@@ -172,14 +221,14 @@ export function MatchCard({
               </div>
             ) : (
               <div
-                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full shrink-0"
+                className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full shrink-0"
                 style={isLotado
                   ? { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.25)" }
                   : { background: "rgba(74,222,128,0.12)", color: "#4ade80" }
                 }
                 data-testid={`match-spots-${id}`}
               >
-                <Users className="w-3 h-3" />
+                <Users className="w-3.5 h-3.5" />
                 {isLotado ? "🚫 Lotado" : `👥 ${spotsRemaining}`}
               </div>
             )}

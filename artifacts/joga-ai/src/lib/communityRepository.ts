@@ -81,6 +81,7 @@ export type MatchListing = {
   city: string;
   location: string;
   gameType: string;
+  fieldType?: string;
   level: string;
   date: string;
   scheduledDate?: string;
@@ -90,6 +91,8 @@ export type MatchListing = {
   price: string;
   communityId?: string;
   status?: string;
+  confirmedCount?: number;
+  confirmedPlayers?: Array<{ userId?: string; name: string; photoUrl?: string }>;
 };
 
 export type CommunityMember = {
@@ -564,6 +567,25 @@ export async function loadCommunityMembers(communityId: string): Promise<Communi
   }
 }
 
+/** UIDs de outros membros das comunidades do utilizador (para "amigos que vão"). */
+export async function loadPeerUserIdsFromMyCommunities(userId: string): Promise<Set<string>> {
+  const peers = new Set<string>();
+  if (!userId) return peers;
+
+  const mine = await loadMyCommunities(userId);
+  await Promise.all(
+    mine.map(async (community) => {
+      const members = await loadCommunityMembers(community.id);
+      for (const member of members) {
+        if (member.userId && member.userId !== userId) {
+          peers.add(member.userId);
+        }
+      }
+    }),
+  );
+  return peers;
+}
+
 /** Corrige memberCount no documento com base na subcoleção members */
 export async function syncCommunityMemberCount(communityId: string): Promise<number> {
   const members = await loadCommunityMembers(communityId);
@@ -1003,12 +1025,17 @@ export function subscribeCommunityMatches(
 }
 
 function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
+  const players = Array.isArray(data.players)
+    ? (data.players as Array<Record<string, unknown>>)
+    : [];
+
   return {
     id,
     title: String(data.title ?? `Partida ${id}`),
     city: String(data.city ?? ""),
     location: String(data.location ?? ""),
     gameType: String(data.gameType ?? data.gameMode ?? "fut7"),
+    fieldType: String(data.fieldType ?? data.gameType ?? data.gameMode ?? "fut5"),
     level: String(data.level ?? "recreativo"),
     date: data.scheduledDate
       ? String(data.scheduledDate)
@@ -1016,7 +1043,7 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
     scheduledDate: data.scheduledDate ? String(data.scheduledDate) : undefined,
     scheduledTime: data.scheduledTime ? String(data.scheduledTime) : undefined,
     spotsRemaining: data.maxPlayers
-      ? `${Math.max(0, Number(data.maxPlayers) - (Array.isArray(data.players) ? data.players.length : 0))} vagas`
+      ? `${Math.max(0, Number(data.maxPlayers) - players.length)} vagas`
       : "—",
     price: String(data.price ?? "—"),
     communityId: data.communityId ? String(data.communityId) : undefined,
@@ -1027,6 +1054,12 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
       ? (data.accessMode as MatchListing["accessMode"])
       : undefined,
     paymentsEnabled: data.paymentsEnabled === true,
+    confirmedCount: players.length,
+    confirmedPlayers: players.map((p) => ({
+      userId: p.userId ? String(p.userId) : p.id ? String(p.id) : undefined,
+      name: String(p.name ?? "Jogador"),
+      photoUrl: p.photoUrl ? String(p.photoUrl) : undefined,
+    })),
   };
 }
 

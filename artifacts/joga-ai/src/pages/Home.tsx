@@ -297,6 +297,7 @@ export default function Home() {
           <button
             type="button"
             data-testid="button-create-match"
+            data-onboarding="create-match"
             className="rounded-2xl p-4 flex items-center gap-3.5 joga-tap text-left w-full"
             style={{ background: "linear-gradient(135deg, #15803d, #16a34a)", boxShadow: "0 4px 16px rgba(21,128,61,0.35)" }}
             onClick={() => {

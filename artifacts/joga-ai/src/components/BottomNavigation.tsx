@@ -28,6 +28,13 @@ export function BottomNavigation() {
               href={item.path}
               className="flex-1 flex flex-col items-center justify-center gap-1 py-2 group relative cursor-pointer joga-tap"
               data-testid={`nav-${item.label.toLowerCase()}`}
+              data-onboarding={
+                item.path === "/jogos"
+                  ? "find-games"
+                  : item.path === "/perfil"
+                    ? "profile"
+                    : undefined
+              }
             >
               {isActive && (
                 <motion.div

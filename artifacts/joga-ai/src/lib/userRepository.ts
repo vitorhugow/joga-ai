@@ -97,6 +97,8 @@ export type UserProfile = {
   stripeAccountId?: string;
   /** Saldo em cêntimos para pagar peladas futuras — escrito só por Functions */
   peladaBalanceCents?: number;
+  /** Tutorial de primeiro acesso concluído ou saltado */
+  onboardingDone?: boolean;
   updatedAt?: string;
 };
 
@@ -320,6 +322,7 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
     peladaBalanceCents: Number.isFinite(Number(data.peladaBalanceCents))
       ? Number(data.peladaBalanceCents)
       : undefined,
+    onboardingDone: Boolean(data.onboardingDone),
     updatedAt: parseUpdatedAt(data.updatedAt),
   };
 }
@@ -792,6 +795,30 @@ export async function updateUserProfile(
   }
 
   writeLocalProfile(updated);
+  return updated;
+}
+
+export async function markOnboardingDone(
+  userId: string,
+  isAnonymous = true,
+): Promise<UserProfile> {
+  const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
+  const updated: UserProfile = {
+    ...current,
+    uid: userId,
+    onboardingDone: true,
+    isAnonymous,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (isFirebaseConfigured() && !isAnonymous) {
+    const userRef = doc(db, "users", userId);
+    const snap = await getDoc(userRef);
+    await persistProfile(userRef, updated, !snap.exists());
+  }
+
+  writeLocalProfile(updated);
+  notifyProfileUpdated(userId);
   return updated;
 }
 

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, SlidersHorizontal, Plus, X } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
-import { loadAvailableMatches, loadMyMatches, type MatchListing } from "@/lib/communityRepository";
+import { loadAvailableMatches, loadMyMatches, loadPeerUserIdsFromMyCommunities, type MatchListing } from "@/lib/communityRepository";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { buildKnownGoingDisplay } from "@/lib/matchSocialUtils";
 import { JogaButton, JogaChip, JogaPage } from "@/components/joga";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
@@ -28,6 +29,23 @@ export default function Jogos() {
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [myMatches, setMyMatches] = useState<MatchListing[]>([]);
   const [loadingMyMatches, setLoadingMyMatches] = useState(true);
+  const [peerUserIds, setPeerUserIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!userId) {
+      setPeerUserIds(new Set());
+      return;
+    }
+    void loadPeerUserIdsFromMyCommunities(userId).then(setPeerUserIds);
+  }, [userId]);
+
+  const matchCardProps = useMemo(
+    () => (m: MatchListing) => ({
+      ...m,
+      knownGoing: buildKnownGoingDisplay(m.confirmedPlayers, peerUserIds, userId ?? undefined),
+    }),
+    [peerUserIds, userId],
+  );
 
   useEffect(() => {
     setLoadingMatches(true);
@@ -201,7 +219,7 @@ export default function Jogos() {
             ) : (
               <div className="space-y-3">
                 {myMatches.map((m) => (
-                  <MatchCard key={m.id} {...m} returnTo="/jogos" />
+                  <MatchCard key={m.id} {...matchCardProps(m)} returnTo="/jogos" />
                 ))}
               </div>
             )}
@@ -245,7 +263,7 @@ export default function Jogos() {
               ) : (
                 <div className="space-y-3">
                   {available.map((m) => (
-                    <MatchCard key={m.id} {...m} returnTo="/jogos" />
+                    <MatchCard key={m.id} {...matchCardProps(m)} returnTo="/jogos" />
                   ))}
                 </div>
               )}
@@ -256,7 +274,7 @@ export default function Jogos() {
                 <h2 className="font-display font-black text-white/50 text-lg mb-3">Lotados ({full.length})</h2>
                 <div className="space-y-3 opacity-60">
                   {full.map((m) => (
-                    <MatchCard key={m.id} {...m} returnTo="/jogos" />
+                    <MatchCard key={m.id} {...matchCardProps(m)} returnTo="/jogos" />
                   ))}
                 </div>
               </section>

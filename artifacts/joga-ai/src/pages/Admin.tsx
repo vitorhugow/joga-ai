@@ -18,6 +18,7 @@ import {
   type AdminUserRow,
   type AdminReport,
 } from "@/lib/adminRepository";
+import { AdminFieldPhotos } from "@/components/admin/AdminFieldPhotos";
 import { toast } from "@/hooks/use-toast";
 
 const ADMIN_FIELD =
@@ -241,6 +242,8 @@ export default function Admin() {
             </JogaButton>
           </div>
         </div>
+
+        <AdminFieldPhotos disabled={busy} />
 
         {results.length > 1 && (
           <div className="space-y-2">

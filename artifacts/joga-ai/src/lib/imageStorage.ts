@@ -61,3 +61,10 @@ export async function uploadCommunityCover(
 ): Promise<string> {
   return uploadImage(`communities/${communityId}/cover/${Date.now()}.webp`, file);
 }
+
+export async function uploadFieldPhoto(
+  key: "futsal" | "f5" | "f7",
+  file: Blob | File | string,
+): Promise<string> {
+  return uploadImage(`app/fieldPhotos/${key}.webp`, file);
+}

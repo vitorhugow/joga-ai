@@ -1,9 +1,10 @@
 /**
  * SkinPicker — seleção debaixo da carta (perfil próprio).
- * Botões fixos (Normal + Embaixador) e lista vertical de skins PRO.
+ * Botões Normal + Embaixador; Skins PRO num menu expansível.
  */
 
-import { Lock } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Lock } from "lucide-react";
 import { doc, updateDoc } from "firebase/firestore";
 import { useLocation } from "wouter";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
@@ -57,11 +58,13 @@ function SkinButton({
 
 export function SkinPicker({ profile, onSkinChange }: Props) {
   const [, setLocation] = useLocation();
+  const [proOpen, setProOpen] = useState(false);
   const active = effectiveSkinId(profile);
 
   const classica = CARD_SKINS.find((s) => s.id === "classica")!;
   const embaixador = CARD_SKINS.find((s) => s.id === "embaixador")!;
   const proSkins = CARD_SKINS.filter((s) => s.access === "pro");
+  const activeProSkin = proSkins.find((s) => s.id === active);
 
   async function pick(skinId: string) {
     const skin = CARD_SKINS.find((s) => s.id === skinId);
@@ -91,9 +94,8 @@ export function SkinPicker({ profile, onSkinChange }: Props) {
 
   return (
     <div className="mt-3 max-w-sm mx-auto">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 text-center flex items-center justify-center gap-1.5">
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 text-center">
         Skin da carta
-        <ProFeatureBadge tier="player" />
       </p>
 
       <div className="grid grid-cols-2 gap-2 mt-2" role="listbox" aria-label="Skins base">
@@ -101,26 +103,40 @@ export function SkinPicker({ profile, onSkinChange }: Props) {
         <SkinButton skin={embaixador} profile={profile} selected={active === embaixador.id} onPick={(id) => void pick(id)} />
       </div>
 
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 mt-3 mb-2 flex items-center gap-1.5">
-        Skins PRO
-        <ProFeatureBadge tier="player" className="scale-90" />
-      </p>
-
-      <div
-        className="flex flex-col gap-1.5 max-h-[168px] overflow-y-auto pr-0.5"
-        role="listbox"
-        aria-label="Skins PRO"
+      <button
+        type="button"
+        className="w-full mt-2 rounded-2xl px-3 py-2.5 text-xs font-black flex items-center gap-2 transition-transform active:scale-[0.98]"
+        style={{
+          background: activeProSkin ? `${activeProSkin.accent}26` : "rgba(255,255,255,0.05)",
+          border: `1px solid ${activeProSkin ? activeProSkin.accent : "rgba(255,255,255,0.10)"}`,
+          color: activeProSkin ? activeProSkin.accent : "rgba(255,255,255,0.75)",
+        }}
+        onClick={() => setProOpen((v) => !v)}
+        aria-expanded={proOpen}
+        data-testid="skins-pro-toggle"
       >
-        {proSkins.map((skin) => (
-          <SkinButton
-            key={skin.id}
-            skin={skin}
-            profile={profile}
-            selected={skin.id === active}
-            onPick={(id) => void pick(id)}
-          />
-        ))}
-      </div>
+        <span className="flex-1 text-left">Skins PRO</span>
+        <ProFeatureBadge tier="player" className="scale-90 shrink-0" />
+        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${proOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {proOpen && (
+        <div
+          className="flex flex-col gap-1.5 mt-1.5 max-h-[168px] overflow-y-auto pr-0.5"
+          role="listbox"
+          aria-label="Skins PRO"
+        >
+          {proSkins.map((skin) => (
+            <SkinButton
+              key={skin.id}
+              skin={skin}
+              profile={profile}
+              selected={skin.id === active}
+              onPick={(id) => void pick(id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

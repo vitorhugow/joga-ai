@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
+import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { PushPermissionPrompt } from "@/components/PushPermissionPrompt";
@@ -34,6 +35,7 @@ function AppServicesInner() {
   return (
     <>
       <ProfileSetupGate />
+      <OnboardingGate />
       <MatchVoteReminderModal />
       <PushPermissionPrompt userId={userId} trigger={0} />
       <ConsentBanner />

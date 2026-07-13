@@ -288,7 +288,7 @@ function SlotPlayer({
           boxShadow: player ? `0 0 16px ${teamColor}55` : "none",
         }}
       >
-        <span className="font-display font-black text-base leading-none">
+        <span className="font-display font-black text-xl leading-none">
           {player ? player.overall : "+"}
         </span>
         <span className="w-full h-px" style={{ background: player ? `${teamColor}88` : "rgba(255,255,255,0.18)" }} />
@@ -352,7 +352,12 @@ function PlayerPicker({
         )}
 
         <div className="space-y-2">
-          {players.map((player) => {
+          {players.length === 0 ? (
+            <p className="text-white/40 text-sm text-center py-6">
+              Nenhum jogador disponível no banco.
+            </p>
+          ) : (
+          players.map((player) => {
             const status = playerTeams[player.id] || "BENCH";
             const statusLabel = status === "BENCH" ? "Banco" : teamNamesMap[status];
 
@@ -375,7 +380,8 @@ function PlayerPicker({
                 </div>
               </button>
             );
-          })}
+          })
+          )}
         </div>
       </div>
     </div>
@@ -1383,13 +1389,22 @@ export default function PreJogo() {
   }, [players, playerTeams]);
 
   const pickerPlayers = useMemo(() => {
-    return [...players].sort((a, b) => {
-      const teamA = playerTeams[a.id] || "BENCH";
-      const teamB = playerTeams[b.id] || "BENCH";
+    if (!pickerSlot) return [];
 
-      return getTeamSortRank(teamA) - getTeamSortRank(teamB) || a.name.localeCompare(b.name);
-    });
-  }, [players, playerTeams]);
+    const assignedElsewhere = new Set(
+      Object.entries(assignments)
+        .filter(([slot, pid]) => pid && slot !== pickerSlot)
+        .map(([, pid]) => pid as string),
+    );
+
+    return [...players]
+      .filter((p) => !assignedElsewhere.has(p.id) || assignments[pickerSlot] === p.id)
+      .sort((a, b) => {
+        const teamA = playerTeams[a.id] || "BENCH";
+        const teamB = playerTeams[b.id] || "BENCH";
+        return getTeamSortRank(teamA) - getTeamSortRank(teamB) || a.name.localeCompare(b.name);
+      });
+  }, [players, playerTeams, assignments, pickerSlot]);
 
   const visiblePlayers = useMemo(() => {
     const list = [...players];

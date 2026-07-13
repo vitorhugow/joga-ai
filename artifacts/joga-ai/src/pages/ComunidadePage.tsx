@@ -20,7 +20,7 @@ import {
   type CommunityMember,
   type JoinRequestStatus,
 } from "@/lib/communityRepository";
-import { useAuth } from "@/contexts/AuthContext";
+import { buildKnownGoingDisplay } from "@/lib/matchSocialUtils";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
@@ -92,6 +92,14 @@ export default function ComunidadePage() {
   const [memberProfiles, setMemberProfiles] = useState<Map<string, PublicUserProfile>>(new Map());
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const [organizerProActive, setOrganizerProActive] = useState(false);
+
+  const communityPeerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of members) {
+      if (m.userId && m.userId !== userId) ids.add(m.userId);
+    }
+    return ids;
+  }, [members, userId]);
 
   useEffect(() => {
     if (!userId) {
@@ -496,7 +504,18 @@ export default function ComunidadePage() {
               {matches.length === 0 ? (
                 <p className="text-white/40 text-sm text-center py-8">Sem partidas nesta comunidade.</p>
               ) : (
-                matches.map((m) => <MatchCard key={m.id} {...m} returnTo={`/comunidades/${id}`} />)
+                matches.map((m) => (
+                  <MatchCard
+                    key={m.id}
+                    {...m}
+                    returnTo={`/comunidades/${id}`}
+                    knownGoing={buildKnownGoingDisplay(
+                      m.confirmedPlayers,
+                      communityPeerIds,
+                      userId ?? undefined,
+                    )}
+                  />
+                ))
               )}
             </div>
           </div>

@@ -56,6 +56,8 @@ export type CreateMatchInput = {
   city: string;
   location: string;
   gameType: string;
+  /** Tipo de campo da partida (Futsal/F5/F7/F11) — persistido em matches/{id}.fieldType */
+  fieldType: string;
   level: string;
   date: string;
   time: string;
@@ -82,6 +84,7 @@ export type MatchDetails = {
   city: string;
   location: string;
   gameType: string;
+  fieldType?: string;
   level: string;
   date: string;
   scheduledDate?: string;
@@ -296,6 +299,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     city: input.city.trim() || "—",
     location: input.location.trim() || "—",
     gameType: input.gameType,
+    fieldType: input.fieldType || input.gameType,
     level: input.level,
     date: input.date || "A definir",
     scheduledDate: input.date || undefined,
@@ -336,6 +340,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
         location: listing.location,
         level: input.level,
         gameType: input.gameType,
+        fieldType: input.fieldType || input.gameType,
         maxPlayers,
         price: listing.price,
         paymentsEnabled: input.paymentsEnabled ?? false,

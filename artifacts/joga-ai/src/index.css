@@ -159,7 +159,9 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased text-foreground;
+    background-color: var(--joga-surface-dark, #0a0f1a);
+    color: white;
     -webkit-tap-highlight-color: transparent;
     letter-spacing: -0.01em;
   }
@@ -358,11 +360,13 @@
 }
 
 /* Joga AI Premium Rebuild helpers */
-html, body, #root { min-height: 100%; }
+html, body, #root {
+  min-height: 100%;
+  background-color: var(--joga-surface-dark, #0a0f1a);
+}
 body {
-  background:
-    radial-gradient(circle at 12% 0%, rgba(34,197,94,.12), transparent 28%),
-    linear-gradient(180deg, #fbfcfb 0%, #f1f5f2 100%);
+  background: var(--joga-surface-dark, #0a0f1a);
+  color: white;
 }
 
 .joga-premium-surface {

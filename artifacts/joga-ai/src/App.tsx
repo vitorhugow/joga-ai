@@ -12,6 +12,7 @@ import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
 import { AppServices } from "@/components/AppServices";
 import { checkAndCloseExpiredMatch } from "@/lib/matchAutoClose";
 import { Suspense } from "react";
+import { JogaLogo } from "@/components/brand/JogaLogo";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
@@ -41,8 +42,13 @@ const Admin = lazyRoute(() => import("@/pages/Admin"));
 
 function PageFallback() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <div
+      className="flex min-h-screen flex-col items-center justify-center gap-4 px-6"
+      style={{ background: "#0A0F1A" }}
+    >
+      <JogaLogo size="xl" />
+      <p className="text-white/50 text-sm font-medium tracking-wide">A carregar…</p>
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-400/60 border-t-transparent" />
     </div>
   );
 }

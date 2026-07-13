@@ -1,3 +1,4 @@
+/fields/*        /fields/:splat        200
 /.well-known/*  /.well-known/:splat  200
 /assets/*       /assets/:splat       200
 /sw.js          /sw.js               200

@@ -16,6 +16,5 @@ export function fieldPhotoSrc(fieldType?: string | null): string {
   return asset("fields/field-f5.webp");
 }
 
-/** Tamanho fixo do painel de foto em todos os cartões (16:9). */
-export const FIELD_PHOTO_WIDTH = 128;
-export const FIELD_PHOTO_HEIGHT = 72;
+/** Quadrado fixo em todos os cartões. */
+export const FIELD_PHOTO_SIZE = 88;

@@ -81,8 +81,9 @@ export function MatchCard({
   return (
     <Link href={href}>
       <div
-        className="relative flex overflow-hidden rounded-2xl joga-tap"
+        className="relative flex items-center overflow-hidden rounded-2xl joga-tap"
         style={{
+          background: "linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)",
           border: paymentsEnabled
             ? "1px solid rgba(251,191,36,0.22)"
             : "1px solid rgba(255,255,255,0.08)",
@@ -92,16 +93,13 @@ export function MatchCard({
         }}
         data-testid={`match-card-${id}`}
       >
-        <div className="w-1.5 shrink-0 relative z-10" style={{ background: lvl.strip, borderRadius: "0 4px 4px 0" }} />
+        <div className="w-1.5 shrink-0 self-stretch" style={{ background: lvl.strip, borderRadius: "0 4px 4px 0" }} />
 
-        <FieldTypePhoto fieldType={resolvedFieldType} className="relative z-0" />
+        <div className="shrink-0 flex items-center p-2.5">
+          <FieldTypePhoto fieldType={resolvedFieldType} />
+        </div>
 
-        <div
-          className="flex-1 px-4 py-3.5 min-w-0 relative z-10"
-          style={{
-            background: "linear-gradient(135deg, rgba(10,15,26,0.92) 0%, rgba(10,15,26,0.78) 100%)",
-          }}
-        >
+        <div className="flex-1 px-3 py-3.5 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-2">
             <h3 className="font-display font-bold text-white text-base leading-tight">
               {title}

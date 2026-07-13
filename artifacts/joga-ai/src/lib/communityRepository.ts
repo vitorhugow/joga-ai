@@ -81,6 +81,7 @@ export type MatchListing = {
   city: string;
   location: string;
   gameType: string;
+  fieldType?: string;
   level: string;
   date: string;
   scheduledDate?: string;
@@ -1009,6 +1010,9 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
     city: String(data.city ?? ""),
     location: String(data.location ?? ""),
     gameType: String(data.gameType ?? data.gameMode ?? "fut7"),
+    fieldType: data.fieldType
+      ? String(data.fieldType)
+      : String(data.gameType ?? data.gameMode ?? "fut7"),
     level: String(data.level ?? "recreativo"),
     date: data.scheduledDate
       ? String(data.scheduledDate)

@@ -14,7 +14,7 @@ export function FieldTypePhoto({ fieldType, className = "" }: Props) {
 
   return (
     <div
-      className={`relative shrink-0 overflow-hidden rounded-xl ${className}`}
+      className={`relative shrink-0 overflow-hidden rounded-xl bg-[#0a0f1a] ${className}`}
       style={{ width: FIELD_PHOTO_SIZE, height: FIELD_PHOTO_SIZE }}
       data-testid="field-photo"
     >
@@ -28,7 +28,7 @@ export function FieldTypePhoto({ fieldType, className = "" }: Props) {
           alt=""
           loading="eager"
           decoding="async"
-          className="block h-full w-full object-cover"
+          className="block h-full w-full object-contain"
           onError={() => setFailed(true)}
         />
       )}

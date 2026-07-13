@@ -66,7 +66,7 @@ jobs:
           pnpm exec wrangler pages deploy dist/public --project-name=joga-ai --branch=main
           echo "status=deployed" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy Firestore rules and indexes
+      - name: Deploy Firestore and Storage rules
         id: firestore
         working-directory: artifacts/joga-ai
         env:
@@ -78,7 +78,7 @@ jobs:
             echo "::warning::Depois: ./scripts/setup-github-deploy-secrets.sh"
             exit 0
           fi
-          pnpm exec firebase deploy --only firestore:rules,firestore:indexes --non-interactive --token "$FIREBASE_TOKEN"
+          pnpm exec firebase deploy --only firestore:rules,firestore:indexes,storage --non-interactive --token "$FIREBASE_TOKEN"
           echo "status=deployed" >> "$GITHUB_OUTPUT"
 
       - name: Deploy summary
@@ -95,9 +95,9 @@ jobs:
               echo "| Cloudflare Pages | ⚠️ saltado (secrets em falta) |"
             fi
             if [ "${{ steps.firestore.outputs.status }}" = "deployed" ]; then
-              echo "| Firestore rules + indexes | ✅ ${FIREBASE_PROJECT} |"
+              echo "| Firestore + Storage rules | ✅ ${FIREBASE_PROJECT} |"
             else
-              echo "| Firestore rules + indexes | ⚠️ saltado — configura FIREBASE_TOKEN |"
+              echo "| Firestore + Storage rules | ⚠️ saltado — configura FIREBASE_TOKEN |"
             fi
             echo "| Cloud Functions | via workflow \`deploy-functions.yml\` (só CI) |"
             echo ""

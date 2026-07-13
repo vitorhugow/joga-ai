@@ -591,6 +591,7 @@ export type MatchRosterData = {
 export async function saveMatchRoster(
   matchId: string,
   roster: MatchRosterData,
+  options?: { throwOnError?: boolean },
 ): Promise<void> {
   const now = new Date().toISOString();
 
@@ -644,7 +645,11 @@ export async function saveMatchRoster(
     organizerId: existing?.organizerId,
   };
 
-  await saveMatchToFirestore(matchId, updated);
+  if (options?.throwOnError) {
+    await saveMatchToFirestoreOrThrow(matchId, updated);
+  } else {
+    await saveMatchToFirestore(matchId, updated);
+  }
 
   const uid = getCurrentUserId();
   if (uid && existing?.organizerId === uid) {
@@ -900,6 +905,22 @@ function miniGameRichness(miniGames: SavedPostMatch["miniGames"] = []) {
   );
 }
 
+function pickBestRoster(
+  candidates: Array<{
+    players: LivePlayer[];
+    playerTeams: Record<string, string>;
+    assignments: Record<string, string | null>;
+    savedAt: number;
+  }>,
+): (typeof candidates)[number] {
+  return [...candidates].sort((a, b) => {
+    if (b.players.length !== a.players.length) {
+      return b.players.length - a.players.length;
+    }
+    return b.savedAt - a.savedAt;
+  })[0];
+}
+
 function mergeMatchSources(
   matchId: string,
   remote: SavedPostMatch | null,
@@ -934,15 +955,7 @@ function mergeMatchSources(
     },
   ];
 
-  const bestRoster =
-    options?.preferRemote && remoteValid
-      ? rosterCandidates[0]
-      : [...rosterCandidates].sort((a, b) => {
-          if (b.players.length !== a.players.length) {
-            return b.players.length - a.players.length;
-          }
-          return b.savedAt - a.savedAt;
-        })[0];
+  const bestRoster = pickBestRoster(rosterCandidates);
 
   const base = remoteValid ?? localValid;
   const now = new Date().toISOString();

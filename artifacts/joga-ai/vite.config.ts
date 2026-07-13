@@ -95,7 +95,7 @@ export default defineConfig({
         // nativa do SDK (persistentLocalCache); o service worker só cacheia
         // os assets estáticos da app (JS/CSS/imagens/fontes).
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        globIgnores: ["**/firebase-messaging-sw.js", "firebase-messaging-sw.js", "deploy-recovery.js"],
+        globIgnores: ["**/firebase-messaging-sw.js", "firebase-messaging-sw.js"],
       },
     }),
     ...(process.env.NODE_ENV !== "production" &&

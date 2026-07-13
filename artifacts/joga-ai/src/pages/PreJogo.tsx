@@ -48,6 +48,7 @@ import {
 } from "@/lib/matchRsvpRepository";
 import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
 import { calculateOverall } from "@/lib/cardUtils";
+import { MANUAL_PLAYER_OVR, formatPlayerOverall, overallFromProfile } from "@/lib/rosterUtils";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
@@ -220,7 +221,9 @@ function PlayerBadge({
         className="w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0"
         style={{ background: `${color}18`, border: `1.5px solid ${color}44` }}
       >
-        <span className="font-display font-black leading-none text-white text-[0.95rem]">{player.overall}</span>
+        <span className="font-display font-black leading-none text-white text-[0.95rem]">
+          {formatPlayerOverall(player)}
+        </span>
         <span className="font-bold text-[0.48rem] tracking-wider" style={{ color }}>{player.position}</span>
       </div>
 
@@ -289,7 +292,7 @@ function SlotPlayer({
         }}
       >
         <span className="font-display font-black text-base leading-none">
-          {player ? player.overall : "+"}
+          {player ? formatPlayerOverall(player) : "+"}
         </span>
         <span className="w-full h-px" style={{ background: player ? `${teamColor}88` : "rgba(255,255,255,0.18)" }} />
         <span className="max-w-full truncate text-[9px] leading-none">
@@ -398,6 +401,9 @@ export default function PreJogo() {
   useDocumentTitle(matchDetails?.title || "Pré-jogo");
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
+  const playersRef = useRef<Player[]>([]);
+  const playerTeamsRef = useRef<Record<string, PlayerStatus>>({});
+  const assignmentsRef = useRef<Record<string, string | null>>({});
   const [setupSyncState, setSetupSyncState] = useState<"idle" | "saving" | "saved">("idle");
   const [organizerId, setOrganizerId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -605,6 +611,56 @@ export default function PreJogo() {
   const [assignments, setAssignments] = useState<Record<string, string | null>>({});
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
 
+  useEffect(() => {
+    playersRef.current = players;
+    playerTeamsRef.current = playerTeams;
+    assignmentsRef.current = assignments;
+  }, [players, playerTeams, assignments]);
+
+  const persistRosterImmediate = useCallback(
+    async (patch?: {
+      players?: Player[];
+      playerTeams?: Record<string, PlayerStatus>;
+      assignments?: Record<string, string | null>;
+    }) => {
+      if (!matchId || !canManageMatch) return false;
+
+      skipNextPersist.current = true;
+      setSetupSyncState("saving");
+      try {
+        await saveMatchRoster(
+          matchId,
+          {
+            gameMode,
+            teamCount,
+            teamNames,
+            players: patch?.players ?? playersRef.current,
+            playerTeams: patch?.playerTeams ?? playerTeamsRef.current,
+            assignments: patch?.assignments ?? assignmentsRef.current,
+            waitlist,
+          },
+          { throwOnError: true },
+        );
+        setSetupSyncState("saved");
+        return true;
+      } catch (err) {
+        console.warn("[PreJogo] persistRosterImmediate:", err);
+        setSetupSyncState("saved");
+        toast({
+          title: "Não foi possível sincronizar o plantel",
+          description: "Verifica a ligação e tenta outra vez.",
+          variant: "destructive",
+        });
+        return false;
+      } finally {
+        window.setTimeout(() => {
+          skipNextPersist.current = false;
+        }, 100);
+      }
+    },
+    [matchId, canManageMatch, gameMode, teamCount, waitlist],
+  );
+
   const teamSetupWarning = useMemo(() => {
     const emptyTeams = activeTeams.filter(
       (team) => !players.some((player) => playerTeams[player.id] === team),
@@ -800,15 +856,31 @@ export default function PreJogo() {
   function addCommunityPlayer(player: Player) {
     if (players.some((item) => item.id === player.id)) return;
 
-    setPlayers((current) => [...current, player]);
+    void (async () => {
+      let resolved = player;
+      if (player.userId) {
+        try {
+          const profile = await loadUserProfile(player.userId, undefined, { preferRemote: true });
+          resolved = {
+            ...player,
+            name: profile.displayName || player.name,
+            position: profile.position || player.position,
+            overall: overallFromProfile(profile),
+            userId: player.userId,
+          };
+        } catch (err) {
+          console.warn("[PreJogo] community player profile:", err);
+        }
+      }
 
-    setPlayerTeams((current) => ({
-      ...current,
-      [player.id]: "BENCH",
-    }));
-
-    setShowCommunityList(false);
-    setManualName("");
+      const nextPlayers = [...playersRef.current, resolved];
+      const nextTeams = { ...playerTeamsRef.current, [resolved.id]: "BENCH" as PlayerStatus };
+      setPlayers(nextPlayers);
+      setPlayerTeams(nextTeams);
+      setShowCommunityList(false);
+      setManualName("");
+      await persistRosterImmediate({ players: nextPlayers, playerTeams: nextTeams });
+    })();
   }
 
   function addManualPlayer() {
@@ -816,25 +888,21 @@ export default function PreJogo() {
     if (!name) return;
 
     const id = `manual-${Date.now()}`;
+    const newPlayer: Player = {
+      id,
+      name,
+      position: "MEI",
+      overall: MANUAL_PLAYER_OVR,
+      paid: false,
+      manual: true,
+    };
+    const nextPlayers = [...players, newPlayer];
+    const nextTeams = { ...playerTeams, [id]: "BENCH" as PlayerStatus };
 
-    setPlayers((current) => [
-      ...current,
-      {
-        id,
-        name,
-        position: "MEI",
-        overall: 50,
-        paid: false,
-        manual: true,
-      },
-    ]);
-
-    setPlayerTeams((current) => ({
-      ...current,
-      [id]: "BENCH",
-    }));
-
+    setPlayers(nextPlayers);
+    setPlayerTeams(nextTeams);
     setManualName("");
+    void persistRosterImmediate({ players: nextPlayers, playerTeams: nextTeams });
   }
 
   function addGuestPlayer() {
@@ -843,25 +911,21 @@ export default function PreJogo() {
 
     const guestId = Math.random().toString(36).slice(2, 9);
     const id = `guest-${guestId}`;
+    const newPlayer: Player = {
+      id,
+      guestId,
+      name,
+      position: "MEI",
+      overall: MANUAL_PLAYER_OVR,
+      paid: false,
+      manual: true,
+      loanCard: true,
+    };
+    const nextPlayers = [...players, newPlayer];
+    const nextTeams = { ...playerTeams, [id]: "BENCH" as PlayerStatus };
 
-    setPlayers((current) => [
-      ...current,
-      {
-        id,
-        guestId,
-        name,
-        position: "MEI",
-        overall: 50,
-        paid: false,
-        manual: true,
-        loanCard: true,
-      },
-    ]);
-
-    setPlayerTeams((current) => ({
-      ...current,
-      [id]: "BENCH",
-    }));
+    setPlayers(nextPlayers);
+    setPlayerTeams(nextTeams);
 
     const claimUrl = buildGuestClaimLink(matchId, guestId);
     void navigator.clipboard.writeText(claimUrl).then(() => {
@@ -872,6 +936,7 @@ export default function PreJogo() {
     });
 
     setManualName("");
+    void persistRosterImmediate({ players: nextPlayers, playerTeams: nextTeams });
   }
 
   async function shareMatchUrl() {
@@ -914,7 +979,7 @@ export default function PreJogo() {
     try {
       const overall = profile.profileComplete
         ? calculateOverall(profile.attributes)
-        : 50;
+        : MANUAL_PLAYER_OVR;
       result = await confirmPresence(matchId, userId, {
         displayName,
         position: profile.position || "MEI",
@@ -1318,28 +1383,28 @@ export default function PreJogo() {
   }
 
   function removePlayer(playerId: string) {
-    setPlayers((current) => current.filter((player) => player.id !== playerId));
+    const nextPlayers = players.filter((player) => player.id !== playerId);
+    const nextAssignments = { ...assignments };
+    for (const key of Object.keys(nextAssignments)) {
+      if (nextAssignments[key] === playerId) nextAssignments[key] = null;
+    }
+    const nextTeams = { ...playerTeams };
+    delete nextTeams[playerId];
 
-    setAssignments((current) => {
-      const next = { ...current };
-
-      for (const key of Object.keys(next)) {
-        if (next[key] === playerId) next[key] = null;
-      }
-
-      return next;
-    });
-
-    setPlayerTeams((current) => {
-      const next = { ...current };
-      delete next[playerId];
-      return next;
-    });
+    setPlayers(nextPlayers);
+    setAssignments(nextAssignments);
+    setPlayerTeams(nextTeams);
 
     if (canManageMatch) {
       void removePlayerAndPromote(matchId, playerId).then(async () => {
         const merged = await loadMatchFromFirestore(matchId);
         if (merged?.waitlist) setWaitlist(merged.waitlist);
+      });
+    } else {
+      void persistRosterImmediate({
+        players: nextPlayers,
+        playerTeams: nextTeams,
+        assignments: nextAssignments,
       });
     }
   }
@@ -1419,7 +1484,7 @@ export default function PreJogo() {
         userId: member.userId,
         name: member.displayName,
         position: "MEI",
-        overall: 50,
+        overall: MANUAL_PLAYER_OVR,
         paid: false,
       }));
   }, [communityMembers, players, manualName]);

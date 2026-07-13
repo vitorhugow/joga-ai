@@ -12,6 +12,7 @@ import {
 import { loadPreMatch } from "./preMatchStorage";
 import { loadPostMatch, savePostMatch, type SavedPostMatch } from "./postMatchStorage";
 import type { LivePlayer } from "./preMatchStorage";
+import { MANUAL_PLAYER_OVR } from "./rosterUtils";
 import { loadCommunityMembers, loadCommunity, isCommunityOrganizerPro } from "./communityRepository";
 import { loadMatchDetails } from "./matchRepository";
 import { resolveAccessMode } from "./matchAccess";
@@ -191,7 +192,7 @@ export async function confirmPresence(
       userId,
       name: profile.displayName.trim() || "Jogador",
       position: profile.position || "MEI",
-      overall: profile.overall || 50,
+      overall: profile.overall > MANUAL_PLAYER_OVR ? profile.overall : MANUAL_PLAYER_OVR,
       paid: paymentsRequired && !isOrganizer ? true : false,
       isMe: true,
     };
@@ -205,7 +206,7 @@ export async function confirmPresence(
     userId,
     name: profile.displayName.trim() || "Jogador",
     position: profile.position || "MEI",
-    overall: profile.overall || 50,
+    overall: profile.overall > MANUAL_PLAYER_OVR ? profile.overall : MANUAL_PLAYER_OVR,
     joinedAt: new Date().toISOString(),
   };
   waitlist.push(entry);

@@ -13,8 +13,8 @@ function playerUserIds(match: Record<string, unknown>): Set<string> {
     ? match.players
     : [];
   for (const player of players) {
-    const uid = player.userId ?? player.id;
-    if (uid) ids.add(String(uid));
+    if (player.userId) ids.add(String(player.userId));
+    else if (player.id) ids.add(String(player.id));
   }
   return ids;
 }

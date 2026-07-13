@@ -9,9 +9,7 @@ import { hasPlayerPro, isOrganizerPro } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { trackEvent } from "@/lib/analytics";
-import { ProfileSubscriptionCard } from "@/components/ProfileSubscriptionCard";
-import { ProfileCaixaCard } from "@/components/ProfileCaixaCard";
-import { ProfilePeladaSaldoCard } from "@/components/ProfilePeladaSaldoCard";
+import { ProfileFinanceBar } from "@/components/ProfileFinanceBar";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
@@ -495,6 +493,12 @@ export default function Perfil() {
         </div>
       )}
 
+      {!isViewingOther && (
+        <div className="px-4 pt-3 flex justify-end">
+          <ProfileFinanceBar profile={activeProfile} />
+        </div>
+      )}
+
       {/* HERO — arena escura */}
       <div className="relative overflow-hidden joga-hero-arena">
         <div className="absolute inset-0" style={{ backgroundImage: PITCH_BG, backgroundSize: "80px 80px", opacity: 0.55 }} />
@@ -689,10 +693,6 @@ export default function Perfil() {
 
       <div className="px-4 space-y-4 pt-4">
 
-        {!isViewingOther && (
-          <ProfileSubscriptionCard profile={activeProfile} />
-        )}
-
         <JogaCard variant="arena" className="flex items-center gap-4">
           <div
             className="w-16 h-16 rounded-2xl flex flex-col items-center justify-center shrink-0"
@@ -788,14 +788,6 @@ export default function Perfil() {
             </div>
           )}
         </JogaCard>
-
-        {!isViewingOther && (
-          <ProfilePeladaSaldoCard profile={activeProfile} />
-        )}
-
-        {!isViewingOther && (
-          <ProfileCaixaCard profile={activeProfile} />
-        )}
 
         {badges.length > 0 && (
         <div>

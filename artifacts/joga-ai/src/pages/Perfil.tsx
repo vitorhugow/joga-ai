@@ -663,6 +663,32 @@ export default function Perfil() {
                 <span className="text-[11px] font-semibold text-amber-300/90">{player.title}</span>
               </div>
 
+              {activeProfile.lastMatchNickname?.label && (playerPro || isViewingOther) && (
+                <div
+                  className="mt-2.5 rounded-xl px-3 py-2 border border-emerald-400/20"
+                  style={{ background: "rgba(74,222,128,0.08)" }}
+                  data-testid="profile-last-match-nickname"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">
+                    Última pelada
+                  </p>
+                  <p className="text-sm font-bold text-emerald-300 mt-0.5">
+                    {activeProfile.lastMatchNickname.label}{" "}
+                    {activeProfile.lastMatchNickname.emoji ?? "⚽"}
+                  </p>
+                </div>
+              )}
+
+              {!isViewingOther && !playerPro && (
+                <Link
+                  href="/premium"
+                  className="mt-2 inline-block text-xs text-white/35 hover:text-amber-300/80 transition-colors"
+                  data-testid="profile-nickname-teaser"
+                >
+                  Os PRO ganham um apelido a cada pelada
+                </Link>
+              )}
+
               <div className="grid grid-cols-2 gap-2 mt-2.5">
                 {[
                   { v: overall, l: "Overall", c: "#fbbf24" },

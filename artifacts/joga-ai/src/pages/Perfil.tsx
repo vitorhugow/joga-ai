@@ -467,14 +467,15 @@ export default function Perfil() {
       )}
 
       {!isViewingOther && !authLoading && isLinked && (
-        <div className="px-4 pt-4 flex items-center justify-between gap-3">
-          <p className="text-white/45 text-sm truncate">
+        <div className="px-4 pt-4 flex items-center gap-2 min-w-0">
+          <p className="text-white/45 text-sm truncate min-w-0 flex-1">
             Sessão: <span className="text-white/70 font-medium">{displayName || "Conta ligada"}</span>
           </p>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto max-w-[72%] sm:max-w-none">
+            <ProfileFinanceBar profile={activeProfile} />
             {isAdmin && (
               <Link href="/admin">
-                <JogaButton variant="ghost" size="sm" className="gap-1.5 text-emerald-400/90">
+                <JogaButton variant="ghost" size="sm" className="gap-1.5 text-emerald-400/90 whitespace-nowrap">
                   <Shield className="w-3.5 h-3.5" />
                   Admin
                 </JogaButton>
@@ -483,19 +484,13 @@ export default function Perfil() {
             <JogaButton
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-white/50"
+              className="gap-1.5 text-white/50 whitespace-nowrap"
               onClick={() => void handleLogout()}
             >
               <LogOut className="w-3.5 h-3.5" />
               Sair
             </JogaButton>
           </div>
-        </div>
-      )}
-
-      {!isViewingOther && (
-        <div className="px-4 pt-3 flex justify-end">
-          <ProfileFinanceBar profile={activeProfile} />
         </div>
       )}
 
@@ -521,6 +516,7 @@ export default function Perfil() {
             ) : null}
             {!isViewingOther && (
             <div className="flex items-center gap-2 flex-wrap justify-end">
+              {!isLinked && <ProfileFinanceBar profile={activeProfile} />}
               <JogaButton
                 variant="ghost"
                 size="sm"

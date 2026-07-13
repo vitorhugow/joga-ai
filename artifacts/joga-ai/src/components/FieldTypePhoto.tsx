@@ -28,7 +28,7 @@ export function FieldTypePhoto({ fieldType, className = "" }: Props) {
           alt=""
           loading="eager"
           decoding="async"
-          className="block h-full w-full object-contain"
+          className="block h-full w-full object-cover object-center"
           onError={() => setFailed(true)}
         />
       )}

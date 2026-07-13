@@ -28,7 +28,7 @@ export function FieldCardBackground({ fieldType }: Props) {
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(105deg, rgba(10,15,26,0.94) 0%, rgba(10,15,26,0.82) 45%, rgba(10,15,26,0.9) 100%)",
+            "linear-gradient(105deg, rgba(10,15,26,0.78) 0%, rgba(10,15,26,0.62) 45%, rgba(10,15,26,0.74) 100%)",
         }}
       />
     </div>

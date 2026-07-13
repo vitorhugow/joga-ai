@@ -9,7 +9,7 @@ import { hasPlayerPro, isOrganizerPro } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { trackEvent } from "@/lib/analytics";
-import { ProfileFinanceBar } from "@/components/ProfileFinanceBar";
+import { ProfileFinanceMenu } from "@/components/ProfileFinanceMenu";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
@@ -467,12 +467,12 @@ export default function Perfil() {
       )}
 
       {!isViewingOther && !authLoading && isLinked && (
-        <div className="px-4 pt-4 flex items-center gap-2 min-w-0">
-          <p className="text-white/45 text-sm truncate min-w-0 flex-1">
+        <div className="px-4 pt-4 flex items-center justify-between gap-3">
+          <p className="text-white/45 text-sm truncate min-w-0">
             Sessão: <span className="text-white/70 font-medium">{displayName || "Conta ligada"}</span>
           </p>
-          <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto max-w-[72%] sm:max-w-none">
-            <ProfileFinanceBar profile={activeProfile} />
+          <div className="flex items-center gap-2 shrink-0">
+            <ProfileFinanceMenu profile={activeProfile} />
             {isAdmin && (
               <Link href="/admin">
                 <JogaButton variant="ghost" size="sm" className="gap-1.5 text-emerald-400/90 whitespace-nowrap">
@@ -516,7 +516,7 @@ export default function Perfil() {
             ) : null}
             {!isViewingOther && (
             <div className="flex items-center gap-2 flex-wrap justify-end">
-              {!isLinked && <ProfileFinanceBar profile={activeProfile} />}
+              {!isLinked && <ProfileFinanceMenu profile={activeProfile} />}
               <JogaButton
                 variant="ghost"
                 size="sm"

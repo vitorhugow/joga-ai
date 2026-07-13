@@ -215,8 +215,8 @@ const FEATURE_SECTIONS: FeatureSectionData[] = [
       "MVP apoiado em dados",
     ],
     screenshot: {
-      src: "/screenshots/01-home.png",
-      alt: "Ranking e início da app",
+      src: "/screenshots/04-perfil.png",
+      alt: "Carta do jogador no perfil",
       label: "Ranking",
     },
     reverse: true,

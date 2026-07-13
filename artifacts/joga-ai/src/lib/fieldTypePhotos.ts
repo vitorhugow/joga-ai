@@ -1,18 +1,14 @@
-/** Fotos dos campos — importadas no bundle (evita falha do PWA em /fields/). */
-
-import fieldFutsal from "@/assets/fields/field-futsal.webp";
-import fieldF5 from "@/assets/fields/field-f5.webp";
-import fieldF7 from "@/assets/fields/field-f7.webp";
+/** Fotos dos campos — servidas de /fields/ (public/fields/). */
 
 const PHOTOS = {
-  futsal: fieldFutsal,
-  f5: fieldF5,
-  fut5: fieldF5,
-  f7: fieldF7,
-  fut7: fieldF7,
-  f11: fieldF7,
-  futebol11: fieldF7,
-  default: fieldF5,
+  futsal: "/fields/field-futsal.webp",
+  f5: "/fields/field-f5.webp",
+  fut5: "/fields/field-f5.webp",
+  f7: "/fields/field-f7.webp",
+  fut7: "/fields/field-f7.webp",
+  f11: "/fields/field-f7.webp",
+  futebol11: "/fields/field-f7.webp",
+  default: "/fields/field-f5.webp",
 } as const;
 
 export function fieldPhotoSrc(fieldType?: string | null): string {

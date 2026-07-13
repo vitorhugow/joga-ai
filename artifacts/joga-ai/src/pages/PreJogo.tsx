@@ -43,6 +43,7 @@ import {
   leaveMatch,
   removePlayerAndPromote,
   getMatchInviteUrl,
+  getMatchAppUrl,
   canConfirmPresence,
   type WaitlistEntry,
 } from "@/lib/matchRsvpRepository";
@@ -53,6 +54,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -327,8 +329,16 @@ function PlayerPicker({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,0.68)" }}>
-      <div className="w-full rounded-t-[28px] p-4 max-h-[78vh] overflow-y-auto" style={{ background: "#0a0f1a", border: "1px solid rgba(255,255,255,0.10)" }}>
+    <div
+      className="fixed inset-0 z-[70] flex items-end"
+      style={{ background: "rgba(0,0,0,0.68)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full rounded-t-[28px] p-4 max-h-[78vh] overflow-y-auto pb-[calc(env(safe-area-inset-bottom,0px)+5.5rem)]"
+        style={{ background: "#0a0f1a", border: "1px solid rgba(255,255,255,0.10)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.22em]">Escolher jogador</p>
@@ -791,38 +801,49 @@ export default function PreJogo() {
     const team = getSlotTeam(slotId);
     const previousPlayerId = assignments[slotId];
 
-    setAssignments((current) => {
-      const next = { ...current };
+    const nextAssignments = { ...assignments };
+    for (const key of Object.keys(nextAssignments)) {
+      if (nextAssignments[key] === playerId) nextAssignments[key] = null;
+    }
+    nextAssignments[slotId] = playerId;
 
-      for (const key of Object.keys(next)) {
-        if (next[key] === playerId) next[key] = null;
-      }
-
-      next[slotId] = playerId;
-      return next;
-    });
-
-    setPlayerTeams((current) => ({
-      ...current,
-      ...(previousPlayerId && previousPlayerId !== playerId ? { [previousPlayerId]: "BENCH" as PlayerStatus } : {}),
+    const nextPlayerTeams = {
+      ...playerTeams,
+      ...(previousPlayerId && previousPlayerId !== playerId
+        ? { [previousPlayerId]: "BENCH" as PlayerStatus }
+        : {}),
       [playerId]: team,
-    }));
+    };
+
+    setAssignments(nextAssignments);
+    setPlayerTeams(nextPlayerTeams);
+    setPickerSlot(null);
+    void persistRosterImmediate({
+      playerTeams: nextPlayerTeams,
+      assignments: nextAssignments,
+    });
   }
 
   function clearSlot(slotId: string) {
     const currentPlayer = assignments[slotId];
 
-    setAssignments((current) => ({
-      ...current,
+    const nextAssignments = {
+      ...assignments,
       [slotId]: null,
-    }));
+    };
 
-    if (currentPlayer) {
-      setPlayerTeams((current) => ({
-        ...current,
-        [currentPlayer]: "BENCH",
-      }));
-    }
+    const nextPlayerTeams = currentPlayer
+      ? { ...playerTeams, [currentPlayer]: "BENCH" as PlayerStatus }
+      : playerTeams;
+
+    setAssignments(nextAssignments);
+    if (currentPlayer) setPlayerTeams(nextPlayerTeams);
+    setPickerSlot(null);
+
+    void persistRosterImmediate({
+      playerTeams: nextPlayerTeams,
+      assignments: nextAssignments,
+    });
   }
 
   function moveToTeam(playerId: string, team: PlayerStatus) {
@@ -1103,246 +1124,39 @@ export default function PreJogo() {
   }
 
   function randomizeTeams() {
-    const ok = window.confirm("Dividir jogadores em times completos e equilibrados?");
+    const ok = window.confirm("Distribuir todos os jogadores pelas equipas de forma equilibrada?");
     if (!ok) return;
 
     const teams = activeTeams;
-    const fieldSize = formations[gameMode].slots.length;
+    if (!teams.length) return;
 
-    const buckets: Record<TeamKey, Player[]> = { A: [], B: [], C: [], D: [] };
-    const targetSizes: Record<TeamKey, number> = { A: 0, B: 0, C: 0, D: 0 };
-
-    // 1) Primeiro decide quantos times completos existem.
-    // A e B são prioridade porque começam no campo.
-    // C só aparece se tiver jogador suficiente para completar.
-    // D só aparece se também tiver jogador suficiente para completar.
-    let remaining = players.length;
-
-    const fixedOrder = (["A", "B", "C", "D"] as TeamKey[]).filter((team) => teams.includes(team));
-
-    for (const team of fixedOrder) {
-      if (remaining >= fieldSize) {
-        targetSizes[team] = fieldSize;
-        remaining -= fieldSize;
-      }
-    }
-
-    // Se não der nem para completar A/B, divide o que tiver entre A e B.
-    if (targetSizes.A === 0 && targetSizes.B === 0) {
-      const starterTeams = (["A", "B"] as TeamKey[]).filter((team) => teams.includes(team));
-      const base = Math.floor(players.length / starterTeams.length);
-      const extra = players.length % starterTeams.length;
-
-      starterTeams.forEach((team, index) => {
-        targetSizes[team] = base + (index < extra ? 1 : 0);
-      });
-
-      remaining = 0;
-    }
-
-    const teamsWithTarget = teams.filter((team) => targetSizes[team] > 0);
-
-    const shuffle = <T,>(items: T[]) => {
-      return [...items]
-        .map((item) => ({ item, random: Math.random() }))
-        .sort((a, b) => a.random - b.random)
-        .map(({ item }) => item);
-    };
-
-    const teamTotal = (team: TeamKey) => {
-      return buckets[team].reduce((sum, player) => sum + player.overall, 0);
-    };
-
-    const teamAverage = (team: TeamKey) => {
-      if (buckets[team].length === 0) return 0;
-      return teamTotal(team) / buckets[team].length;
-    };
-
-    const hasPosition = (team: TeamKey, position: string) => {
-      return buckets[team].some((player) => player.position === position);
-    };
-
-    const compensation = (team: TeamKey) => {
-      let value = 0;
-
-      // Time sem GR pode ser aproximadamente 1 ponto mais forte.
-      if (!hasPosition(team, "GR")) value += 1;
-
-      // DEF é mais importante no Fut 7, mas ainda conta no Fut 5.
-      if (!hasPosition(team, "DEF")) value += gameMode === "fut7" ? 1 : 0.75;
-
-      return value;
-    };
-
-    const effectiveAverage = (team: TeamKey) => {
-      return teamAverage(team) - compensation(team);
-    };
-
-    const hasSpace = (team: TeamKey) => {
-      return buckets[team].length < targetSizes[team];
-    };
-
-    const projectedScore = (team: TeamKey, player: Player, spreadPosition: boolean) => {
-      const projectedPlayers = [...buckets[team], player];
-      const projectedAverage = projectedPlayers.reduce((sum, item) => sum + item.overall, 0) / projectedPlayers.length;
-
-      const wouldHaveGR = projectedPlayers.some((item) => item.position === "GR");
-      const wouldHaveDEF = projectedPlayers.some((item) => item.position === "DEF");
-
-      let projectedCompensation = 0;
-      if (!wouldHaveGR) projectedCompensation += 1;
-      if (!wouldHaveDEF) projectedCompensation += gameMode === "fut7" ? 1 : 0.75;
-
-      const repeatPositionPenalty = spreadPosition && hasPosition(team, player.position) ? 0.65 : 0;
-      const sizePressure = projectedPlayers.length / Math.max(1, targetSizes[team]);
-
-      return projectedAverage - projectedCompensation + repeatPositionPenalty + sizePressure * 0.15;
-    };
-
-    const chooseBestTeamForPlayer = (player: Player, spreadPosition: boolean) => {
-      const candidates = teamsWithTarget.filter((team) => hasSpace(team));
-      if (candidates.length === 0) return null;
-
-      return [...candidates]
-        .map((team) => ({ team, random: Math.random() }))
-        .sort((a, b) => {
-          const scoreDiff = projectedScore(a.team, player, spreadPosition) - projectedScore(b.team, player, spreadPosition);
-          if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
-
-          const totalDiff = teamTotal(a.team) - teamTotal(b.team);
-          if (totalDiff !== 0) return totalDiff;
-
-          const sizeDiff = buckets[a.team].length - buckets[b.team].length;
-          if (sizeDiff !== 0) return sizeDiff;
-
-          return a.random - b.random;
-        })[0].team;
-    };
-
-    const assignedIds = new Set<string>();
-
-    const assignPlayer = (player: Player, spreadPosition: boolean) => {
-      if (assignedIds.has(player.id)) return;
-
-      const team = chooseBestTeamForPlayer(player, spreadPosition);
-      if (!team) return;
-
-      buckets[team].push(player);
-      assignedIds.add(player.id);
-    };
-
-    const assignPositionGroup = (position: string, spreadPosition: boolean) => {
-      const group = shuffle(players.filter((player) => player.position === position && !assignedIds.has(player.id)))
-        .sort((a, b) => b.overall - a.overall);
-
-      for (const player of group) {
-        assignPlayer(player, spreadPosition);
-      }
-    };
-
-    // 2) Depois equilibra pensando dentro dos times já definidos.
-    // Fut 5: GR primeiro, depois equilíbrio geral.
-    // Fut 7: GR primeiro, DEF depois, depois equilíbrio geral.
-    assignPositionGroup("GR", true);
-    assignPositionGroup("DEF", true);
-    assignPositionGroup("MEI", true);
-    assignPositionGroup("AVA", true);
-
-    const remainingPlayers = shuffle(players.filter((player) => !assignedIds.has(player.id)))
-      .sort((a, b) => b.overall - a.overall);
-
-    for (const player of remainingPlayers) {
-      assignPlayer(player, true);
-    }
-
-    // 3) Pequena revisão final: tenta trocar jogadores entre times para reduzir diferença de média efetiva.
-    const balanceScore = () => {
-      if (teamsWithTarget.length <= 1) return 0;
-
-      const averages = teamsWithTarget.map((team) => effectiveAverage(team));
-      const maxAverage = Math.max(...averages);
-      const minAverage = Math.min(...averages);
-
-      return maxAverage - minAverage;
-    };
-
-    let improved = true;
-    let guard = 0;
-
-    while (improved && guard < 80) {
-      improved = false;
-      guard += 1;
-
-      const currentScore = balanceScore();
-
-      for (const teamA of teamsWithTarget) {
-        for (const teamB of teamsWithTarget) {
-          if (teamA === teamB) continue;
-
-          for (let indexA = 0; indexA < buckets[teamA].length; indexA += 1) {
-            for (let indexB = 0; indexB < buckets[teamB].length; indexB += 1) {
-              const playerA = buckets[teamA][indexA];
-              const playerB = buckets[teamB][indexB];
-
-              buckets[teamA][indexA] = playerB;
-              buckets[teamB][indexB] = playerA;
-
-              const newScore = balanceScore();
-
-              if (newScore + 0.15 < currentScore) {
-                improved = true;
-                break;
-              }
-
-              buckets[teamA][indexA] = playerA;
-              buckets[teamB][indexB] = playerB;
-            }
-
-            if (improved) break;
-          }
-
-          if (improved) break;
-        }
-
-        if (improved) break;
-      }
-    }
+    const shuffle = <T,>(items: T[]) => [...items].sort(() => Math.random() - 0.5);
+    const shuffled = shuffle(players);
 
     const nextPlayerTeams: Record<string, PlayerStatus> = {};
-
-    // Quem não couber em time completo fica Banco.
-    for (const player of players) {
-      nextPlayerTeams[player.id] = "BENCH";
-    }
-
-    for (const team of teamsWithTarget) {
-      for (const player of buckets[team]) {
-        nextPlayerTeams[player.id] = team;
-      }
-    }
+    shuffled.forEach((player, index) => {
+      nextPlayerTeams[player.id] = teams[index % teams.length];
+    });
 
     const nextAssignments: Record<string, string | null> = {};
-
     for (const team of ["A", "B"] as TeamKey[]) {
       for (const slot of formations[gameMode].slots) {
         nextAssignments[makeSlot(team, slot.id)] = null;
       }
     }
 
-    // A e B entram no campo automaticamente.
     for (const team of ["A", "B"] as TeamKey[]) {
-      if (!teamsWithTarget.includes(team)) continue;
+      if (!teams.includes(team)) continue;
 
       const usedPlayerIds = new Set<string>();
-      const teamPlayers = [...buckets[team]];
+      const teamPlayers = shuffled.filter((player) => nextPlayerTeams[player.id] === team);
 
       for (const slot of formations[gameMode].slots) {
-        const availablePlayers = teamPlayers.filter((player) => !usedPlayerIds.has(player.id));
-        if (availablePlayers.length === 0) continue;
+        const available = teamPlayers.filter((player) => !usedPlayerIds.has(player.id));
+        if (!available.length) continue;
 
-        const samePosition = availablePlayers.filter((player) => player.position === slot.label);
-        const candidates = samePosition.length > 0 ? samePosition : availablePlayers;
-
+        const samePosition = available.filter((player) => player.position === slot.label);
+        const candidates = samePosition.length > 0 ? samePosition : available;
         const chosen = [...candidates].sort((a, b) => b.overall - a.overall)[0];
 
         nextAssignments[makeSlot(team, slot.id)] = chosen.id;
@@ -1353,6 +1167,11 @@ export default function PreJogo() {
     setPlayerTeams(nextPlayerTeams);
     setAssignments(nextAssignments);
     setSortMode("teams");
+
+    void persistRosterImmediate({
+      playerTeams: nextPlayerTeams,
+      assignments: nextAssignments,
+    });
   }
 
   function clearAllTeams() {
@@ -1492,6 +1311,26 @@ export default function PreJogo() {
   const totalPaid = players.filter((player) => player.paid).length;
   const benchCount = teamBuckets.BENCH.length;
   const teamsWithPlayers = (["A", "B", "C", "D"] as TeamKey[]).filter((team) => teamBuckets[team].length > 0).length;
+
+  const pageMeta = useMemo(() => {
+    if (!matchDetails) return {};
+    const schedule = [matchDetails.scheduledDate, matchDetails.scheduledTime]
+      .filter(Boolean)
+      .join(" ");
+    const place = [matchDetails.location, matchDetails.city].filter(Boolean).join(" · ");
+    const max = Number(matchDetails.maxPlayers) || 14;
+    const left = Math.max(0, max - players.length);
+    const spots = left === 0 ? "Lotado" : `${left} ${left === 1 ? "vaga" : "vagas"}`;
+    const price = formatMatchPriceAmount(matchDetails.price) ?? "Grátis";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://jogaai.pt";
+    return {
+      title: matchDetails.title || "Pelada Joga AI",
+      description: [schedule, place, spots, price].filter(Boolean).join(" · "),
+      image: `${origin}/opengraph.jpg`,
+      url: getMatchAppUrl(matchId),
+    };
+  }, [matchDetails, players.length, matchId]);
+  usePageMeta(pageMeta);
 
   const myPlayerIndex = userId
     ? players.findIndex((p) => p.userId === userId || p.id === userId)

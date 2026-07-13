@@ -255,6 +255,14 @@ export default function Perfil() {
   const player = profileToPlayerCard(activeProfile);
   const playerPro = hasPlayerPro(activeProfile?.entitlements);
 
+  const profileHighlightLabel = useMemo(() => {
+    if (!isViewingOther && playerPro && activeProfile?.lastMatchNickname?.label?.trim()) {
+      const { label, emoji } = activeProfile.lastMatchNickname;
+      return emoji ? `${emoji} ${label}` : label;
+    }
+    return player.title;
+  }, [isViewingOther, playerPro, activeProfile?.lastMatchNickname, player.title]);
+
   const historyCommunityOptions = useMemo(() => {
     const ids = new Set<string>();
     for (const m of matchHistory) {
@@ -660,7 +668,7 @@ export default function Perfil() {
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/25">
                   {player.position}
                 </span>
-                <span className="text-[11px] font-semibold text-amber-300/90">{player.title}</span>
+                <span className="text-[11px] font-semibold text-amber-300/90">{profileHighlightLabel}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 mt-2.5">
@@ -704,7 +712,7 @@ export default function Perfil() {
               <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/20">
                 {player.position}
               </span>
-              <span className="text-[12px] font-semibold text-white/55">{player.title}</span>
+              <span className="text-[12px] font-semibold text-white/55">{profileHighlightLabel}</span>
             </div>
             <p className="text-white/35 text-[11px] mt-1 font-medium">Época 2024/25</p>
           </div>

@@ -357,6 +357,14 @@ export async function getMatchOpenToExternal(matchId: string): Promise<boolean> 
 }
 
 export function getMatchInviteUrl(matchId: string): string {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "https://jogaai.pt";
+  return `${origin}/og/partida/${matchId}`;
+}
+
+/** Destino real da app (após preview OG). */
+export function getMatchAppUrl(matchId: string): string {
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "https://jogaai.pt";
   return `${origin}/partida/${matchId}/pre-jogo`;
 }

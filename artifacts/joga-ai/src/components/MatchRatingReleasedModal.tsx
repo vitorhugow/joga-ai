@@ -104,7 +104,7 @@ export function MatchRatingReleasedModal() {
     : [];
 
   const proNickname = isProActive(profile?.entitlements)
-    ? (profile as { lastMatchNickname?: string }).lastMatchNickname
+    ? profile?.lastMatchNickname?.label
     : undefined;
 
   function dismiss() {

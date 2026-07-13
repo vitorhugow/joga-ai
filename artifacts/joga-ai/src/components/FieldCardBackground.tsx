@@ -21,7 +21,7 @@ export function FieldCardBackground({ fieldType }: Props) {
         alt=""
         loading="lazy"
         decoding="async"
-        className="absolute inset-0 h-full w-full scale-110 object-cover object-center opacity-[0.28] blur-[1.5px]"
+        className="absolute inset-0 h-full w-full scale-110 object-cover object-center opacity-[0.55] blur-[1px]"
         onError={() => setFailed(true)}
       />
       <div

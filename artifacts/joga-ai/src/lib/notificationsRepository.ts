@@ -316,7 +316,8 @@ export async function processPendingNotifications(userId: string): Promise<void>
       title: "Confere a tua evolução",
       body: `A tua nota em «${entry.title}» já está disponível.`,
       type: "match",
-      link: "/perfil/evolucao",
+      priority: "popup",
+      link: `/partida/${entry.matchId}/pos-jogo?view=summary`,
     });
   }
 }

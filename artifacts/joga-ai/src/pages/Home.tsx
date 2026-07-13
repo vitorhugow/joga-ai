@@ -156,7 +156,7 @@ export default function Home() {
 
   function matchHref(match: EnrichedMatchListing) {
     if (match.voted && match.status === "aguardando_auditoria") {
-      return matchSummaryPath(match.id);
+      return matchSummaryPath(match.id, { view: "summary" });
     }
     if (match.pendingVote && match.status === "aguardando_auditoria") {
       return matchSummaryPath(match.id);

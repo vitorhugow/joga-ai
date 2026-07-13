@@ -18,6 +18,11 @@ export function openToExternalFromAccessMode(mode: MatchAccessMode): boolean {
   return mode === "public";
 }
 
+/** Só partidas ainda em pré-jogo (agendadas) aparecem na descoberta pública. */
+export function isPublicSchedulingStatus(status?: string): boolean {
+  return !status || status === "configurando";
+}
+
 /** Visível na descoberta pública (Encontrar Jogos). */
 export function isListedInPublicBrowse(input: {
   accessMode?: MatchAccessMode;
@@ -27,15 +32,17 @@ export function isListedInPublicBrowse(input: {
   communityProActive?: boolean;
   status?: string;
 }): boolean {
+  if (!isPublicSchedulingStatus(input.status)) return false;
+
   if (input.communityId) {
     if (input.communityOpenToExternal && input.communityProActive) {
-      return !input.status || ["configurando", "ao_vivo", "aguardando_auditoria", "auditada"].includes(input.status);
+      return true;
     }
   }
   const mode = resolveAccessMode(input);
   if (mode !== "public") return false;
   if (input.communityId) return true;
-  return !input.status || ["configurando", "ao_vivo", "aguardando_auditoria", "auditada"].includes(input.status);
+  return true;
 }
 
 export function accessModeLabel(mode: MatchAccessMode): string {

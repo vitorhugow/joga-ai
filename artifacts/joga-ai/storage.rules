@@ -16,6 +16,21 @@ service firebase.storage {
         && request.resource.contentType in ['image/png', 'image/jpeg', 'image/webp'];
     }
 
+    function isAppAdmin() {
+      return request.auth != null && (
+        request.auth.uid == 'KrnnjgKclcPJm4In4W9ORp3iX6j2'
+        || request.auth.token.email == 'vh.santos.nunes@gmail.com'
+        || (firestore.exists(/databases/(default)/documents/appConfig/admins)
+            && request.auth.uid in firestore.get(/databases/(default)/documents/appConfig/admins).data.uids)
+      );
+    }
+
+    match /app/fieldPhotos/{fileName} {
+      allow read: if true;
+      allow write: if isAppAdmin() && isValidBrandingImage();
+      allow delete: if isAppAdmin();
+    }
+
     match /communities/{communityId}/branding/{fileName} {
       allow read: if isSignedIn();
       allow write: if isCommunityAdmin(communityId) && isValidBrandingImage();

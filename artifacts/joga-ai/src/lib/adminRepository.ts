@@ -10,6 +10,7 @@ import {
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   limit as fsLimit,
@@ -18,6 +19,7 @@ import {
 import { db, isFirebaseConfigured } from "./firebase";
 import type { EntitlementPlan, Entitlements } from "./entitlements";
 import type { UserProfile } from "./userRepository";
+import type { FieldPhotoKey } from "./fieldPhotosConfig";
 
 export type AdminUserRow = {
   uid: string;
@@ -157,4 +159,13 @@ export async function adminUpdateReportStatus(
     status,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function adminSaveFieldPhoto(key: FieldPhotoKey, url: string): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+  await setDoc(
+    doc(db, "appConfig", "fieldPhotos"),
+    { [key]: url, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
 }

@@ -215,8 +215,8 @@ service cloud.firestore {
 
     // Configuração da app gerida pela consola (ex.: patrocinador do SponsorSlot)
     match /appConfig/{docId} {
-      allow read: if isSignedIn();
-      allow write: if false;
+      allow read: if isSignedIn() || docId == 'fieldPhotos';
+      allow write: if docId == 'fieldPhotos' && isAppAdmin();
     }
 
     match /users/{userId} {

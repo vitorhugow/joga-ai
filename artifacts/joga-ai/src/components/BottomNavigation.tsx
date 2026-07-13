@@ -6,7 +6,7 @@ const navItems = [
   { path: "/", icon: Home, label: "Início" },
   { path: "/jogos", icon: Calendar, label: "Jogos" },
   { path: "/comunidades", icon: Users, label: "Comunidades" },
-  { path: "/ranking", icon: Trophy, label: "Ranking" },
+  { path: "/ranking", icon: Trophy, label: "Liga Global" },
   { path: "/perfil", icon: User, label: "Perfil" },
 ];
 

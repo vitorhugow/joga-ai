@@ -91,6 +91,12 @@ export type UserProfile = {
   cardSkin?: string;
   /** email (Auth) — para pesquisa no painel admin */
   email?: string;
+  /** Cidade onde costuma jogar (preferência; filtro de jogos) */
+  city?: string;
+  /** Tipo de futebol preferido (futsal | fut5 | fut7 | futebol11) */
+  preferredFieldType?: "futsal" | "fut5" | "fut7" | "futebol11";
+  /** Utilizador concluiu ou saltou o fluxo de preferências no registo */
+  preferencesPromptCompleted?: boolean;
   /** PRO — leitura no cliente; escrito por Stripe (Functions) ou admin */
   entitlements?: import("./entitlements").Entitlements;
   /** Conta Stripe Connect do organizador — escrito só por Functions */
@@ -313,6 +319,11 @@ function remoteToPartial(data: Record<string, unknown>, userId: string): Partial
       : undefined,
     cardSkin: data.cardSkin ? String(data.cardSkin) : undefined,
     email: data.email ? String(data.email).toLowerCase() : undefined,
+    city: data.city ? String(data.city).trim() : undefined,
+    preferredFieldType: data.preferredFieldType
+      ? (String(data.preferredFieldType) as UserProfile["preferredFieldType"])
+      : undefined,
+    preferencesPromptCompleted: Boolean(data.preferencesPromptCompleted),
     entitlements: data.entitlements
       ? (data.entitlements as UserProfile["entitlements"])
       : undefined,
@@ -553,6 +564,7 @@ export type PublicPlayerProfile = PublicUserProfile & {
   whatsapp?: string;
   showInstagramPublic?: boolean;
   showWhatsappPublic?: boolean;
+  lastAttributeDeltas?: Partial<PlayerAttributes>;
 };
 
 function mapPublicPlayerProfile(userId: string, data: Record<string, unknown>): PublicPlayerProfile {
@@ -578,6 +590,7 @@ function mapPublicPlayerProfile(userId: string, data: Record<string, unknown>): 
     whatsapp: data.whatsapp ? sanitizeWhatsappInput(String(data.whatsapp)) : undefined,
     showInstagramPublic: Boolean(data.showInstagramPublic),
     showWhatsappPublic: Boolean(data.showWhatsappPublic),
+    lastAttributeDeltas: data.lastAttributeDeltas as Partial<PlayerAttributes> | undefined,
   };
 }
 
@@ -670,6 +683,44 @@ export async function loadGlobalRanking(maxPlayers = 200): Promise<PublicPlayerP
     console.warn("[userRepository] loadGlobalRanking:", err);
     return [];
   }
+}
+
+export type UserPreferencesInput = {
+  city?: string;
+  preferredFieldType?: UserProfile["preferredFieldType"];
+  preferencesPromptCompleted?: boolean;
+};
+
+export async function saveUserPreferences(
+  userId: string,
+  input: UserPreferencesInput,
+  isAnonymous = true,
+): Promise<UserProfile> {
+  const current = readLocalProfile(userId) ?? createIncompleteSeedProfile(userId, isAnonymous);
+
+  const updated: UserProfile = {
+    ...current,
+    uid: userId,
+    city: input.city !== undefined ? input.city.trim() || undefined : current.city,
+    preferredFieldType:
+      input.preferredFieldType !== undefined
+        ? input.preferredFieldType
+        : current.preferredFieldType,
+    preferencesPromptCompleted:
+      input.preferencesPromptCompleted ?? current.preferencesPromptCompleted ?? false,
+    isAnonymous,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (isFirebaseConfigured() && !isAnonymous) {
+    const userRef = doc(db, "users", userId);
+    const snap = await getDoc(userRef);
+    await persistProfile(userRef, updated, !snap.exists());
+  }
+
+  writeLocalProfile(updated);
+  notifyProfileUpdated(userId);
+  return updated;
 }
 
 export type ProfileSetupInput = {

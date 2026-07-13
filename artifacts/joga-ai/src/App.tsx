@@ -41,8 +41,11 @@ const Admin = lazyRoute(() => import("@/pages/Admin"));
 
 function PageFallback() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <div
+      className="flex min-h-screen items-center justify-center"
+      style={{ background: "#0a0f1a" }}
+    >
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
     </div>
   );
 }

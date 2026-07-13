@@ -1,10 +1,11 @@
-import { Search, Plus, X, Users } from "lucide-react";
+import { Search, Plus, X, Users, Sparkles, Bell } from "lucide-react";
 import { SponsorSlot } from "@/components/SponsorSlot";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   loadCommunities,
   loadMyCommunities,
+  loadPendingJoinRequestsForAdmin,
   type Community,
 } from "@/lib/communityRepository";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,6 +48,8 @@ function CommunityCard({
   coverUrl,
   joined,
   proActive,
+  variant = "default",
+  activityHint,
 }: {
   id: string;
   name: string;
@@ -57,20 +60,31 @@ function CommunityCard({
   coverUrl?: string;
   joined?: boolean;
   proActive?: boolean;
+  variant?: "mine" | "discover" | "default";
+  activityHint?: string;
 }) {
   const accent = gameTypeAccent[gameType] || { color: "#9ca3af", bg: "rgba(156,163,175,0.2)" };
   const abbr = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   const clubBg = clubColors[parseInt(id, 36) % clubColors.length];
   const coverSrc = resolveCommunityCover({ coverUrl, coverImage });
 
+  const isDiscover = variant === "discover";
+  const isMine = variant === "mine";
+
   return (
     <Link href={`/comunidades/${id}`} data-testid={`community-card-${id}`}>
       <div
         className="rounded-2xl overflow-hidden active:scale-[0.98] transition-all"
         style={{
-          background: "rgba(255,255,255,0.05)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 2px 16px rgba(0,0,0,0.3)",
+          background: isDiscover ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.05)",
+          border: isDiscover && proActive
+            ? "1.5px solid rgba(251,191,36,0.35)"
+            : isMine
+              ? "1px solid rgba(74,222,128,0.18)"
+              : "1px solid rgba(255,255,255,0.08)",
+          boxShadow: isDiscover && proActive
+            ? "0 4px 24px rgba(251,191,36,0.1), 0 2px 16px rgba(0,0,0,0.3)"
+            : "0 2px 16px rgba(0,0,0,0.3)",
         }}
       >
         <div className="relative h-28 overflow-hidden">
@@ -93,11 +107,19 @@ function CommunityCard({
             <div>
               <h3 className="font-display font-black text-white text-base leading-tight drop-shadow">
                 {name}
-                {proActive && (
+                {proActive && isDiscover && (
+                  <span
+                    className="ml-1.5 inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide"
+                    style={{ background: "rgba(251,191,36,0.22)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.45)" }}
+                  >
+                    ✦ Clube PRO
+                  </span>
+                )}
+                {proActive && !isDiscover && (
                   <span className="ml-1.5 text-[9px] font-black uppercase text-amber-300">✦ PRO</span>
                 )}
               </h3>
-              <p className="text-white/55 text-xs font-medium">📍 {city}</p>
+              <p className="text-white/60 text-sm font-medium">📍 {city}</p>
             </div>
           </div>
           <div
@@ -112,9 +134,18 @@ function CommunityCard({
           className="px-4 py-3 flex items-center justify-between"
           style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
         >
-          <div className="flex items-center gap-1.5 text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>
+          <div className="flex items-center gap-1.5 text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
             <Users className="w-3.5 h-3.5" />
             <span className="font-medium">{memberCount} membros</span>
+            {activityHint && (
+              <span
+                className="ml-1 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
+                style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}
+              >
+                <Bell className="w-3 h-3" />
+                {activityHint}
+              </span>
+            )}
           </div>
           <div
             className="text-xs font-black px-3 py-1.5 rounded-full"
@@ -125,10 +156,12 @@ function CommunityCard({
                     color: "#4ade80",
                     border: "1px solid rgba(74,222,128,0.25)",
                   }
-                : { background: "linear-gradient(135deg, #15803d, #16a34a)", color: "white" }
+                : isDiscover
+                  ? { background: "linear-gradient(135deg, #15803d, #16a34a)", color: "white" }
+                  : { background: "linear-gradient(135deg, #15803d, #16a34a)", color: "white" }
             }
           >
-            {joined ? "✓ Membro" : "Ver"}
+            {joined ? "✓ Membro" : isDiscover ? "Explorar" : "Ver"}
           </div>
         </div>
       </div>
@@ -148,16 +181,23 @@ export default function Comunidades() {
   const [allCommunities, setAllCommunities] = useState<Community[]>([]);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [loadingCommunities, setLoadingCommunities] = useState(true);
+  const [pendingByCommunity, setPendingByCommunity] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     setLoadingCommunities(true);
     Promise.all([
       loadCommunities(userId),
       userId ? loadMyCommunities(userId) : Promise.resolve([] as Community[]),
+      userId ? loadPendingJoinRequestsForAdmin(userId) : Promise.resolve([]),
     ])
-      .then(([all, mine]) => {
+      .then(([all, mine, pendingRequests]) => {
         setAllCommunities(all);
         setMyCommunities(mine);
+        const counts = new Map<string, number>();
+        for (const req of pendingRequests) {
+          counts.set(req.communityId, (counts.get(req.communityId) ?? 0) + 1);
+        }
+        setPendingByCommunity(counts);
       })
       .finally(() => setLoadingCommunities(false));
   }, [userId, location]);
@@ -197,12 +237,15 @@ export default function Comunidades() {
   );
 
   const myIds = new Set(mergedMyCommunities.map((c) => c.id));
-  const discoverList = filtered.filter(
-    (c) => !myIds.has(c.id) && !c.isMember && !(c as Community & { joinPending?: boolean }).joinPending,
-  );
+  const discoverList = filtered
+    .filter(
+      (c) => !myIds.has(c.id) && !c.isMember && !(c as Community & { joinPending?: boolean }).joinPending,
+    )
+    .sort((a, b) => Number(Boolean(b.proActive)) - Number(Boolean(a.proActive)));
   const myFilteredList = mergedMyCommunities.filter(
     (c) => matchesSearch(c) && matchesGameTypeFilter(c.gameType),
   );
+  const totalPendingAdmin = [...pendingByCommunity.values()].reduce((sum, n) => sum + n, 0);
 
   return (
     <JogaPage theme="dark" padded={false}>
@@ -267,23 +310,30 @@ export default function Comunidades() {
             type="button"
             onClick={() => setView("minhas")}
             data-testid="tab-minhas-comunidades"
-            className="py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+            className="py-2.5 rounded-xl text-sm font-bold transition-colors flex flex-col items-center justify-center gap-0.5"
             style={
               view === "minhas"
                 ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
                 : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
             }
           >
-            Minhas
-            {mergedMyCommunities.length > 0 && (
-              <span
-                className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
-                style={{
-                  background: view === "minhas" ? "rgba(74,222,128,0.25)" : "rgba(255,255,255,0.1)",
-                  color: view === "minhas" ? "#4ade80" : "rgba(255,255,255,0.5)",
-                }}
-              >
-                {mergedMyCommunities.length}
+            <span className="flex items-center gap-1.5">
+              As tuas
+              {mergedMyCommunities.length > 0 && (
+                <span
+                  className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
+                  style={{
+                    background: view === "minhas" ? "rgba(74,222,128,0.25)" : "rgba(255,255,255,0.1)",
+                    color: view === "minhas" ? "#4ade80" : "rgba(255,255,255,0.5)",
+                  }}
+                >
+                  {mergedMyCommunities.length}
+                </span>
+              )}
+            </span>
+            {totalPendingAdmin > 0 && (
+              <span className="text-[10px] font-semibold text-amber-300/90">
+                {totalPendingAdmin} pedido{totalPendingAdmin !== 1 ? "s" : ""} pendente{totalPendingAdmin !== 1 ? "s" : ""}
               </span>
             )}
           </button>
@@ -291,14 +341,18 @@ export default function Comunidades() {
             type="button"
             onClick={() => setView("descobrir")}
             data-testid="tab-descobrir-comunidades"
-            className="py-2.5 rounded-xl text-sm font-bold transition-colors"
+            className="py-2.5 rounded-xl text-sm font-bold transition-colors flex flex-col items-center justify-center gap-0.5"
             style={
               view === "descobrir"
-                ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
+                ? { background: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.28)" }
                 : { background: "transparent", color: "rgba(255,255,255,0.45)", border: "1px solid transparent" }
             }
           >
-            Descobrir
+            <span className="flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5" />
+              Descobrir
+            </span>
+            <span className="text-[10px] font-medium opacity-80">Explora novas malhas</span>
           </button>
         </div>
 
@@ -334,14 +388,14 @@ export default function Comunidades() {
 
         {!loadingCommunities && view === "minhas" ? (
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-display font-black text-white text-lg">As Minhas</h2>
-              <span
-                className="text-xs font-bold px-2.5 py-1 rounded-full"
-                style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)" }}
-              >
-                {myFilteredList.length}
-              </span>
+            <div className="mb-3">
+              <h2 className="font-display font-black text-white text-lg">As tuas comunidades</h2>
+              <p className="text-white/40 text-sm mt-0.5">
+                {myFilteredList.length} comunidade{myFilteredList.length !== 1 ? "s" : ""}
+                {totalPendingAdmin > 0
+                  ? ` · ${totalPendingAdmin} pedido${totalPendingAdmin !== 1 ? "s" : ""} a rever`
+                  : ""}
+              </p>
             </div>
             {myFilteredList.length === 0 ? (
               <div className="text-center py-16 flex flex-col items-center gap-4">
@@ -364,25 +418,33 @@ export default function Comunidades() {
               </div>
             ) : (
               <div className="space-y-5">
-                {myFilteredList.map((c) => (
-                  <CommunityCard key={c.id} {...c} joined />
-                ))}
+                {myFilteredList.map((c) => {
+                  const pending = pendingByCommunity.get(c.id) ?? 0;
+                  return (
+                    <CommunityCard
+                      key={c.id}
+                      {...c}
+                      joined
+                      variant="mine"
+                      activityHint={pending > 0 ? `${pending} pedido${pending !== 1 ? "s" : ""}` : undefined}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
         ) : (
           !loadingCommunities && (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-display font-black text-white text-lg">
-                  {search || filter !== "todas" ? "Resultados" : "Descobrir"}
+              <div className="mb-3">
+                <h2 className="font-display font-black text-white text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                  {search || filter !== "todas" ? "Resultados" : "Descobrir comunidades"}
                 </h2>
-                <span
-                  className="text-xs font-bold px-2.5 py-1 rounded-full"
-                  style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)" }}
-                >
-                  {discoverList.length}
-                </span>
+                <p className="text-white/40 text-sm mt-0.5">
+                  {discoverList.length} para explorar
+                  {discoverList.some((c) => c.proActive) ? " · Clube PRO em destaque" : ""}
+                </p>
               </div>
               {discoverList.length === 0 ? (
                 <div className="text-center py-16 flex flex-col items-center gap-4">
@@ -402,7 +464,7 @@ export default function Comunidades() {
               ) : (
                 <div className="space-y-5">
                   {discoverList.map((c) => (
-                    <CommunityCard key={c.id} {...c} joined={false} />
+                    <CommunityCard key={c.id} {...c} joined={false} variant="discover" />
                   ))}
                 </div>
               )}

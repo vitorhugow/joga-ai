@@ -86,7 +86,13 @@ export default defineConfig({
       workbox: {
         // SPA: qualquer rota (/admin, /premium, …) serve index.html
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/\.well-known\//, /^\/assets\//, /\.(?:js|css|mjs)(?:\?.*)?$/],
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/\.well-known\//,
+          /^\/assets\//,
+          /^\/fields\//,
+          /\.(?:js|css|mjs|webp|jpg|jpeg|png|gif)(?:\?.*)?$/,
+        ],
         // Novo deploy substitui o SW de imediato (evita router antigo em cache)
         skipWaiting: true,
         clientsClaim: true,
@@ -94,7 +100,7 @@ export default defineConfig({
         // Deixa as leituras/escritas do Firestore fluírem pela persistência
         // nativa do SDK (persistentLocalCache); o service worker só cacheia
         // os assets estáticos da app (JS/CSS/imagens/fontes).
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2,webp,jpg,jpeg}"],
         globIgnores: ["**/firebase-messaging-sw.js", "firebase-messaging-sw.js"],
       },
     }),

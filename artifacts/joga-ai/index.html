@@ -27,22 +27,44 @@
     <script>
       (function () {
         var KEY = "joga-deploy-reload";
+        var MAX = 3;
+        function shouldRecover(src) {
+          if (!src) return false;
+          return src.indexOf("/assets/") !== -1 || src.indexOf("/fields/") !== -1;
+        }
         function recover() {
-          if (sessionStorage.getItem(KEY)) return;
-          sessionStorage.setItem(KEY, "1");
-          function reload() { window.location.reload(); }
-          if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.getRegistrations()
-              .then(function (regs) { return Promise.all(regs.map(function (r) { return r.unregister(); })); })
-              .then(reload).catch(reload);
-          } else reload();
+          var count = parseInt(sessionStorage.getItem(KEY) || "0", 10);
+          if (count >= MAX) return;
+          sessionStorage.setItem(KEY, String(count + 1));
+          function reload() {
+            var url = new URL(window.location.href);
+            url.searchParams.set("_cb", String(Date.now()));
+            window.location.replace(url.toString());
+          }
+          function unregisterAndReload() {
+            if ("serviceWorker" in navigator) {
+              navigator.serviceWorker.getRegistrations()
+                .then(function (regs) { return Promise.all(regs.map(function (r) { return r.unregister(); })); })
+                .then(reload).catch(reload);
+            } else reload();
+          }
+          if ("caches" in window) {
+            caches.keys()
+              .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+              .catch(function () {})
+              .finally(unregisterAndReload);
+          } else unregisterAndReload();
         }
         window.addEventListener("vite:preloadError", function (e) { e.preventDefault(); recover(); });
         window.addEventListener("error", function (e) {
+          if (e.message && e.message.indexOf("module script") !== -1) {
+            recover();
+            return;
+          }
           var t = e.target;
           if (!t || !(t instanceof HTMLElement)) return;
           var src = t.getAttribute("src") || t.getAttribute("href");
-          if (!src || src.indexOf("/assets/") === -1) return;
+          if (!shouldRecover(src)) return;
           recover();
         }, true);
       })();

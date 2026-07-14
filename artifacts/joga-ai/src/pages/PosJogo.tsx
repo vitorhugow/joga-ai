@@ -80,6 +80,7 @@ import { MatchStatsSections } from "@/components/MatchStatsSections";
 import { generateResultImage } from "@/lib/resultImage";
 import { hasPlayerPro, isOrganizerProForCommunity } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
+import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 
@@ -328,7 +329,9 @@ export default function PosJogo() {
   const { profile, refresh } = useUserProfile();
   const evolutionCardRef = useRef<HTMLDivElement>(null);
   const [shareEvolutionBusy, setShareEvolutionBusy] = useState(false);
+  const [shareEvolutionProOpen, setShareEvolutionProOpen] = useState(false);
   const [isCommunityAdmin, setIsCommunityAdmin] = useState(false);
+  const playerPro = hasPlayerPro(profile?.entitlements);
 
   // O admin da comunidade também deve poder finalizar/administrar a
   // votação, não só o organizador — útil quando o organizador não está
@@ -628,6 +631,12 @@ export default function PosJogo() {
   );
 
   async function shareEvolutionCard() {
+    if (!playerPro) {
+      trackEvent("pro_gate_clicked", { feature: "share_evolution" });
+      setShareEvolutionProOpen(true);
+      return;
+    }
+
     const node = evolutionCardRef.current;
     if (!node) return;
     setShareEvolutionBusy(true);
@@ -1131,11 +1140,12 @@ export default function PosJogo() {
         <JogaButton
           variant="primary"
           size="lg"
-          className="mt-4"
+          className="mt-4 gap-2"
           disabled={shareEvolutionBusy || !profile.profileComplete}
           onClick={() => void shareEvolutionCard()}
         >
           Partilhar evolução
+          {!playerPro && <ProFeatureBadge tier="player" className="scale-90" />}
         </JogaButton>
 
         <TooltipProvider delayDuration={200}>
@@ -1582,6 +1592,13 @@ export default function PosJogo() {
         )}
       </section>
       {ConfirmDialog}
+      <ProUpgradeDialog
+        open={shareEvolutionProOpen}
+        onOpenChange={setShareEvolutionProOpen}
+        tier="player"
+        featureTitle="Partilhar evolução é PRO"
+        featureDescription="Exporta a tua carta com os ganhos desta pelada em alta qualidade."
+      />
     </JogaPage>
   );
 }

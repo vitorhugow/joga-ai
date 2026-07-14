@@ -50,6 +50,7 @@ import {
   setupFromRoster,
   updateSetup,
 } from "./matchStateRepository";
+import { sanitizeLivePlayers, stripUndefined } from "./firestoreUtils";
 
 export type CreateMatchInput = {
   title: string;
@@ -329,26 +330,18 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
   if (isFirebaseConfigured()) {
     try {
       const ref = doc(db, "matches", matchId);
-      await setDoc(ref, {
-        ...saved,
-        title: listing.title,
+      await setDoc(ref, stripUndefined({
+        ...buildMatchDocPayload(saved),
         city: listing.city,
         location: listing.location,
         level: input.level,
         gameType: input.gameType,
         maxPlayers,
         price: listing.price,
-        paymentsEnabled: input.paymentsEnabled ?? false,
-        proBadge: input.proBadge ?? false,
-        accessMode: input.accessMode,
-        openToExternal: input.openToExternal,
-        notes: input.notes,
-        organizerId: input.organizerId,
-        communityId: input.communityId ?? null,
-        scheduledDate: input.date,
-        scheduledTime: input.time,
-        savedAt: serverTimestamp(),
-      });
+        notes: input.notes ?? null,
+        scheduledDate: input.date ?? null,
+        scheduledTime: input.time ?? null,
+      }));
     } catch (err) {
       console.warn("[matchRepository] createMatch firestore:", err);
     }
@@ -671,13 +664,13 @@ export async function saveMatchRoster(
  * explícito para `null` em vez de deixar passar `undefined`.
  */
 function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
-  return {
+  return stripUndefined({
     matchId: data.matchId,
     status: data.status,
     gameMode: data.gameMode,
     teamCount: data.teamCount,
     teamNames: data.teamNames,
-    players: data.players,
+    players: sanitizeLivePlayers(data.players ?? []),
     participantUserIds: Array.from(
       new Set(
         (data.players ?? [])
@@ -685,7 +678,7 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
           .filter((id): id is string => Boolean(id)),
       ),
     ),
-    playerTeams: data.playerTeams,
+    playerTeams: data.playerTeams ?? {},
     assignments: data.assignments ?? {},
     currentPlayerId: data.currentPlayerId ?? "",
     miniGames: data.miniGames ?? [],
@@ -703,6 +696,35 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     organizerId: data.organizerId ?? null,
     liveControllerIds: data.organizerId ? [data.organizerId] : [],
     savedAt: serverTimestamp(),
+  });
+}
+
+export function matchDetailsFromFirestore(matchId: string, data: DocumentData): MatchDetails {
+  const maxPlayers = Math.max(4, Number(data.maxPlayers) || 14);
+  const playerCount = Array.isArray(data.players) ? data.players.length : 0;
+  const spotsLeft = Math.max(0, maxPlayers - playerCount);
+  return {
+    id: matchId,
+    title: String(data.title ?? "Nova partida"),
+    city: String(data.city ?? "").trim() || "—",
+    location: String(data.location ?? "").trim() || "—",
+    gameType: String(data.gameType ?? "fut5"),
+    level: String(data.level ?? "todos"),
+    date: String(data.scheduledDate ?? data.date ?? "A definir"),
+    scheduledDate: data.scheduledDate ? String(data.scheduledDate) : undefined,
+    scheduledTime: data.scheduledTime ? String(data.scheduledTime) : undefined,
+    spotsRemaining:
+      spotsLeft > 0 ? `${spotsLeft} ${spotsLeft === 1 ? "vaga" : "vagas"}` : "Lotado",
+    price: String(data.price ?? "Grátis"),
+    paymentsEnabled: data.paymentsEnabled === true,
+    proBadge: data.proBadge === true,
+    maxPlayers,
+    notes: data.notes ? String(data.notes) : undefined,
+    accessMode: data.accessMode as MatchAccessMode | undefined,
+    openToExternal: data.openToExternal as boolean | undefined,
+    organizerId: data.organizerId ? String(data.organizerId) : undefined,
+    communityId: data.communityId ? String(data.communityId) : undefined,
+    status: data.status ? String(data.status) : undefined,
   };
 }
 
@@ -1002,6 +1024,7 @@ export type MatchDocMeta = {
   match: SavedPostMatch | null;
   liveControllerIds: string[];
   organizerId: string | null;
+  details: MatchDetails | null;
 };
 
 function mapFirestoreMatchDoc(matchId: string, data: DocumentData): SavedPostMatch {
@@ -1048,7 +1071,7 @@ export function subscribeToMatch(
     ref,
     (snap) => {
       if (!snap.exists()) {
-        callback({ match: null, liveControllerIds: [], organizerId: null });
+        callback({ match: null, liveControllerIds: [], organizerId: null, details: null });
         return;
       }
 
@@ -1059,6 +1082,9 @@ export function subscribeToMatch(
       const merged = mergeMatchSources(matchId, remoteMatch, local, pre, { preferRemote: true });
       if (merged) savePostMatch(merged);
 
+      const details = matchDetailsFromFirestore(matchId, data);
+      saveMatchDetails(details);
+
       const organizerId = (data.organizerId as string | undefined) ?? null;
       const liveControllerIds = resolveControllerIds({
         liveControllerIds: data.liveControllerIds as string[] | undefined,
@@ -1066,7 +1092,7 @@ export function subscribeToMatch(
         organizerId,
       });
 
-      callback({ match: merged, liveControllerIds, organizerId });
+      callback({ match: merged, liveControllerIds, organizerId, details });
     },
     (err) => console.warn("[matchRepository] subscribeToMatch:", err),
   );

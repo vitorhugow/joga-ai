@@ -60,6 +60,8 @@ export type UserMatchHistoryEntry = {
 
 /** Limite de partidas visíveis no Perfil sem PRO Jogador (gate de leitura apenas). */
 export const FREE_HISTORY_LIMIT = 10;
+export const INITIAL_HISTORY_VISIBLE = 3;
+export const HISTORY_PAGE_SIZE = 3;
 
 const LOCAL_HISTORY_PREFIX = "joga-ai-match-history-v1";
 

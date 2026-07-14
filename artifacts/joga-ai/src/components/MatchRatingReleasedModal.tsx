@@ -52,6 +52,11 @@ export function MatchRatingReleasedModal() {
   const [queue, setQueue] = useState<RatingPopupPayload[]>([]);
   const shownRef = useRef<Set<string>>(new Set());
 
+  function markSeen(notifId: string) {
+    if (!userId) return;
+    void markNotificationRead(userId, notifId);
+  }
+
   useEffect(() => {
     if (!isLinked || !userId) return;
 
@@ -63,8 +68,11 @@ export function MatchRatingReleasedModal() {
       );
       if (pending.length === 0) return;
 
-      pending.forEach((n) => shownRef.current.add(n.id));
-      pending.forEach((n) => markPopupNotificationShown(n.id));
+      pending.forEach((n) => {
+        shownRef.current.add(n.id);
+        markPopupNotificationShown(n.id);
+        markSeen(n.id);
+      });
 
       void Promise.all(
         pending.map(async (notification) => {
@@ -108,18 +116,18 @@ export function MatchRatingReleasedModal() {
     : undefined;
 
   function dismiss() {
+    if (current) markSeen(current.notification.id);
     setQueue((q) => q.slice(1));
   }
 
   function handleAction() {
     if (!current || !userId) return;
-    void markNotificationRead(userId, current.notification.id);
+    markSeen(current.notification.id);
     dismiss();
     setLocation(matchSummaryPath(current.matchId, { view: "summary" }));
   }
 
   function handleLater() {
-    if (current && userId) void markNotificationRead(userId, current.notification.id);
     dismiss();
   }
 
@@ -128,11 +136,11 @@ export function MatchRatingReleasedModal() {
   return (
     <Dialog open onOpenChange={(open) => !open && handleLater()}>
       <DialogContent
-        className="max-w-sm border-amber-400/30 text-white text-center p-0 overflow-hidden z-[60]"
+        className="max-w-sm border-amber-400/30 text-white text-center p-0 overflow-hidden z-[60] flex flex-col max-h-[min(90vh,640px)]"
         style={{ background: "#0f172a" }}
       >
         <div
-          className="p-6 pb-5"
+          className="p-6 pb-5 overflow-y-auto flex-1 min-h-0"
           style={{ background: "linear-gradient(165deg, rgba(250,204,21,0.22), rgba(16,185,129,0.08), rgba(15,23,42,0))" }}
         >
           <div
@@ -178,7 +186,7 @@ export function MatchRatingReleasedModal() {
           )}
         </div>
 
-        <div className="px-6 pb-6 space-y-2">
+        <div className="px-6 pb-6 space-y-2 shrink-0 border-t border-white/5 pt-4">
           <JogaButton variant="gold" size="lg" className="w-full gap-2" onClick={handleAction}>
             Ver resumo completo
             <ChevronRight className="w-4 h-4" />

@@ -13,26 +13,29 @@ import {
 import { markPopupNotificationShown } from "@/lib/pushNotifications";
 import { loadMatchFromFirestore } from "@/lib/matchRepository";
 
-type PopupKind = "vote" | "pay" | "generic";
+type PopupKind = "vote" | "pay" | "cancel" | "generic";
 
 function isPopupNotification(n: AppNotification): boolean {
   if (n.id.startsWith("evo-")) return false;
   return (
     n.priority === "popup" ||
     n.id.startsWith("vote-") ||
-    n.id.startsWith("pay-")
+    n.id.startsWith("pay-") ||
+    n.id.startsWith("cancel-")
   );
 }
 
 function popupKind(n: AppNotification): PopupKind {
   if (n.id.startsWith("vote-")) return "vote";
   if (n.id.startsWith("pay-")) return "pay";
+  if (n.id.startsWith("cancel-")) return "cancel";
   return "generic";
 }
 
 function popupLabel(kind: PopupKind): string {
   if (kind === "vote") return "Pelada terminada";
   if (kind === "pay") return "Pagamento pendente";
+  if (kind === "cancel") return "Pelada cancelada";
   return "Aviso importante";
 }
 
@@ -43,7 +46,7 @@ function popupCta(kind: PopupKind): string {
 }
 
 /**
- * Pop-up global: notificações com priority "popup" (e legado vote-/pay-)
+ * Pop-up global: notificações com priority "popup" (e legado vote-/pay-/cancel-)
  * aparecem em tempo real sem abrir o sino.
  */
 export function MatchVoteReminderModal() {
@@ -51,6 +54,11 @@ export function MatchVoteReminderModal() {
   const [, setLocation] = useLocation();
   const [queue, setQueue] = useState<AppNotification[]>([]);
   const shownRef = useRef<Set<string>>(new Set());
+
+  function markSeen(notifId: string) {
+    if (!userId) return;
+    void markNotificationRead(userId, notifId);
+  }
 
   useEffect(() => {
     if (!isLinked || !userId) return;
@@ -63,8 +71,11 @@ export function MatchVoteReminderModal() {
       );
       if (pending.length === 0) return;
 
-      pending.forEach((n) => shownRef.current.add(n.id));
-      pending.forEach((n) => markPopupNotificationShown(n.id));
+      pending.forEach((n) => {
+        shownRef.current.add(n.id);
+        markPopupNotificationShown(n.id);
+        markSeen(n.id);
+      });
 
       void Promise.all(
         pending.map(async (n) => {
@@ -73,7 +84,6 @@ export function MatchVoteReminderModal() {
           try {
             const match = await loadMatchFromFirestore(matchId);
             if (match && match.status !== "aguardando_auditoria" && match.status !== "auditada") {
-              void markNotificationRead(userId, n.id);
               return null;
             }
           } catch {
@@ -92,15 +102,17 @@ export function MatchVoteReminderModal() {
 
   const current = queue[0] ?? null;
   const kind = current ? popupKind(current) : "generic";
+  const isCancelPopup = kind === "cancel";
 
   function dismiss() {
+    if (current) markSeen(current.id);
     setQueue((q) => q.slice(1));
   }
 
   function handleAction() {
     if (!current) return;
     const link = current.link || "/jogos";
-    if (userId) void markNotificationRead(userId, current.id);
+    markSeen(current.id);
     dismiss();
     setLocation(link);
   }
@@ -114,11 +126,11 @@ export function MatchVoteReminderModal() {
   return (
     <Dialog open onOpenChange={(open) => !open && handleLater()}>
       <DialogContent
-        className="max-w-sm border-amber-400/25 text-white text-center p-0 overflow-hidden"
+        className="max-w-sm border-amber-400/25 text-white text-center p-0 overflow-hidden flex flex-col max-h-[min(90vh,640px)]"
         style={{ background: "#0f172a" }}
       >
         <div
-          className="p-6 pb-5"
+          className="p-6 pb-5 overflow-y-auto flex-1 min-h-0"
           style={{ background: "linear-gradient(160deg, rgba(250,204,21,0.16), rgba(15,23,42,0))" }}
         >
           <div
@@ -144,13 +156,15 @@ export function MatchVoteReminderModal() {
           </p>
         </div>
 
-        <div className="px-6 pb-6 space-y-2">
-          <JogaButton variant="gold" size="lg" className="w-full gap-2" onClick={handleAction}>
-            {popupCta(kind)}
-            <ChevronRight className="w-4 h-4" />
-          </JogaButton>
+        <div className="px-6 pb-6 space-y-2 shrink-0 border-t border-white/5 pt-4">
+          {!isCancelPopup && (
+            <JogaButton variant="gold" size="lg" className="w-full gap-2" onClick={handleAction}>
+              {popupCta(kind)}
+              <ChevronRight className="w-4 h-4" />
+            </JogaButton>
+          )}
           <JogaButton variant="ghost" size="md" className="w-full" onClick={handleLater}>
-            Agora não
+            {isCancelPopup ? "Fechar" : "Agora não"}
           </JogaButton>
         </div>
       </DialogContent>

@@ -471,10 +471,14 @@ export default function Home() {
                   variant="primary"
                   size="sm"
                   className="mt-3"
-                  onClick={() => requireLinked({
-                    mode: "register",
-                    title: "Cria conta para organizar partidas",
-                  })}
+                  onClick={() => {
+                    if (requireLinked({
+                      mode: "register",
+                      title: "Cria conta para organizar partidas",
+                    })) {
+                      window.location.href = "/criar-partida";
+                    }
+                  }}
                 >
                   Criar primeira partida
                 </JogaButton>

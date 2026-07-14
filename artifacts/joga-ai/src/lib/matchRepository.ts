@@ -273,6 +273,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
     paymentsEnabled: input.paymentsEnabled ?? false,
     proBadge: input.proBadge ?? false,
     openToExternal: input.openToExternal,
+    accessMode: input.accessMode,
     maxPlayers,
   };
 
@@ -341,6 +342,8 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
         notes: input.notes ?? null,
         scheduledDate: input.date ?? null,
         scheduledTime: input.time ?? null,
+        accessMode: input.accessMode,
+        openToExternal: input.openToExternal,
       }));
     } catch (err) {
       console.warn("[matchRepository] createMatch firestore:", err);

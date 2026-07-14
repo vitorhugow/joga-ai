@@ -591,9 +591,8 @@ export default function PreJogo() {
         return;
       }
 
-      if (!canApplySetupRef.current) return;
-
-      const localEditGrace = Date.now() - lastLocalRosterWriteMs.current < 2000;
+      const localEditGrace =
+        canApplySetupRef.current && Date.now() - lastLocalRosterWriteMs.current < 2000;
       if (localEditGrace) return;
 
       const matchSavedAt = firestoreTimestampToMs(loadPostMatch(matchId)?.savedAt);
@@ -683,6 +682,15 @@ export default function PreJogo() {
     }) => {
       if (!matchId || !canManageMatch) return false;
 
+      const orgId = organizerIdRef.current;
+      const delegateWrite = Boolean(
+        userId && orgId && userId !== orgId &&
+        isUserLiveController(userId, {
+          liveControllerIds: liveControllerIdsRef.current,
+          organizerId: orgId,
+        }),
+      );
+
       lastLocalRosterWriteMs.current = Date.now();
       skipNextPersist.current = true;
       setSetupSyncState("saving");
@@ -700,7 +708,7 @@ export default function PreJogo() {
           },
           {
             throwOnError: true,
-            forceRosterPatch: isLiveController && !isOrganizer,
+            forceRosterPatch: delegateWrite,
           },
         );
         setSetupSyncState("saved");
@@ -720,7 +728,7 @@ export default function PreJogo() {
         }, 700);
       }
     },
-    [matchId, canManageMatch, waitlist, isLiveController, isOrganizer],
+    [matchId, canManageMatch, waitlist, userId, teamNames],
   );
 
   const teamSetupWarning = useMemo(() => {
@@ -790,17 +798,30 @@ export default function PreJogo() {
   const persistRoster = useCallback(() => {
     if (!matchId || skipNextPersist.current || !canManageMatch) return;
 
+    const orgId = organizerIdRef.current;
+    const delegateWrite = Boolean(
+      userId && orgId && userId !== orgId &&
+      isUserLiveController(userId, {
+        liveControllerIds: liveControllerIdsRef.current,
+        organizerId: orgId,
+      }),
+    );
+
     setSetupSyncState("saving");
-    void saveMatchRoster(matchId, {
-      gameMode,
-      teamCount,
-      teamNames,
-      players,
-      playerTeams,
-      assignments,
-      waitlist,
-    }).then(() => setSetupSyncState("saved"));
-  }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist, canManageMatch]);
+    void saveMatchRoster(
+      matchId,
+      {
+        gameMode,
+        teamCount,
+        teamNames,
+        players,
+        playerTeams,
+        assignments,
+        waitlist,
+      },
+      { forceRosterPatch: delegateWrite },
+    ).then(() => setSetupSyncState("saved"));
+  }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist, canManageMatch, userId, teamNames]);
 
   useEffect(() => {
     if (!rosterHydrated) return;

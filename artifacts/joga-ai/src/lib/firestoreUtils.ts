@@ -1,3 +1,5 @@
+import type { LivePlayer } from "./preMatchStorage";
+
 /** Remove chaves undefined (Firestore rejeita undefined em writes). */
 function isFirestoreFieldValue(value: unknown): boolean {
   return Boolean(value && typeof value === "object" && "_methodName" in (value as object));
@@ -27,4 +29,25 @@ export function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
   }
 
   return out as T;
+}
+
+/** Jogador de plantel sem campos undefined — seguro para setDoc/updateDoc. */
+export function sanitizeLivePlayer(player: LivePlayer): Record<string, unknown> {
+  return stripUndefined({
+    id: player.id,
+    name: player.name,
+    position: player.position,
+    overall: player.overall,
+    paid: player.paid,
+    paidVia: player.paidVia,
+    isMe: player.isMe,
+    manual: player.manual,
+    userId: player.userId,
+    guestId: player.guestId,
+    loanCard: player.loanCard,
+  });
+}
+
+export function sanitizeLivePlayers(players: LivePlayer[]): Record<string, unknown>[] {
+  return players.map(sanitizeLivePlayer);
 }

@@ -13,7 +13,7 @@ import { ProfileFinanceMenu } from "@/components/ProfileFinanceMenu";
 import { profileToPlayerCard, getOverallDeltaFromDeltas, getLastMatchAttributeDeltas, loadUserProfile, createIncompleteSeedProfile, type UserProfile } from "@/lib/userRepository";
 import type { PlayerAttributes } from "@/lib/cardUtils";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
-import { loadUserMatchHistory, FREE_HISTORY_LIMIT, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
+import { loadUserMatchHistory, FREE_HISTORY_LIMIT, INITIAL_HISTORY_VISIBLE, HISTORY_PAGE_SIZE, type UserMatchHistoryEntry } from "@/lib/matchHistoryRepository";
 import { ProLockedOverlay } from "@/components/ProLockedOverlay";
 import { calculateOverall } from "@/lib/cardUtils";
 import { useUserId, useAuth } from "@/contexts/AuthContext";
@@ -232,6 +232,7 @@ export default function Perfil() {
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [targetBlocked, setTargetBlocked] = useState(false);
   const [matchHistory, setMatchHistory] = useState<UserMatchHistoryEntry[]>([]);
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(INITIAL_HISTORY_VISIBLE);
   const [historyCommunityFilter, setHistoryCommunityFilter] = useState("all");
   const [historyPeriodFilter, setHistoryPeriodFilter] = useState<"30d" | "90d" | "season" | "all">("all");
   const cardExportRef = useRef<HTMLDivElement>(null);
@@ -290,9 +291,12 @@ export default function Perfil() {
     });
   }, [matchHistory, playerPro, historyCommunityFilter, historyPeriodFilter]);
 
-  const visibleFreeHistory = matchHistory.slice(0, FREE_HISTORY_LIMIT);
+  const visibleFreeHistory = matchHistory.slice(0, Math.min(historyVisibleCount, FREE_HISTORY_LIMIT));
   const lockedPreviewHistory = matchHistory.slice(FREE_HISTORY_LIMIT, FREE_HISTORY_LIMIT + 3);
   const hiddenHistoryCount = Math.max(0, matchHistory.length - FREE_HISTORY_LIMIT);
+  const visibleProHistory = proFilteredHistory.slice(0, historyVisibleCount);
+  const canShowMoreFreeHistory = historyVisibleCount < Math.min(matchHistory.length, FREE_HISTORY_LIMIT);
+  const canShowMoreProHistory = historyVisibleCount < proFilteredHistory.length;
   const orgPro = isOrganizerPro(activeProfile?.entitlements);
 
   const overall = calculateOverall(player.attributes);
@@ -854,8 +858,18 @@ export default function Perfil() {
                 <p className="text-white/40 text-sm">Nenhuma partida com estes filtros.</p>
               ) : (
                 <div className="space-y-2">
-                  {proFilteredHistory.map((m) => <MatchHistoryRow key={m.matchId} m={m} />)}
+                  {visibleProHistory.map((m) => <MatchHistoryRow key={m.matchId} m={m} />)}
                 </div>
+              )}
+              {canShowMoreProHistory && (
+                <JogaButton
+                  variant="ghost"
+                  size="sm"
+                  className="mt-3 w-full"
+                  onClick={() => setHistoryVisibleCount((count) => count + HISTORY_PAGE_SIZE)}
+                >
+                  Ver mais
+                </JogaButton>
               )}
             </>
           ) : (
@@ -863,6 +877,16 @@ export default function Perfil() {
               <div className="space-y-2">
                 {visibleFreeHistory.map((m) => <MatchHistoryRow key={m.matchId} m={m} />)}
               </div>
+              {canShowMoreFreeHistory && (
+                <JogaButton
+                  variant="ghost"
+                  size="sm"
+                  className="mt-3 w-full"
+                  onClick={() => setHistoryVisibleCount((count) => count + HISTORY_PAGE_SIZE)}
+                >
+                  Ver mais
+                </JogaButton>
+              )}
               {hiddenHistoryCount > 0 && (
                 <div className="mt-3">
                   <ProLockedOverlay

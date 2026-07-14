@@ -29,7 +29,7 @@ import {
 } from "@/lib/matchStateRepository";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
-import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
+import { loadMatchDetails, saveMatchDetails, type MatchDetails } from "@/lib/matchRepository";
 import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
@@ -516,13 +516,18 @@ export default function PreJogo() {
       setMatchStatus(merged?.status ?? "configurando");
       setPaidUserIds(merged?.paidUserIds ?? []);
 
-      const details = loadMatchDetails(matchId);
+      if (meta.details) {
+        setMatchDetails(meta.details);
+        if (meta.details.communityId) setMatchCommunityId(meta.details.communityId);
+      }
+
+      const details = meta.details ?? loadMatchDetails(matchId);
       const payments =
         merged?.paymentsEnabled ?? details?.paymentsEnabled ?? false;
       setPaymentsOn(payments);
       if (details || merged?.paymentsEnabled) {
         setMatchDetails((prev) => {
-          const base = prev ?? details;
+          const base = meta.details ?? prev ?? details;
           if (!base) return prev;
           return { ...base, paymentsEnabled: payments };
         });
@@ -868,10 +873,16 @@ export default function PreJogo() {
 
     setAssignments(nextAssignments);
 
-    setPlayerTeams((current) => ({
-      ...current,
+    const nextPlayerTeams = {
+      ...playerTeams,
       [playerId]: team,
-    }));
+    };
+    setPlayerTeams(nextPlayerTeams);
+
+    void persistRosterImmediate({
+      playerTeams: nextPlayerTeams,
+      assignments: nextAssignments,
+    });
   }
 
   function addCommunityPlayer(player: Player) {
@@ -1130,13 +1141,31 @@ export default function PreJogo() {
     const teams = activeTeams;
     if (!teams.length) return;
 
-    const shuffle = <T,>(items: T[]) => [...items].sort(() => Math.random() - 0.5);
+    const shuffle = <T,>(items: T[]) => {
+      const copy = [...items];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    };
     const shuffled = shuffle(players);
 
     const nextPlayerTeams: Record<string, PlayerStatus> = {};
-    shuffled.forEach((player, index) => {
-      nextPlayerTeams[player.id] = teams[index % teams.length];
-    });
+    const total = shuffled.length;
+    const baseSize = Math.floor(total / teams.length);
+    const remainder = total % teams.length;
+    const capacities = teams.map((_, index) =>
+      index === teams.length - 1 ? baseSize + remainder : baseSize,
+    );
+
+    let playerIndex = 0;
+    for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
+      for (let slot = 0; slot < capacities[teamIndex] && playerIndex < shuffled.length; slot++) {
+        nextPlayerTeams[shuffled[playerIndex].id] = teams[teamIndex];
+        playerIndex++;
+      }
+    }
 
     const nextAssignments: Record<string, string | null> = {};
     for (const team of ["A", "B"] as TeamKey[]) {
@@ -1178,27 +1207,24 @@ export default function PreJogo() {
     const ok = window.confirm("Colocar todos os jogadores no Banco e limpar o campo?");
     if (!ok) return;
 
-    setPlayerTeams(() => {
-      const next: Record<string, PlayerStatus> = {};
+    const nextTeams: Record<string, PlayerStatus> = {};
+    for (const player of players) {
+      nextTeams[player.id] = "BENCH";
+    }
 
-      for (const player of players) {
-        next[player.id] = "BENCH";
-      }
+    const nextAssignments = { ...assignments };
+    for (const key of Object.keys(nextAssignments)) {
+      nextAssignments[key] = null;
+    }
 
-      return next;
-    });
-
-    setAssignments((current) => {
-      const next = { ...current };
-
-      for (const key of Object.keys(next)) {
-        next[key] = null;
-      }
-
-      return next;
-    });
-
+    setPlayerTeams(nextTeams);
+    setAssignments(nextAssignments);
     setSortMode("teams");
+
+    void persistRosterImmediate({
+      playerTeams: nextTeams,
+      assignments: nextAssignments,
+    });
   }
 
   function removePlayer(playerId: string) {
@@ -1327,7 +1353,7 @@ export default function PreJogo() {
       title: matchDetails.title || "Pelada Joga AI",
       description: [schedule, place, spots, price].filter(Boolean).join(" · "),
       image: `${origin}/opengraph.jpg`,
-      url: getMatchAppUrl(matchId),
+      url: getMatchInviteUrl(matchId),
     };
   }, [matchDetails, players.length, matchId]);
   usePageMeta(pageMeta);

@@ -48,3 +48,4 @@ export {
 export { onUserBadgesUpdatedNotify } from "./userNotifications";
 export { deleteMyAccount } from "./account";
 export { matchOgPreview } from "./matchOg";
+export { onMatchRatingsReleasedNicknames } from "./matchNicknames";

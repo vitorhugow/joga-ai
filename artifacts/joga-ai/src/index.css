@@ -361,8 +361,11 @@
 }
 
 /* Joga AI Premium Rebuild helpers */
-html, body, #root {
-  min-height: 100%;
+html,
+body,
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
   background-color: var(--joga-surface-dark, #0a0f1a);
 }
 body {

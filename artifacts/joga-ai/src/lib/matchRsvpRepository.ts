@@ -9,9 +9,10 @@ import {
   saveMatchRoster,
   type MatchRosterData,
 } from "./matchRepository";
-import { loadPreMatch } from "./preMatchStorage";
+import { loadPreMatch, savePreMatch } from "./preMatchStorage";
 import { loadPostMatch, savePostMatch, type SavedPostMatch } from "./postMatchStorage";
 import type { LivePlayer } from "./preMatchStorage";
+import { getCurrentUserId } from "./auth";
 import { MANUAL_PLAYER_OVR } from "./rosterUtils";
 import { loadCommunityMembers, loadCommunity, isCommunityOrganizerPro } from "./communityRepository";
 import { loadMatchDetails } from "./matchRepository";
@@ -72,7 +73,7 @@ function findWaitlistIndex(waitlist: WaitlistEntry[], userId: string): number {
 }
 
 async function loadMatchState(matchId: string): Promise<SavedPostMatch | null> {
-  return (await loadMatchFromFirestore(matchId)) ?? loadPostMatch(matchId);
+  return (await loadMatchFromFirestore(matchId, { preferRemote: true })) ?? loadPostMatch(matchId);
 }
 
 async function persistRsvpState(
@@ -81,7 +82,13 @@ async function persistRsvpState(
   roster: MatchRosterData,
   waitlist: WaitlistEntry[],
 ): Promise<void> {
-  const updated: SavedPostMatch = { ...match, waitlist };
+  const updated: SavedPostMatch = {
+    ...match,
+    waitlist,
+    players: roster.players,
+    playerTeams: roster.playerTeams,
+    assignments: roster.assignments ?? {},
+  };
   savePostMatch(updated);
 
   if (isFirebaseConfigured()) {
@@ -104,7 +111,29 @@ async function persistRsvpState(
     }
   }
 
-  await saveMatchRoster(matchId, roster);
+  const uid = getCurrentUserId();
+  if (uid && match.organizerId === uid) {
+    await saveMatchRoster(matchId, roster);
+  } else {
+    syncLocalPreMatchFromRoster(matchId, roster);
+  }
+}
+
+function syncLocalPreMatchFromRoster(matchId: string, roster: MatchRosterData) {
+  savePreMatch(
+    {
+      version: 1,
+      matchId,
+      gameMode: roster.gameMode,
+      teamCount: roster.teamCount,
+      teamNames: roster.teamNames,
+      players: roster.players,
+      playerTeams: roster.playerTeams,
+      assignments: roster.assignments ?? {},
+      savedAt: new Date().toISOString(),
+    },
+    matchId,
+  );
 }
 
 function normalizeMatchStatus(status?: string): MatchStatus {

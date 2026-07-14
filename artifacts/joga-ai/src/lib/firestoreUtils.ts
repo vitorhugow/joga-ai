@@ -5,6 +5,30 @@ function isFirestoreFieldValue(value: unknown): boolean {
   return Boolean(value && typeof value === "object" && "_methodName" in (value as object));
 }
 
+/** Converte Timestamp/string do Firestore para ISO — evita parseSavedAt=0 no merge. */
+export function coerceFirestoreTimestampToIso(value: unknown): string {
+  if (!value) return new Date().toISOString();
+  if (typeof value === "string") {
+    const time = new Date(value).getTime();
+    return Number.isNaN(time) ? new Date().toISOString() : value;
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: () => Date }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return new Date().toISOString();
+}
+
+export function firestoreTimestampToMs(value: unknown): number {
+  const iso = coerceFirestoreTimestampToIso(value);
+  const time = new Date(iso).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 export function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
   const out: Record<string, unknown> = {};
 

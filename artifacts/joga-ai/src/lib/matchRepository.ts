@@ -50,7 +50,7 @@ import {
   setupFromRoster,
   updateSetup,
 } from "./matchStateRepository";
-import { sanitizeLivePlayers, stripUndefined } from "./firestoreUtils";
+import { sanitizeLivePlayers, stripUndefined, coerceFirestoreTimestampToIso, firestoreTimestampToMs } from "./firestoreUtils";
 
 export type CreateMatchInput = {
   title: string;
@@ -922,10 +922,8 @@ export async function loadMatchFromFirestore(
   }
 }
 
-function parseSavedAt(value?: string) {
-  if (!value) return 0;
-  const time = new Date(value).getTime();
-  return Number.isNaN(time) ? 0 : time;
+function parseSavedAt(value?: unknown) {
+  return firestoreTimestampToMs(value);
 }
 
 function miniGameRichness(miniGames: SavedPostMatch["miniGames"] = []) {
@@ -986,10 +984,17 @@ function mergeMatchSources(
     },
   ];
 
-  const bestRoster = pickBestRoster(rosterCandidates);
+  const bestRoster =
+    options?.preferRemote && remoteValid
+      ? rosterCandidates[0]
+      : pickBestRoster(rosterCandidates);
 
   const base = remoteValid ?? localValid;
   const now = new Date().toISOString();
+  const mergedSavedAt =
+    options?.preferRemote && remoteValid
+      ? coerceFirestoreTimestampToIso(remoteValid.savedAt)
+      : now;
   const remoteMini = remoteValid?.miniGames ?? [];
   const localMini = localValid?.miniGames ?? [];
   const miniGames =
@@ -1003,7 +1008,7 @@ function mergeMatchSources(
     status: base?.status ?? "configurando",
     createdAt: base?.createdAt ?? now,
     expiresAt: base?.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    savedAt: now,
+    savedAt: mergedSavedAt,
     gameMode: base?.gameMode ?? preValid?.gameMode ?? "fut5",
     teamCount: base?.teamCount ?? preValid?.teamCount ?? 2,
     teamNames: base?.teamNames ?? preValid?.teamNames ?? { A: "Equipa A", B: "Equipa B", C: "Equipa C", D: "Equipa D" },
@@ -1043,9 +1048,9 @@ function mapFirestoreMatchDoc(matchId: string, data: DocumentData): SavedPostMat
     version: 1,
     matchId: remote.matchId ?? matchId,
     status: remote.status ?? "configurando",
-    createdAt: remote.createdAt ?? new Date().toISOString(),
-    expiresAt: remote.expiresAt ?? new Date().toISOString(),
-    savedAt: remote.savedAt ?? new Date().toISOString(),
+    createdAt: coerceFirestoreTimestampToIso(remote.createdAt),
+    expiresAt: coerceFirestoreTimestampToIso(remote.expiresAt),
+    savedAt: coerceFirestoreTimestampToIso(remote.savedAt),
     gameMode: remote.gameMode ?? "fut5",
     teamCount: remote.teamCount ?? 2,
     teamNames: remote.teamNames ?? { A: "Equipa A", B: "Equipa B", C: "Equipa C", D: "Equipa D" },

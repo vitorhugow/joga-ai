@@ -18,8 +18,9 @@ import {
 } from "lucide-react";
 import { loadMatchFromFirestore, saveMatchRoster, cancelMatch, startMatchLive, subscribeToMatch } from "@/lib/matchRepository";
 import { ManageLiveControllersDialog } from "@/components/ManageLiveControllersDialog";
-import { loadPreMatch } from "@/lib/preMatchStorage";
-import { savePreMatch } from "@/lib/preMatchStorage";
+import { loadPreMatch, savePreMatch } from "@/lib/preMatchStorage";
+import { loadPostMatch, clearPostMatch } from "@/lib/postMatchStorage";
+import { firestoreTimestampToMs } from "@/lib/firestoreUtils";
 import {
   cacheSetupFromSnapshot,
   ensureSetupMigrated,
@@ -27,7 +28,6 @@ import {
   subscribeToSetup,
   type MatchSetupState,
 } from "@/lib/matchStateRepository";
-import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
 import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
 import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
@@ -412,6 +412,7 @@ export default function PreJogo() {
   useDocumentTitle(matchDetails?.title || "Pré-jogo");
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
+  const organizerIdRef = useRef<string | null>(null);
   const playersRef = useRef<Player[]>([]);
   const playerTeamsRef = useRef<Record<string, PlayerStatus>>({});
   const assignmentsRef = useRef<Record<string, string | null>>({});
@@ -508,10 +509,13 @@ export default function PreJogo() {
 
       const merged = meta.match;
       if (meta.organizerId) {
+        organizerIdRef.current = meta.organizerId;
         setOrganizerId(meta.organizerId);
       } else if (merged?.organizerId) {
+        organizerIdRef.current = merged.organizerId;
         setOrganizerId(merged.organizerId);
       } else if (meta.details?.organizerId) {
+        organizerIdRef.current = meta.details.organizerId;
         setOrganizerId(meta.details.organizerId);
       }
       setLiveControllerIds(meta.liveControllerIds);
@@ -537,9 +541,14 @@ export default function PreJogo() {
       }
 
       if (merged) {
+        skipNextPersist.current = true;
         const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setWaitlist(merged.waitlist ?? []);
+        setPlayerTeams(merged.playerTeams ?? {});
+        setAssignments(merged.assignments ?? {});
+        setGameMode(merged.gameMode ?? "fut5");
+        setTeamCount(merged.teamCount ?? 2);
       }
 
       if (meta.organizerId && userId === meta.organizerId) {
@@ -551,7 +560,7 @@ export default function PreJogo() {
       setRosterHydrated(true);
       window.setTimeout(() => {
         skipNextPersist.current = false;
-      }, 0);
+      }, 700);
     });
 
     const unsubSetup = subscribeToSetup(matchId, (setup: MatchSetupState | null) => {
@@ -562,6 +571,13 @@ export default function PreJogo() {
         return;
       }
 
+      const isOrganizerViewer = Boolean(userId && organizerIdRef.current === userId);
+      if (!isOrganizerViewer) return;
+
+      const matchSavedAt = firestoreTimestampToMs(loadPostMatch(matchId)?.savedAt);
+      const setupUpdatedAt = firestoreTimestampToMs(setup.updatedAt);
+      if (matchSavedAt > setupUpdatedAt) return;
+
       skipNextPersist.current = true;
       setGameMode(setup.gameMode);
       setTeamCount(setup.teamCount);
@@ -569,12 +585,12 @@ export default function PreJogo() {
       setAssignments(setup.assignments);
       setSetupSyncState("saved");
 
-      const mergedPlayers = loadPreMatch(matchId)?.players ?? [];
+      const mergedPlayers = loadPostMatch(matchId)?.players ?? loadPreMatch(matchId)?.players ?? [];
       cacheSetupFromSnapshot(matchId, setup, mergedPlayers);
 
       window.setTimeout(() => {
         skipNextPersist.current = false;
-      }, 0);
+      }, 700);
     });
 
     return () => {

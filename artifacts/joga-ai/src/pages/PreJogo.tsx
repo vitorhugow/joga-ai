@@ -415,6 +415,9 @@ export default function PreJogo() {
   const organizerIdRef = useRef<string | null>(null);
   const liveControllerIdsRef = useRef<string[]>([]);
   const canApplySetupRef = useRef(false);
+  const lastLocalRosterWriteMs = useRef(0);
+  const gameModeRef = useRef<GameMode>("fut5");
+  const teamCountRef = useRef<2 | 3 | 4>(2);
   const playersRef = useRef<Player[]>([]);
   const playerTeamsRef = useRef<Record<string, PlayerStatus>>({});
   const assignmentsRef = useRef<Record<string, string | null>>({});
@@ -556,10 +559,16 @@ export default function PreJogo() {
         const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setWaitlist(merged.waitlist ?? []);
-        setPlayerTeams(merged.playerTeams ?? {});
-        setAssignments(merged.assignments ?? {});
-        setGameMode(merged.gameMode ?? "fut5");
-        setTeamCount(merged.teamCount ?? 2);
+
+        const localEditGrace = Date.now() - lastLocalRosterWriteMs.current < 2000;
+        const applySetupFromRemote = !canApplySetupRef.current || !localEditGrace;
+
+        if (applySetupFromRemote) {
+          setPlayerTeams(merged.playerTeams ?? {});
+          setAssignments(merged.assignments ?? {});
+          setGameMode(merged.gameMode ?? "fut5");
+          setTeamCount(merged.teamCount ?? 2);
+        }
       }
 
       if (meta.organizerId && userId === meta.organizerId) {
@@ -583,6 +592,9 @@ export default function PreJogo() {
       }
 
       if (!canApplySetupRef.current) return;
+
+      const localEditGrace = Date.now() - lastLocalRosterWriteMs.current < 2000;
+      if (localEditGrace) return;
 
       const matchSavedAt = firestoreTimestampToMs(loadPostMatch(matchId)?.savedAt);
       const setupUpdatedAt = firestoreTimestampToMs(setup.updatedAt);
@@ -657,24 +669,29 @@ export default function PreJogo() {
     playersRef.current = players;
     playerTeamsRef.current = playerTeams;
     assignmentsRef.current = assignments;
-  }, [players, playerTeams, assignments]);
+    gameModeRef.current = gameMode;
+    teamCountRef.current = teamCount;
+  }, [players, playerTeams, assignments, gameMode, teamCount]);
 
   const persistRosterImmediate = useCallback(
     async (patch?: {
       players?: Player[];
       playerTeams?: Record<string, PlayerStatus>;
       assignments?: Record<string, string | null>;
+      gameMode?: GameMode;
+      teamCount?: 2 | 3 | 4;
     }) => {
       if (!matchId || !canManageMatch) return false;
 
+      lastLocalRosterWriteMs.current = Date.now();
       skipNextPersist.current = true;
       setSetupSyncState("saving");
       try {
         await saveMatchRoster(
           matchId,
           {
-            gameMode,
-            teamCount,
+            gameMode: patch?.gameMode ?? gameModeRef.current,
+            teamCount: patch?.teamCount ?? teamCountRef.current,
             teamNames,
             players: patch?.players ?? playersRef.current,
             playerTeams: patch?.playerTeams ?? playerTeamsRef.current,
@@ -697,10 +714,10 @@ export default function PreJogo() {
       } finally {
         window.setTimeout(() => {
           skipNextPersist.current = false;
-        }, 100);
+        }, 700);
       }
     },
-    [matchId, canManageMatch, gameMode, teamCount, waitlist],
+    [matchId, canManageMatch, waitlist],
   );
 
   const teamSetupWarning = useMemo(() => {
@@ -805,6 +822,7 @@ export default function PreJogo() {
         }
       }
 
+      void persistRosterImmediate({ gameMode: mode, assignments: next });
       return next;
     });
   }
@@ -825,6 +843,7 @@ export default function PreJogo() {
         }
       }
 
+      void persistRosterImmediate({ teamCount: count, playerTeams: next });
       return next;
     });
   }
@@ -1507,19 +1526,15 @@ export default function PreJogo() {
               <span className="block text-[9px] text-emerald-300/70 normal-case tracking-normal mt-0.5">guardado</span>
             )}
           </p>
-          {canManageMatch ? (
-            <button
-              onClick={() => void shareMatchUrl()}
-              className="w-10 h-10 rounded-2xl flex items-center justify-center cursor-pointer"
-              style={{ background: "rgba(74,222,128,0.14)", border: "1px solid rgba(74,222,128,0.28)" }}
-              title="Convidar"
-              data-testid="button-invite-match"
-            >
-              <Share2 className="w-4 h-4 text-emerald-300" />
-            </button>
-          ) : (
-            <div className="w-10" />
-          )}
+          <button
+            onClick={() => void shareMatchUrl()}
+            className="w-10 h-10 rounded-2xl flex items-center justify-center cursor-pointer"
+            style={{ background: "rgba(74,222,128,0.14)", border: "1px solid rgba(74,222,128,0.28)" }}
+            title="Convidar"
+            data-testid="button-invite-match"
+          >
+            <Share2 className="w-4 h-4 text-emerald-300" />
+          </button>
         </div>
 
         <div className="relative px-5 pb-8 pt-3">
@@ -2156,17 +2171,15 @@ export default function PreJogo() {
           </section>
         )}
 
-        {canManageMatch && (
-          <JogaButton
-            variant="ghost"
-            size="sm"
-            className="gap-2 w-full"
-            onClick={() => void shareMatchUrl()}
-          >
-            <LinkIcon className="w-4 h-4" />
-            Copiar link da pelada
-          </JogaButton>
-        )}
+        <JogaButton
+          variant="ghost"
+          size="sm"
+          className="gap-2 w-full"
+          onClick={() => void shareMatchUrl()}
+        >
+          <LinkIcon className="w-4 h-4" />
+          Copiar link da pelada
+        </JogaButton>
 
         {canManageMatch && (
           <JogaButton

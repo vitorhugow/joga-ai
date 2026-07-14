@@ -24,7 +24,7 @@ import {
   type PartialWithFieldValue,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
-import { resolveControllerIds } from "./liveControllerUtils";
+import { resolveControllerIds, isUserLiveController } from "./liveControllerUtils";
 import {
   savePostMatch,
   loadPostMatch,
@@ -654,11 +654,26 @@ export async function saveMatchRoster(
   }
 
   const uid = getCurrentUserId();
-  if (uid && existing?.organizerId === uid) {
-    try {
-      await updateSetup(matchId, setupFromRoster(roster));
-    } catch (err) {
-      console.warn("[matchRepository] updateSetup:", err);
+  const organizerId = existing?.organizerId;
+  if (uid && organizerId) {
+    let canSyncSetup = uid === organizerId;
+    if (!canSyncSetup && isFirebaseConfigured()) {
+      try {
+        const snap = await getDoc(doc(db, "matches", matchId));
+        canSyncSetup = isUserLiveController(uid, {
+          liveControllerIds: snap.data()?.liveControllerIds as string[] | undefined,
+          organizerId,
+        });
+      } catch (err) {
+        console.warn("[matchRepository] saveMatchRoster controller check:", err);
+      }
+    }
+    if (canSyncSetup) {
+      try {
+        await updateSetup(matchId, setupFromRoster(roster));
+      } catch (err) {
+        console.warn("[matchRepository] updateSetup:", err);
+      }
     }
   }
 }

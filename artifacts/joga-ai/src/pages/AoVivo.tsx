@@ -1099,6 +1099,7 @@ export default function AoVivo() {
           organizerId={organizerId}
           liveControllerIds={liveControllerIds}
           players={players}
+          onControllersChange={setLiveControllerIds}
         />
       )}
 

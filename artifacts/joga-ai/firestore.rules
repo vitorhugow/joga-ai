@@ -55,6 +55,20 @@ service cloud.firestore {
           .hasOnly(['liveControllerIds', 'savedAt']);
     }
 
+    // Controlador delegado pode editar plantel (pré-jogo) — mesmos campos que RSVP + modo/equipas.
+    function isLiveControllerRosterUpdate(matchId) {
+      let data = resource.data;
+      return isLiveController(matchId)
+        && request.resource.data.organizerId == data.organizerId
+        && request.resource.data.status == data.status
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'players', 'participantUserIds', 'playerTeams', 'assignments',
+            'gameMode', 'teamCount', 'teamNames', 'waitlist', 'savedAt',
+            'currentPlayerId', 'miniGames', 'votedUserIds', 'paidUserIds',
+          ]);
+    }
+
     // Administradores da app (painel /admin — PRO manual sem Stripe)
     function isAppAdmin() {
       return isSignedIn() && (
@@ -331,6 +345,7 @@ service cloud.firestore {
         || isMatchVotingFinalizeUpdate(matchId)
         || isMatchVoteMarkUpdate()
         || isLiveControllerIdsUpdate(matchId)
+        || isLiveControllerRosterUpdate(matchId)
       );
       allow delete: if isSignedIn()
         && resource.data.organizerId == request.auth.uid;

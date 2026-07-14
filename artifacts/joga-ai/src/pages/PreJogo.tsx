@@ -50,7 +50,7 @@ import {
 } from "@/lib/matchRsvpRepository";
 import { buildGuestClaimLink } from "@/lib/guestClaimRepository";
 import { calculateOverall } from "@/lib/cardUtils";
-import { MANUAL_PLAYER_OVR, formatPlayerOverall, overallFromProfile } from "@/lib/rosterUtils";
+import { MANUAL_PLAYER_OVR, computeSequentialTeamCapacities, formatPlayerOverall, overallFromProfile } from "@/lib/rosterUtils";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useStripeConnectReturn } from "@/hooks/useStripeConnectReturn";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
@@ -1152,7 +1152,7 @@ export default function PreJogo() {
   }
 
   function randomizeTeams() {
-    const ok = window.confirm("Distribuir todos os jogadores pelas equipas de forma equilibrada?");
+    const ok = window.confirm("Sortear jogadores pelas equipas (A e B primeiro, depois C)?");
     if (!ok) return;
 
     const teams = activeTeams;
@@ -1169,12 +1169,7 @@ export default function PreJogo() {
     const shuffled = shuffle(players);
 
     const nextPlayerTeams: Record<string, PlayerStatus> = {};
-    const total = shuffled.length;
-    const baseSize = Math.floor(total / teams.length);
-    const remainder = total % teams.length;
-    const capacities = teams.map((_, index) =>
-      index === teams.length - 1 ? baseSize + remainder : baseSize,
-    );
+    const capacities = computeSequentialTeamCapacities(shuffled.length, teams.length);
 
     let playerIndex = 0;
     for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {

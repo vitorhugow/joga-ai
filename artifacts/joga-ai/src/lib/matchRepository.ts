@@ -344,6 +344,7 @@ export async function createMatch(input: CreateMatchInput): Promise<string> {
         scheduledTime: input.time ?? null,
         accessMode: input.accessMode,
         openToExternal: input.openToExternal,
+        liveControllerIds: input.organizerId ? [input.organizerId] : [],
       }));
     } catch (err) {
       console.warn("[matchRepository] createMatch firestore:", err);
@@ -703,7 +704,6 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     ...(data.communityId !== undefined ? { communityId: data.communityId } : {}),
     ...(data.organizerId !== undefined ? { organizerId: data.organizerId } : {}),
     ...(data.maxPlayers !== undefined ? { maxPlayers: data.maxPlayers } : {}),
-    liveControllerIds: data.organizerId ? [data.organizerId] : [],
     savedAt: serverTimestamp(),
   });
 }

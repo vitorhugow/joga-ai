@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
-import { isListedInPublicBrowse, isListedInCommunityFeed } from "./matchAccess";
+import { isListedInPublicBrowse, isListedInCommunityFeed, resolveAccessMode, type MatchAccessMode } from "./matchAccess";
 import { MAX_PROFILE_PHOTO_BYTES, loadUserProfile } from "./userRepository";
 import { isOrganizerProForCommunity } from "./entitlements";
 import { loadAllPostMatches } from "./postMatchStorage";
@@ -1029,6 +1029,18 @@ export function subscribeCommunityMatches(
 }
 
 function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
+  const communityId = data.communityId ? String(data.communityId) : undefined;
+  const rawAccessMode = typeof data.accessMode === "string" ? (data.accessMode as MatchAccessMode) : undefined;
+  const rawOpenToExternal =
+    data.openToExternal === true || data.openToExternal === false
+      ? data.openToExternal
+      : undefined;
+  const accessMode = resolveAccessMode({
+    accessMode: rawAccessMode,
+    openToExternal: rawOpenToExternal,
+    communityId,
+  });
+
   return {
     id,
     title: String(data.title ?? `Partida ${id}`),
@@ -1048,17 +1060,11 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
       ? `${Math.max(0, Number(data.maxPlayers) - (Array.isArray(data.players) ? data.players.length : 0))} vagas`
       : "—",
     price: String(data.price ?? "—"),
-    communityId: data.communityId ? String(data.communityId) : undefined,
+    communityId,
     status: data.status ? String(data.status) : undefined,
     proBadge: data.proBadge === true,
-    openToExternal: data.openToExternal === true || data.accessMode === "public",
-    accessMode: typeof data.accessMode === "string"
-      ? (data.accessMode as MatchListing["accessMode"])
-      : data.openToExternal === true
-        ? "public"
-        : data.communityId
-          ? "community"
-          : undefined,
+    openToExternal: accessMode === "public",
+    accessMode,
     paymentsEnabled: data.paymentsEnabled === true,
   };
 }

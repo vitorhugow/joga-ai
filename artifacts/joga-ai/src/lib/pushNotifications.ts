@@ -136,8 +136,7 @@ async function getMessagingTokenWithRetry(
 
   try {
     return await getMessagingToken(messaging, swReg);
-  } catch (err) {
-    console.warn("[push] getToken (tentativa 1):", err);
+  } catch (firstErr) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     swReg = await registerMessagingServiceWorker();
     if (!swReg?.active) {
@@ -147,7 +146,7 @@ async function getMessagingTokenWithRetry(
     try {
       return await getMessagingToken(messaging, swReg);
     } catch (retryErr) {
-      console.warn("[push] getToken (tentativa 2):", retryErr);
+      console.warn("[push] getToken:", retryErr ?? firstErr);
       return null;
     }
   }

@@ -156,8 +156,6 @@
 
   html {
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    overscroll-behavior: none;
-    overflow-x: hidden;
   }
 
   body {
@@ -166,13 +164,7 @@
     color: white;
     -webkit-tap-highlight-color: transparent;
     letter-spacing: -0.01em;
-    overscroll-behavior: none;
-    overflow-x: hidden;
-  }
-
-  #root {
-    min-height: 100%;
-    overscroll-behavior: none;
+    overscroll-behavior-y: none;
   }
 
   a,

@@ -413,6 +413,8 @@ export default function PreJogo() {
   const [rosterHydrated, setRosterHydrated] = useState(false);
   const skipNextPersist = useRef(true);
   const organizerIdRef = useRef<string | null>(null);
+  const liveControllerIdsRef = useRef<string[]>([]);
+  const canApplySetupRef = useRef(false);
   const playersRef = useRef<Player[]>([]);
   const playerTeamsRef = useRef<Record<string, PlayerStatus>>({});
   const assignmentsRef = useRef<Record<string, string | null>>({});
@@ -519,6 +521,15 @@ export default function PreJogo() {
         setOrganizerId(meta.details.organizerId);
       }
       setLiveControllerIds(meta.liveControllerIds);
+      liveControllerIdsRef.current = meta.liveControllerIds;
+      canApplySetupRef.current = Boolean(
+        userId &&
+          (organizerIdRef.current === userId ||
+            isUserLiveController(userId, {
+              liveControllerIds: meta.liveControllerIds,
+              organizerId: meta.organizerId ?? organizerIdRef.current ?? undefined,
+            })),
+      );
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
       setMatchStatus(merged?.status ?? "configurando");
       setPaidUserIds(merged?.paidUserIds ?? []);
@@ -571,8 +582,7 @@ export default function PreJogo() {
         return;
       }
 
-      const isOrganizerViewer = Boolean(userId && organizerIdRef.current === userId);
-      if (!isOrganizerViewer) return;
+      if (!canApplySetupRef.current) return;
 
       const matchSavedAt = firestoreTimestampToMs(loadPostMatch(matchId)?.savedAt);
       const setupUpdatedAt = firestoreTimestampToMs(setup.updatedAt);
@@ -1168,8 +1178,19 @@ export default function PreJogo() {
     };
     const shuffled = shuffle(players);
 
+    const { capacities, notifyInsufficientTeams } = computeSequentialTeamCapacities(
+      shuffled.length,
+      teams.length,
+      gameMode,
+    );
+    if (notifyInsufficientTeams) {
+      toast({
+        title: "Jogadores insuficientes",
+        description: notifyInsufficientTeams,
+      });
+    }
+
     const nextPlayerTeams: Record<string, PlayerStatus> = {};
-    const capacities = computeSequentialTeamCapacities(shuffled.length, teams.length);
 
     let playerIndex = 0;
     for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
@@ -2263,6 +2284,7 @@ export default function PreJogo() {
           organizerId={resolvedOrganizerId}
           liveControllerIds={liveControllerIds}
           players={players}
+          onControllersChange={setLiveControllerIds}
         />
       )}
 

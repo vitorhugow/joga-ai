@@ -19,6 +19,8 @@ type Props = {
   organizerId: string;
   liveControllerIds: string[];
   players: LivePlayer[];
+  /** Actualização optimista para UI em tempo real antes do snapshot. */
+  onControllersChange?: (nextIds: string[]) => void;
 };
 
 export function ManageLiveControllersDialog({
@@ -28,6 +30,7 @@ export function ManageLiveControllersDialog({
   organizerId,
   liveControllerIds,
   players,
+  onControllersChange,
 }: Props) {
   const [busyUid, setBusyUid] = useState<string | null>(null);
 
@@ -41,6 +44,12 @@ export function ManageLiveControllersDialog({
   async function handleToggle(uid: string, nextEnabled: boolean) {
     if (uid === organizerId) return;
 
+    const prevIds = resolveControllerIds({ liveControllerIds, organizerId });
+    const optimistic = nextEnabled
+      ? [...new Set([...prevIds, uid])]
+      : prevIds.filter((id) => id !== uid);
+    onControllersChange?.(optimistic);
+
     setBusyUid(uid);
     try {
       if (nextEnabled) {
@@ -49,6 +58,7 @@ export function ManageLiveControllersDialog({
         await removeLiveController(matchId, uid, organizerId);
       }
     } catch (err) {
+      onControllersChange?.(prevIds);
       console.warn("[ManageLiveControllers] toggle:", err);
       toast({
         title: "Não foi possível actualizar controladores",

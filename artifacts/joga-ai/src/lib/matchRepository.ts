@@ -24,7 +24,7 @@ import {
   type PartialWithFieldValue,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
-import { resolveControllerIds, isUserLiveController } from "./liveControllerUtils";
+import { resolveControllerIds } from "./liveControllerUtils";
 import {
   savePostMatch,
   loadPostMatch,
@@ -649,22 +649,12 @@ export async function saveMatchRoster(
 
   const uid = getCurrentUserId();
   let organizerId = existing?.organizerId ?? loadMatchDetails(matchId)?.organizerId;
-  let rosterPatchOnly = options?.forceRosterPatch === true;
 
-  if (uid && isFirebaseConfigured() && (!organizerId || uid !== organizerId || rosterPatchOnly)) {
+  if (uid && isFirebaseConfigured()) {
     try {
       const snap = await getDoc(doc(db, "matches", matchId));
       const remote = snap.data();
       organizerId = organizerId ?? (remote?.organizerId as string | undefined);
-      if (organizerId && uid !== organizerId) {
-        rosterPatchOnly =
-          rosterPatchOnly ||
-          isUserLiveController(uid, {
-            liveControllerIds: remote?.liveControllerIds as string[] | undefined,
-            liveControllerId: remote?.liveControllerId as string | undefined,
-            organizerId,
-          });
-      }
     } catch (err) {
       console.warn("[matchRepository] saveMatchRoster controller check:", err);
     }
@@ -674,33 +664,22 @@ export async function saveMatchRoster(
     updated.organizerId = organizerId;
   }
 
-  async function writeToFirestore(throwOnError: boolean): Promise<void> {
-    if (rosterPatchOnly) {
-      if (throwOnError) {
-        await saveRosterPatchToFirestoreOrThrow(matchId, updated);
-      } else {
-        await saveRosterPatchToFirestore(matchId, updated);
-      }
-      return;
-    }
+  const isNonOrganizer = Boolean(uid && organizerId && uid !== organizerId);
 
-    try {
-      if (throwOnError) {
-        await saveMatchToFirestoreOrThrow(matchId, updated);
-      } else {
-        await saveMatchToFirestore(matchId, updated);
-      }
-    } catch (err) {
-      if (!throwOnError || !isFirestorePermissionDenied(err)) throw err;
-      console.warn("[matchRepository] saveMatchRoster retry roster patch:", err);
-      rosterPatchOnly = true;
-      await saveRosterPatchToFirestoreOrThrow(matchId, updated);
-    }
+  if (isNonOrganizer) {
+    await writeDelegatedRosterToFirestore(matchId, updated, roster, {
+      throwOnError: options?.throwOnError === true,
+    });
+    return;
   }
 
-  await writeToFirestore(options?.throwOnError === true);
+  if (options?.throwOnError) {
+    await saveMatchToFirestoreOrThrow(matchId, updated);
+  } else {
+    await saveMatchToFirestore(matchId, updated);
+  }
 
-  if (uid && organizerId && (uid === organizerId || rosterPatchOnly)) {
+  if (uid && organizerId && uid === organizerId) {
     try {
       await updateSetup(matchId, setupFromRoster(roster));
     } catch (err) {
@@ -718,6 +697,23 @@ export async function saveMatchRoster(
  * "fica presa" no Ao Vivo. Por isso todos os campos opcionais têm fallback
  * explícito para `null` em vez de deixar passar `undefined`.
  */
+function buildRsvpRosterPatchPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
+  return stripUndefined({
+    players: sanitizeLivePlayers(data.players ?? []),
+    participantUserIds: Array.from(
+      new Set(
+        (data.players ?? [])
+          .map((p) => p.userId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ),
+    playerTeams: data.playerTeams ?? {},
+    assignments: data.assignments ?? {},
+    waitlist: data.waitlist ?? [],
+    savedAt: serverTimestamp(),
+  });
+}
+
 function buildRosterPatchPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
   return stripUndefined({
     gameMode: data.gameMode,
@@ -738,9 +734,52 @@ function buildRosterPatchPayload(data: SavedPostMatch): PartialWithFieldValue<Do
   });
 }
 
-function isFirestorePermissionDenied(err: unknown): boolean {
-  const code = (err as { code?: string })?.code;
-  return code === "permission-denied";
+/**
+ * Controlador delegado: grava setup (permitido em state/setup) + patch mínimo
+ * no documento da partida (campos RSVP). Não depende de isLiveControllerRosterUpdate.
+ */
+async function writeDelegatedRosterToFirestore(
+  matchId: string,
+  updated: SavedPostMatch,
+  roster: MatchRosterData,
+  options: { throwOnError: boolean },
+): Promise<void> {
+  applyLocalMatchUpdate(matchId, updated);
+
+  let setupOk = false;
+  let matchOk = false;
+  let lastError: unknown;
+
+  try {
+    await updateSetup(matchId, setupFromRoster(roster));
+    setupOk = true;
+  } catch (err) {
+    lastError = err;
+    console.warn("[matchRepository] writeDelegatedRoster updateSetup:", err);
+  }
+
+  if (!isFirebaseConfigured()) return;
+
+  const ref = doc(db, "matches", matchId);
+  const attempts: PartialWithFieldValue<DocumentData>[] = [
+    buildRosterPatchPayload(updated),
+    buildRsvpRosterPatchPayload(updated),
+  ];
+
+  for (const payload of attempts) {
+    try {
+      await updateDoc(ref, payload);
+      matchOk = true;
+      break;
+    } catch (err) {
+      lastError = err;
+      console.warn("[matchRepository] writeDelegatedRoster match patch:", err);
+    }
+  }
+
+  if (!setupOk && !matchOk && options.throwOnError) {
+    throw lastError instanceof Error ? lastError : new Error("Missing or insufficient permissions.");
+  }
 }
 
 function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
@@ -832,36 +871,6 @@ function applyLocalMatchUpdate(matchId: string, data: SavedPostMatch) {
       })
       .catch((err) => console.warn("[matchRepository] participation:", err));
   }
-}
-
-/** Salva apenas campos de plantel (controlador delegado — regras Firestore). */
-async function saveRosterPatchToFirestore(
-  matchId: string,
-  data: SavedPostMatch,
-): Promise<void> {
-  applyLocalMatchUpdate(matchId, data);
-
-  if (!isFirebaseConfigured()) return;
-
-  try {
-    const ref = doc(db, "matches", matchId);
-    await updateDoc(ref, buildRosterPatchPayload(data));
-  } catch (err) {
-    console.warn("[matchRepository] saveRosterPatchToFirestore:", err);
-  }
-}
-
-/** Igual a `saveRosterPatchToFirestore`, mas propaga erros do Firestore. */
-async function saveRosterPatchToFirestoreOrThrow(
-  matchId: string,
-  data: SavedPostMatch,
-): Promise<void> {
-  applyLocalMatchUpdate(matchId, data);
-
-  if (!isFirebaseConfigured()) return;
-
-  const ref = doc(db, "matches", matchId);
-  await updateDoc(ref, buildRosterPatchPayload(data));
 }
 
 /** Salva ou actualiza o documento `matches/{matchId}` (melhor esforço, não propaga erros). */

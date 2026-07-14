@@ -416,6 +416,7 @@ export default function PreJogo() {
   const liveControllerIdsRef = useRef<string[]>([]);
   const canApplySetupRef = useRef(false);
   const lastLocalRosterWriteMs = useRef(0);
+  const lastAppliedSetupAtMs = useRef(0);
   const gameModeRef = useRef<GameMode>("fut5");
   const teamCountRef = useRef<2 | 3 | 4>(2);
   const playersRef = useRef<Player[]>([]);
@@ -560,14 +561,15 @@ export default function PreJogo() {
         setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
         setWaitlist(merged.waitlist ?? []);
 
-        const localEditGrace = Date.now() - lastLocalRosterWriteMs.current < 2000;
-        const applySetupFromRemote = !canApplySetupRef.current || !localEditGrace;
-
-        if (applySetupFromRemote) {
-          setPlayerTeams(merged.playerTeams ?? {});
-          setAssignments(merged.assignments ?? {});
-          setGameMode(merged.gameMode ?? "fut5");
-          setTeamCount(merged.teamCount ?? 2);
+        // Organizador/controlador: modo/equipas vêm de state/setup, não do match doc.
+        if (!canApplySetupRef.current) {
+          const localEditGrace = Date.now() - lastLocalRosterWriteMs.current < 2000;
+          if (!localEditGrace) {
+            setPlayerTeams(merged.playerTeams ?? {});
+            setAssignments(merged.assignments ?? {});
+            setGameMode(merged.gameMode ?? "fut5");
+            setTeamCount(merged.teamCount ?? 2);
+          }
         }
       }
 
@@ -591,13 +593,16 @@ export default function PreJogo() {
         return;
       }
 
+      const isOwnSetupWrite = Boolean(userId && setup.updatedBy === userId);
       const localEditGrace =
-        canApplySetupRef.current && Date.now() - lastLocalRosterWriteMs.current < 2000;
+        canApplySetupRef.current &&
+        !isOwnSetupWrite &&
+        Date.now() - lastLocalRosterWriteMs.current < 2000;
       if (localEditGrace) return;
 
-      const matchSavedAt = firestoreTimestampToMs(loadPostMatch(matchId)?.savedAt);
       const setupUpdatedAt = firestoreTimestampToMs(setup.updatedAt);
-      if (matchSavedAt > setupUpdatedAt) return;
+      if (setupUpdatedAt <= lastAppliedSetupAtMs.current) return;
+      lastAppliedSetupAtMs.current = setupUpdatedAt;
 
       skipNextPersist.current = true;
       setGameMode(setup.gameMode);

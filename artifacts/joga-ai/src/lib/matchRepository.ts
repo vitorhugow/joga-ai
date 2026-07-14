@@ -714,26 +714,6 @@ function buildRsvpRosterPatchPayload(data: SavedPostMatch): PartialWithFieldValu
   });
 }
 
-function buildRosterPatchPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
-  return stripUndefined({
-    gameMode: data.gameMode,
-    teamCount: data.teamCount,
-    teamNames: data.teamNames,
-    players: sanitizeLivePlayers(data.players ?? []),
-    participantUserIds: Array.from(
-      new Set(
-        (data.players ?? [])
-          .map((p) => p.userId)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ),
-    playerTeams: data.playerTeams ?? {},
-    assignments: data.assignments ?? {},
-    waitlist: data.waitlist ?? [],
-    savedAt: serverTimestamp(),
-  });
-}
-
 /**
  * Controlador delegado: grava setup (permitido em state/setup) + patch mínimo
  * no documento da partida (campos RSVP). Não depende de isLiveControllerRosterUpdate.
@@ -744,8 +724,6 @@ async function writeDelegatedRosterToFirestore(
   roster: MatchRosterData,
   options: { throwOnError: boolean },
 ): Promise<void> {
-  applyLocalMatchUpdate(matchId, updated);
-
   let setupOk = false;
   let matchOk = false;
   let lastError: unknown;
@@ -758,23 +736,38 @@ async function writeDelegatedRosterToFirestore(
     console.warn("[matchRepository] writeDelegatedRoster updateSetup:", err);
   }
 
-  if (!isFirebaseConfigured()) return;
-
-  const ref = doc(db, "matches", matchId);
-  const attempts: PartialWithFieldValue<DocumentData>[] = [
-    buildRosterPatchPayload(updated),
-    buildRsvpRosterPatchPayload(updated),
-  ];
-
-  for (const payload of attempts) {
+  if (isFirebaseConfigured()) {
+    const ref = doc(db, "matches", matchId);
     try {
-      await updateDoc(ref, payload);
+      await updateDoc(ref, buildRsvpRosterPatchPayload(updated));
       matchOk = true;
-      break;
     } catch (err) {
       lastError = err;
-      console.warn("[matchRepository] writeDelegatedRoster match patch:", err);
+      if (!setupOk) {
+        console.warn("[matchRepository] writeDelegatedRoster match patch:", err);
+      }
     }
+  } else {
+    matchOk = true;
+  }
+
+  // Cache local só depois de pelo menos uma escrita remota ter funcionado.
+  if (setupOk || matchOk) {
+    applyLocalMatchUpdate(matchId, updated);
+    savePreMatch(
+      {
+        version: 1,
+        matchId,
+        gameMode: roster.gameMode,
+        teamCount: roster.teamCount,
+        teamNames: roster.teamNames,
+        players: roster.players,
+        playerTeams: roster.playerTeams,
+        assignments: roster.assignments,
+        savedAt: new Date().toISOString(),
+      },
+      matchId,
+    );
   }
 
   if (!setupOk && !matchOk && options.throwOnError) {

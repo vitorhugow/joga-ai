@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, SlidersHorizontal, Plus, X } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
 import { loadAvailableMatches, loadMyMatches, type MatchListing } from "@/lib/communityRepository";
+import { isListedInPublicBrowse } from "@/lib/matchAccess";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaChip, JogaPage } from "@/components/joga";
@@ -31,10 +32,28 @@ export default function Jogos() {
 
   useEffect(() => {
     setLoadingMatches(true);
-    loadAvailableMatches(50)
+    loadAvailableMatches(50, userId ?? undefined)
       .then(setAllMatches)
       .finally(() => setLoadingMatches(false));
-  }, []);
+  }, [userId]);
+
+  /** Partidas públicas de "Minhas" entram também em Descobrir (exceto privadas/comunidade). */
+  const discoverMatches = useMemo(() => {
+    const byId = new Map(allMatches.map((m) => [m.id, m]));
+    for (const m of myMatches) {
+      if (
+        isListedInPublicBrowse({
+          accessMode: m.accessMode,
+          openToExternal: m.openToExternal,
+          communityId: m.communityId,
+          status: m.status,
+        })
+      ) {
+        byId.set(m.id, m);
+      }
+    }
+    return [...byId.values()];
+  }, [allMatches, myMatches]);
 
   useEffect(() => {
     if (!userId) {
@@ -48,7 +67,7 @@ export default function Jogos() {
       .finally(() => setLoadingMyMatches(false));
   }, [userId]);
 
-  const filtered = allMatches.filter((m) => {
+  const filtered = discoverMatches.filter((m) => {
     const s = m.title.toLowerCase().includes(search.toLowerCase()) || m.city.toLowerCase().includes(search.toLowerCase());
     const c = cityFilter === "todas" || m.city === cityFilter;
     const t = typeFilter === "todos" || m.gameType === typeFilter;

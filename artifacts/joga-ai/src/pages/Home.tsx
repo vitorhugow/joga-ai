@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Plus, Search, ChevronRight, Trophy, Flame } from "lucide-react";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { calculateOverall } from "@/lib/cardUtils";
 import { loadCommunities, loadMyCommunities, loadAvailableMatches, loadMyMatches, type Community, type MatchListing } from "@/lib/communityRepository";
+import { isListedInPublicBrowse } from "@/lib/matchAccess";
 import {
   computeMatchPriority,
   fetchLiveClockStatus,
@@ -83,8 +84,25 @@ export default function Home() {
   const overall = calculateOverall(player.attributes);
 
   const [communities, setCommunities] = useState<Community[]>([]);
-  const [available, setAvailable] = useState<MatchListing[]>([]);
+  const [discoverPool, setDiscoverPool] = useState<MatchListing[]>([]);
   const [myMatches, setMyMatches] = useState<EnrichedMatchListing[]>([]);
+
+  const available = useMemo(() => {
+    const byId = new Map(discoverPool.map((m) => [m.id, m]));
+    for (const m of myMatches) {
+      if (
+        isListedInPublicBrowse({
+          accessMode: m.accessMode,
+          openToExternal: m.openToExternal,
+          communityId: m.communityId,
+          status: m.status,
+        })
+      ) {
+        byId.set(m.id, m);
+      }
+    }
+    return [...byId.values()].filter((m) => m.spotsRemaining !== "Lotado");
+  }, [discoverPool, myMatches]);
 
   // Hidrata comunidades e partidas do Firestore em background
   useEffect(() => {
@@ -127,9 +145,7 @@ export default function Home() {
         setMyMatches(sortEnrichedMatches(enriched));
       });
     }
-    loadAvailableMatches().then((matches) => {
-      setAvailable(matches.filter((m) => m.spotsRemaining !== "Lotado"));
-    });
+    loadAvailableMatches(20, userId ?? undefined).then(setDiscoverPool);
   }, [userId]);
 
   const [rankingTab, setRankingTab] = useState<"overall" | "notas" | "golos">("overall");

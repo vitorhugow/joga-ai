@@ -639,6 +639,11 @@ export async function saveMatchRoster(
     title: existing?.title,
     communityId: existing?.communityId,
     organizerId: existing?.organizerId,
+    accessMode: existing?.accessMode,
+    openToExternal: existing?.openToExternal,
+    maxPlayers: existing?.maxPlayers,
+    paymentsEnabled: existing?.paymentsEnabled,
+    proBadge: existing?.proBadge,
   };
 
   if (options?.throwOnError) {
@@ -690,13 +695,14 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     votedUserIds: data.votedUserIds ?? [],
     waitlist: data.waitlist ?? [],
     paidUserIds: data.paidUserIds ?? [],
-    paymentsEnabled: data.paymentsEnabled ?? false,
-    proBadge: data.proBadge ?? false,
-    openToExternal: data.openToExternal ?? null,
-    accessMode: data.accessMode ?? null,
-    title: data.title ?? null,
-    communityId: data.communityId ?? null,
-    organizerId: data.organizerId ?? null,
+    ...(data.paymentsEnabled !== undefined ? { paymentsEnabled: data.paymentsEnabled } : {}),
+    ...(data.proBadge !== undefined ? { proBadge: data.proBadge } : {}),
+    ...(data.openToExternal !== undefined ? { openToExternal: data.openToExternal } : {}),
+    ...(data.accessMode !== undefined ? { accessMode: data.accessMode } : {}),
+    ...(data.title !== undefined ? { title: data.title } : {}),
+    ...(data.communityId !== undefined ? { communityId: data.communityId } : {}),
+    ...(data.organizerId !== undefined ? { organizerId: data.organizerId } : {}),
+    ...(data.maxPlayers !== undefined ? { maxPlayers: data.maxPlayers } : {}),
     liveControllerIds: data.organizerId ? [data.organizerId] : [],
     savedAt: serverTimestamp(),
   });
@@ -1020,6 +1026,7 @@ function mergeMatchSources(
     proBadge: remoteValid?.proBadge ?? localValid?.proBadge ?? false,
     openToExternal: remoteValid?.openToExternal ?? localValid?.openToExternal,
     accessMode: remoteValid?.accessMode ?? localValid?.accessMode,
+    maxPlayers: remoteValid?.maxPlayers ?? localValid?.maxPlayers,
   };
 }
 
@@ -1057,6 +1064,7 @@ function mapFirestoreMatchDoc(matchId: string, data: DocumentData): SavedPostMat
     proBadge: remote.proBadge ?? false,
     openToExternal: remote.openToExternal,
     accessMode: remote.accessMode,
+    maxPlayers: remote.maxPlayers,
   };
 }
 

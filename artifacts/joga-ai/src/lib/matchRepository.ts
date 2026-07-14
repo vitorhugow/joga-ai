@@ -588,7 +588,7 @@ export type MatchRosterData = {
 export async function saveMatchRoster(
   matchId: string,
   roster: MatchRosterData,
-  options?: { throwOnError?: boolean },
+  options?: { throwOnError?: boolean; forceRosterPatch?: boolean },
 ): Promise<void> {
   const now = new Date().toISOString();
 
@@ -648,33 +648,57 @@ export async function saveMatchRoster(
   };
 
   const uid = getCurrentUserId();
-  const organizerId = existing?.organizerId;
-  let rosterPatchOnly = false;
+  let organizerId = existing?.organizerId ?? loadMatchDetails(matchId)?.organizerId;
+  let rosterPatchOnly = options?.forceRosterPatch === true;
 
-  if (uid && organizerId && uid !== organizerId && isFirebaseConfigured()) {
+  if (uid && isFirebaseConfigured() && (!organizerId || uid !== organizerId || rosterPatchOnly)) {
     try {
       const snap = await getDoc(doc(db, "matches", matchId));
-      rosterPatchOnly = isUserLiveController(uid, {
-        liveControllerIds: snap.data()?.liveControllerIds as string[] | undefined,
-        liveControllerId: snap.data()?.liveControllerId as string | undefined,
-        organizerId,
-      });
+      const remote = snap.data();
+      organizerId = organizerId ?? (remote?.organizerId as string | undefined);
+      if (organizerId && uid !== organizerId) {
+        rosterPatchOnly =
+          rosterPatchOnly ||
+          isUserLiveController(uid, {
+            liveControllerIds: remote?.liveControllerIds as string[] | undefined,
+            liveControllerId: remote?.liveControllerId as string | undefined,
+            organizerId,
+          });
+      }
     } catch (err) {
       console.warn("[matchRepository] saveMatchRoster controller check:", err);
     }
   }
 
-  if (options?.throwOnError) {
-    if (rosterPatchOnly) {
-      await saveRosterPatchToFirestoreOrThrow(matchId, updated);
-    } else {
-      await saveMatchToFirestoreOrThrow(matchId, updated);
-    }
-  } else if (rosterPatchOnly) {
-    await saveRosterPatchToFirestore(matchId, updated);
-  } else {
-    await saveMatchToFirestore(matchId, updated);
+  if (organizerId && !updated.organizerId) {
+    updated.organizerId = organizerId;
   }
+
+  async function writeToFirestore(throwOnError: boolean): Promise<void> {
+    if (rosterPatchOnly) {
+      if (throwOnError) {
+        await saveRosterPatchToFirestoreOrThrow(matchId, updated);
+      } else {
+        await saveRosterPatchToFirestore(matchId, updated);
+      }
+      return;
+    }
+
+    try {
+      if (throwOnError) {
+        await saveMatchToFirestoreOrThrow(matchId, updated);
+      } else {
+        await saveMatchToFirestore(matchId, updated);
+      }
+    } catch (err) {
+      if (!throwOnError || !isFirestorePermissionDenied(err)) throw err;
+      console.warn("[matchRepository] saveMatchRoster retry roster patch:", err);
+      rosterPatchOnly = true;
+      await saveRosterPatchToFirestoreOrThrow(matchId, updated);
+    }
+  }
+
+  await writeToFirestore(options?.throwOnError === true);
 
   if (uid && organizerId && (uid === organizerId || rosterPatchOnly)) {
     try {
@@ -709,13 +733,14 @@ function buildRosterPatchPayload(data: SavedPostMatch): PartialWithFieldValue<Do
     ),
     playerTeams: data.playerTeams ?? {},
     assignments: data.assignments ?? {},
-    currentPlayerId: data.currentPlayerId ?? "",
-    miniGames: data.miniGames ?? [],
-    votedUserIds: data.votedUserIds ?? [],
     waitlist: data.waitlist ?? [],
-    paidUserIds: data.paidUserIds ?? [],
     savedAt: serverTimestamp(),
   });
+}
+
+function isFirestorePermissionDenied(err: unknown): boolean {
+  const code = (err as { code?: string })?.code;
+  return code === "permission-denied";
 }
 
 function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {

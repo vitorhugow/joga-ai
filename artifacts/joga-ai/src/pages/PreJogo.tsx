@@ -698,7 +698,10 @@ export default function PreJogo() {
             assignments: patch?.assignments ?? assignmentsRef.current,
             waitlist,
           },
-          { throwOnError: true },
+          {
+            throwOnError: true,
+            forceRosterPatch: isLiveController && !isOrganizer,
+          },
         );
         setSetupSyncState("saved");
         return true;
@@ -717,7 +720,7 @@ export default function PreJogo() {
         }, 700);
       }
     },
-    [matchId, canManageMatch, waitlist],
+    [matchId, canManageMatch, waitlist, isLiveController, isOrganizer],
   );
 
   const teamSetupWarning = useMemo(() => {

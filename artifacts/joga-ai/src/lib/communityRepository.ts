@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
-import { isListedInPublicBrowse, isListedInCommunityFeed, isPublicSchedulingStatus } from "./matchAccess";
+import { isListedInPublicBrowse, isListedInCommunityFeed } from "./matchAccess";
 import { MAX_PROFILE_PHOTO_BYTES, loadUserProfile } from "./userRepository";
 import { isOrganizerProForCommunity } from "./entitlements";
 import { loadAllPostMatches } from "./postMatchStorage";
@@ -759,18 +759,19 @@ async function loadCommunityFlagsForMatches(
   return map;
 }
 
-/** Exclui partidas cujo relógio ao vivo já arrancou (mesmo que status local esteja desatualizado). */
+/** Exclui partidas cujo relógio ao vivo está a correr (status desatualizado em configurando). */
 async function excludeMatchesWithActiveLiveSession(matches: MatchListing[]): Promise<MatchListing[]> {
   if (!isFirebaseConfigured() || matches.length === 0) return matches;
 
   const liveChecks = await Promise.all(
     matches.map(async (match) => {
-      if (!isPublicSchedulingStatus(match.status)) return false;
       try {
         const snap = await getDoc(doc(db, "matches", match.id, "state", "live"));
         if (!snap.exists()) return true;
         const liveStatus = String(snap.data()?.status ?? "");
-        return !["running", "paused", "ended"].includes(liveStatus);
+        // Só esconder quando o relógio está realmente a correr — idle/paused/ended
+        // (doc live criado mas pelada não iniciada) mantém-se visível na descoberta.
+        return liveStatus !== "running";
       } catch {
         return true;
       }
@@ -1050,10 +1051,14 @@ function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {
     communityId: data.communityId ? String(data.communityId) : undefined,
     status: data.status ? String(data.status) : undefined,
     proBadge: data.proBadge === true,
-    openToExternal: data.openToExternal === true,
+    openToExternal: data.openToExternal === true || data.accessMode === "public",
     accessMode: typeof data.accessMode === "string"
       ? (data.accessMode as MatchListing["accessMode"])
-      : undefined,
+      : data.openToExternal === true
+        ? "public"
+        : data.communityId
+          ? "community"
+          : undefined,
     paymentsEnabled: data.paymentsEnabled === true,
   };
 }

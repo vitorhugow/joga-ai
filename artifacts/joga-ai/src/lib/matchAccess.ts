@@ -23,7 +23,7 @@ export function isPublicSchedulingStatus(status?: string): boolean {
   return !status || status === "configurando";
 }
 
-/** Visível na descoberta pública (Encontrar Jogos). */
+/** Visível na descoberta pública (Encontrar Jogos). Só partidas públicas — não comunidade-only nem privadas. */
 export function isListedInPublicBrowse(input: {
   accessMode?: MatchAccessMode;
   openToExternal?: boolean;
@@ -33,16 +33,7 @@ export function isListedInPublicBrowse(input: {
   status?: string;
 }): boolean {
   if (!isPublicSchedulingStatus(input.status)) return false;
-
-  if (input.communityId) {
-    if (input.communityOpenToExternal && input.communityProActive) {
-      return true;
-    }
-  }
-  const mode = resolveAccessMode(input);
-  if (mode !== "public") return false;
-  if (input.communityId) return true;
-  return true;
+  return resolveAccessMode(input) === "public";
 }
 
 export function accessModeLabel(mode: MatchAccessMode): string {

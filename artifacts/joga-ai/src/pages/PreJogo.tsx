@@ -29,15 +29,16 @@ import {
 } from "@/lib/matchStateRepository";
 import { clearPostMatch } from "@/lib/postMatchStorage";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
-import { loadMatchDetails, saveMatchDetails, type MatchDetails } from "@/lib/matchRepository";
+import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
 import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
 import { formatCentsEuro, peladaCheckoutTotalCents, peladaPriceCents } from "@/lib/peladaWallet";
 import { createIncompleteSeedProfile, getWhatsappUrl, loadUserProfile } from "@/lib/userRepository";
-import { loadCommunityMembers, loadCommunity } from "@/lib/communityRepository";
+import { loadCommunityMembers } from "@/lib/communityRepository";
 import { loadMensalistaStatus } from "@/lib/mensalistaRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
+import { isUserLiveController } from "@/lib/liveControllerUtils";
 import {
   confirmPresence,
   leaveMatch,
@@ -506,10 +507,12 @@ export default function PreJogo() {
       if (cancelled) return;
 
       const merged = meta.match;
-      if (merged?.organizerId) setOrganizerId(merged.organizerId);
-      else if (merged?.players?.length) {
-        const paidOrganizer = merged.players.find((p) => p.paid && p.userId);
-        if (paidOrganizer?.userId) setOrganizerId(paidOrganizer.userId);
+      if (meta.organizerId) {
+        setOrganizerId(meta.organizerId);
+      } else if (merged?.organizerId) {
+        setOrganizerId(merged.organizerId);
+      } else if (meta.details?.organizerId) {
+        setOrganizerId(meta.details.organizerId);
       }
       setLiveControllerIds(meta.liveControllerIds);
       if (merged?.communityId) setMatchCommunityId(merged.communityId);
@@ -589,14 +592,10 @@ export default function PreJogo() {
     const communityId = matchCommunityId ?? matchDetails?.communityId;
     if (!communityId) {
       setCommunityMembers([]);
-      setIsCommunityAdmin(false);
       return;
     }
     void loadCommunityMembers(communityId).then(setCommunityMembers);
-    void loadCommunity(communityId, userId).then((c) => {
-      setIsCommunityAdmin(Boolean(userId && c?.adminId === userId));
-    });
-  }, [matchCommunityId, matchDetails?.communityId, userId]);
+  }, [matchCommunityId, matchDetails?.communityId]);
 
   useEffect(() => {
     if (!userId || !rosterHydrated) return;
@@ -611,11 +610,13 @@ export default function PreJogo() {
   const resolvedOrganizerId =
     organizerId ??
     matchDetails?.organizerId ??
-    players.find((p) => p.paid && p.userId)?.userId ??
     null;
   const isOrganizer = Boolean(userId && resolvedOrganizerId && userId === resolvedOrganizerId);
-  const [isCommunityAdmin, setIsCommunityAdmin] = useState(false);
-  const canManageMatch = isOrganizer || isCommunityAdmin;
+  const isLiveController = isUserLiveController(userId, {
+    liveControllerIds,
+    organizerId: resolvedOrganizerId ?? undefined,
+  });
+  const canManageMatch = isOrganizer || isLiveController;
   const [showCommunityList, setShowCommunityList] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("teams");
 
@@ -1466,7 +1467,7 @@ export default function PreJogo() {
           </button>
 
           <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.22em]">
-            Pré-Jogo Editável
+            {canManageMatch ? "Pré-Jogo Editável" : "Pré-Jogo"}
             {canManageMatch && setupSyncState === "saving" && (
               <span className="block text-[9px] text-amber-300/80 normal-case tracking-normal mt-0.5">a guardar…</span>
             )}
@@ -2011,24 +2012,36 @@ export default function PreJogo() {
                       <PlayerBadge player={player} showOnlinePaidBadge={canManageMatch && paymentsOn} />
                     </div>
 
-                    <select
-                      value={team}
-                      onChange={(event) => moveToTeam(player.id, event.target.value as PlayerStatus)}
-                      disabled={!canManageMatch}
-                      className="rounded-xl px-2 py-2 text-[11px] font-black outline-hidden cursor-pointer"
-                      style={{
-                        background: `${statusColor}22`,
-                        border: `1px solid ${statusColor}66`,
-                        color: statusColor,
-                      }}
-                    >
-                      {activeTeams.map((teamOption) => (
-                        <option key={teamOption} value={teamOption}>
-                          {teamNames[teamOption]}
-                        </option>
-                      ))}
-                      <option value="BENCH">Banco</option>
-                    </select>
+                    {canManageMatch ? (
+                      <select
+                        value={team}
+                        onChange={(event) => moveToTeam(player.id, event.target.value as PlayerStatus)}
+                        className="rounded-xl px-2 py-2 text-[11px] font-black outline-hidden cursor-pointer"
+                        style={{
+                          background: `${statusColor}22`,
+                          border: `1px solid ${statusColor}66`,
+                          color: statusColor,
+                        }}
+                      >
+                        {activeTeams.map((teamOption) => (
+                          <option key={teamOption} value={teamOption}>
+                            {teamNames[teamOption]}
+                          </option>
+                        ))}
+                        <option value="BENCH">Banco</option>
+                      </select>
+                    ) : (
+                      <span
+                        className="rounded-xl px-2 py-2 text-[11px] font-black shrink-0"
+                        style={{
+                          background: `${statusColor}18`,
+                          border: `1px solid ${statusColor}44`,
+                          color: statusColor,
+                        }}
+                      >
+                        {team === "BENCH" ? "Banco" : teamNames[team]}
+                      </span>
+                    )}
                   </div>
 
                   {canManageMatch && (
@@ -2213,6 +2226,7 @@ export default function PreJogo() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {canManageMatch && (
       <PlayerPicker
         open={Boolean(pickerSlot)}
         title={pickerSlot ? `Posição ${pickerSlot}` : "Posição"}
@@ -2228,8 +2242,9 @@ export default function PreJogo() {
         }}
         onClose={() => setPickerSlot(null)}
       />
+      )}
 
-      {resolvedOrganizerId && (
+      {isOrganizer && resolvedOrganizerId && (
         <ManageLiveControllersDialog
           open={controllersDialogOpen}
           onOpenChange={setControllersDialogOpen}

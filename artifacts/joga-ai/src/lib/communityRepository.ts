@@ -794,24 +794,68 @@ async function excludeMatchesWithActiveLiveSession(matches: MatchListing[]): Pro
  */
 
 /** Partidas públicas (Firestore) — inclui peladas de comunidade abertas */
-export async function loadAvailableMatches(limitCount = 10): Promise<MatchListing[]> {
+export async function loadAvailableMatches(limitCount = 10, userId?: string): Promise<MatchListing[]> {
   if (!isFirebaseConfigured()) {
     const fallback = readLocalMatchListings().filter((m) => isOpenPublicMatch(m));
     return (await excludeMatchesWithActiveLiveSession(fallback)).slice(0, limitCount);
   }
 
   try {
-    const q = query(
-      collection(db, "matches"),
-      where("status", "in", [...OPEN_MATCH_STATUSES]),
-      orderBy("createdAt", "desc"),
-      limit(limitCount * 4),
-    );
-    const snap = await getDocs(q);
+    const byId = new Map<string, MatchListing>();
 
-    const mapped = snap.docs.map((d) => mapMatchDoc(d.id, d.data()));
-    const flags = await loadCommunityFlagsForMatches(mapped);
-    const remote = mapped
+    const addDocs = (docs: { id: string; data: () => Record<string, unknown> }[]) => {
+      for (const d of docs) {
+        byId.set(d.id, mapMatchDoc(d.id, d.data()));
+      }
+    };
+
+    // Query directa por accessMode público — mais fiável que filtrar só no cliente.
+    try {
+      const publicSnap = await getDocs(
+        query(
+          collection(db, "matches"),
+          where("accessMode", "==", "public"),
+          where("status", "in", [...OPEN_MATCH_STATUSES]),
+          orderBy("createdAt", "desc"),
+          limit(Math.max(limitCount * 2, 20)),
+        ),
+      );
+      addDocs(publicSnap.docs);
+    } catch (err) {
+      console.warn("[communityRepository] loadAvailableMatches (accessMode public):", err);
+    }
+
+    // Pool geral (documentos legados sem accessMode gravado).
+    const poolSnap = await getDocs(
+      query(
+        collection(db, "matches"),
+        where("status", "in", [...OPEN_MATCH_STATUSES]),
+        orderBy("createdAt", "desc"),
+        limit(limitCount * 4),
+      ),
+    );
+    addDocs(poolSnap.docs);
+
+    // Garantir que partidas públicas do organizador aparecem em Descobrir
+    // (mesmo que falhem nos filtros amostra acima).
+    if (userId) {
+      try {
+        const organizerSnap = await getDocs(
+          query(
+            collection(db, "matches"),
+            where("organizerId", "==", userId),
+            where("status", "in", [...OPEN_MATCH_STATUSES]),
+            limit(30),
+          ),
+        );
+        addDocs(organizerSnap.docs);
+      } catch (err) {
+        console.warn("[communityRepository] loadAvailableMatches (organizer):", err);
+      }
+    }
+
+    const flags = await loadCommunityFlagsForMatches([...byId.values()]);
+    const remote = [...byId.values()]
       .filter((m) => isOpenPublicMatch(m, flags))
       .sort((a, b) => {
         const proDiff = Number(b.proBadge) - Number(a.proBadge);

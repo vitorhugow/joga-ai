@@ -1,1 +1,8 @@
-[]
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "pt.jogaai.app",
+    "sha256_cert_fingerprints": ["BD:23:C8:A3:1B:46:DC:92:C4:02:DE:7D:E8:A3:75:2B:1F:32:49:DA:2F:50:2C:AA:1C:DB:37:65:78:46:E8:A9"]
+  }
+}]

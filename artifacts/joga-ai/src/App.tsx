@@ -39,6 +39,7 @@ const Privacidade = lazyRoute(() => import("@/pages/Privacidade"));
 const Termos = lazyRoute(() => import("@/pages/Termos"));
 const DemoCarta = lazyRoute(() => import("@/pages/DemoCarta"));
 const Admin = lazyRoute(() => import("@/pages/Admin"));
+const Instalar = lazyRoute(() => import("@/pages/Instalar"));
 
 function PageFallback() {
   return (
@@ -91,6 +92,7 @@ function AnimatedRoutes() {
             <Route path="/admin" component={Admin} />
             <Route path="/campos" component={Campos} />
             <Route path="/ranking" component={Ranking} />
+            <Route path="/instalar" component={Instalar} />
               <Route component={NotFound} />
             </Switch>
             </Suspense>

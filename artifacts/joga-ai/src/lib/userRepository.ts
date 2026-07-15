@@ -19,6 +19,7 @@ import {
   type DocumentReference,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { stripUndefined } from "./firestoreUtils";
 import { uploadUserAvatar, deleteImageByUrl } from "./imageStorage";
 import { resolveImageSrc } from "./imageUtils";
 import { clearPendingReferral, consumePendingReferral } from "./referral";
@@ -432,20 +433,20 @@ async function persistProfile(
   profile: UserProfile,
   create = false,
 ): Promise<void> {
-  const payload = {
+  const payload = stripUndefined({
     ...profileForFirestore(profile),
     updatedAt: serverTimestamp(),
-  };
+  });
 
   if (create) {
     const referredBy = consumePendingReferral(userRef.id);
     await setDoc(
       userRef,
-      {
+      stripUndefined({
         ...payload,
         ...(referredBy ? { referredBy } : {}),
         createdAt: serverTimestamp(),
-      },
+      }),
       { merge: true },
     );
     if (referredBy) clearPendingReferral();

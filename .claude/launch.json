@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "joga-ai-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd artifacts/joga-ai && npm run dev"],
+      "port": 5173
+    }
+  ]
+}

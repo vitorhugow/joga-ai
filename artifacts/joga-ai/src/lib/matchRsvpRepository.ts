@@ -4,6 +4,7 @@
 
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { sanitizeLivePlayers } from "./firestoreUtils";
 import {
   loadMatchFromFirestore,
   saveMatchRoster,
@@ -94,7 +95,7 @@ async function persistRsvpState(
   if (isFirebaseConfigured()) {
     try {
       await updateDoc(doc(db, "matches", matchId), {
-        players: roster.players,
+        players: sanitizeLivePlayers(roster.players),
         participantUserIds: participantUserIdsFrom(roster.players),
         playerTeams: roster.playerTeams,
         assignments: roster.assignments ?? {},

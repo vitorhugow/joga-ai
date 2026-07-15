@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from "react";
-import { Share2, TrendingUp, ChevronRight, ChevronLeft, Shield, LogOut, Link2 } from "lucide-react";
+import { Share2, TrendingUp, ChevronRight, ChevronLeft, Shield, LogOut, Link2, Smartphone } from "lucide-react";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { Link, useRoute } from "wouter";
 import { PlayerCard } from "@/components/PlayerCard";
@@ -957,6 +957,15 @@ export default function Perfil() {
         )}
 
         {!isViewingOther && isLinked && <DeleteAccountSection />}
+
+        {!isViewingOther && (
+          <Link href="/instalar" className="block text-center">
+            <span className="inline-flex items-center gap-1.5 text-white/35 text-xs font-semibold hover:text-white/55 transition-colors">
+              <Smartphone className="w-3.5 h-3.5" />
+              Como instalar a app
+            </span>
+          </Link>
+        )}
 
       </div>
 

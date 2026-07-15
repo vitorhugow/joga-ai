@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { JogaButton } from "@/components/joga";
+import { Slider } from "@/components/ui/slider";
 import { PhotoCropDialog } from "@/components/profile/PhotoCropDialog";
 import {
   completeUserProfile,
@@ -115,6 +116,21 @@ export function ProfileSetupDialog({
     });
   }
 
+  /** Igual a adjustAttribute, mas recebe o valor absoluto do slider em vez de um delta. */
+  function setAttributeValue(key: keyof PlayerAttributes, value: number) {
+    setAttributes((prev) => {
+      const current = prev[key];
+      const remaining = allocationPointsRemaining(prev);
+      let next = Math.round(value);
+      next = Math.max(ALLOCATION_MIN_PER_ATTRIBUTE, Math.min(ALLOCATION_MAX_PER_ATTRIBUTE, next));
+      const delta = next - current;
+      if (delta > 0 && delta > remaining) {
+        next = current + remaining;
+      }
+      return { ...prev, [key]: next };
+    });
+  }
+
   function handleInfoSubmit(e: React.FormEvent) {
     e.preventDefault();
     const name = displayName.trim();
@@ -183,16 +199,16 @@ export function ProfileSetupDialog({
         displayName: name,
         position,
         shirtNumber: profile?.shirtNumber ?? 10,
-        photoUrl,
-        attributes: isEditing ? undefined : attributes,
+        ...(photoUrl !== undefined ? { photoUrl } : {}),
+        ...(isEditing ? {} : { attributes }),
       };
 
       const saveTask = isEditing
         ? updateUserProfile(
             userId,
             pro
-              ? { displayName: name, position, photoUrl }
-              : { photoUrl },
+              ? { displayName: name, position, ...(photoUrl !== undefined ? { photoUrl } : {}) }
+              : { ...(photoUrl !== undefined ? { photoUrl } : {}) },
             !isLinked,
           )
         : completeUserProfile(userId, input, !isLinked);
@@ -219,11 +235,22 @@ export function ProfileSetupDialog({
       } else if (String((err as Error)?.message ?? err).includes("auth/timeout")) {
         setError("O guardar demorou demasiado. Verifica a ligação e tenta outra vez.");
       } else {
-        setError(
-          isLinked
-            ? "Não foi possível sincronizar na nuvem. Verifica a ligação e tenta outra vez."
-            : "Não foi possível guardar. Tenta outra vez.",
-        );
+        const code = (err as { code?: string })?.code ?? "";
+        const isNetworkError =
+          code === "unavailable" ||
+          code === "deadline-exceeded" ||
+          (typeof navigator !== "undefined" && navigator.onLine === false);
+
+        if (isNetworkError) {
+          setError(
+            isLinked
+              ? "Não foi possível sincronizar na nuvem. Verifica a ligação e tenta outra vez."
+              : "Não foi possível guardar. Tenta outra vez.",
+          );
+        } else {
+          console.error("[ProfileSetupDialog] saveProfile:", err);
+          setError("Ocorreu um erro ao guardar o perfil. Tenta outra vez.");
+        }
       }
     } finally {
       setSaving(false);
@@ -291,23 +318,32 @@ export function ProfileSetupDialog({
               </div>
             </div>
 
-            <div className="space-y-3">
-              {ATTRIBUTE_KEYS.map((key) => (
+            <div className="space-y-4">
+              {ATTRIBUTE_KEYS.map((key) => {
+                // O slider deste atributo não pode ir além do que resta por
+                // distribuir — mesmo que ALLOCATION_MAX_PER_ATTRIBUTE seja maior.
+                const sliderMax = Math.min(
+                  ALLOCATION_MAX_PER_ATTRIBUTE,
+                  attributes[key] + remainingPoints,
+                );
+
+                return (
                 <div key={key} className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-bold text-white">{ATTRIBUTE_LABELS[key]}</span>
                       <span className="text-sm font-black text-emerald-400">{attributes[key]}</span>
                     </div>
-                    <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${((attributes[key] - ALLOCATION_MIN_PER_ATTRIBUTE) / (ALLOCATION_MAX_PER_ATTRIBUTE - ALLOCATION_MIN_PER_ATTRIBUTE)) * 100}%`,
-                          background: "linear-gradient(90deg, #16a34a, #4ade80)",
-                        }}
-                      />
-                    </div>
+                    <Slider
+                      value={[attributes[key]]}
+                      min={ALLOCATION_MIN_PER_ATTRIBUTE}
+                      max={sliderMax}
+                      step={1}
+                      onValueChange={([value]) => setAttributeValue(key, value)}
+                      className="py-2 [&_[role=slider]]:h-6 [&_[role=slider]]:w-6"
+                      aria-label={`${ATTRIBUTE_LABELS[key]}: ${attributes[key]}`}
+                      data-testid={`attr-slider-${key}`}
+                    />
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
@@ -332,7 +368,8 @@ export function ProfileSetupDialog({
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {error && <p className="text-red-400 text-sm">{error}</p>}

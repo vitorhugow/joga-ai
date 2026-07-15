@@ -4,6 +4,7 @@
 
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
+import { sanitizeLivePlayers } from "./firestoreUtils";
 import { loadMatchFromFirestore, saveMatchRoster } from "./matchRepository";
 import { loadUserProfile, applyMatchResultToProfile, type UserProfile } from "./userRepository";
 import type { LivePlayer } from "./preMatchStorage";
@@ -107,7 +108,7 @@ export async function claimGuestCard(
   if (guest.loanCard && isFirebaseConfigured()) {
     try {
       await updateDoc(doc(db, "matches", token.matchId), {
-        players: updatedPlayers,
+        players: sanitizeLivePlayers(updatedPlayers),
         playerTeams,
         assignments,
         savedAt: serverTimestamp(),

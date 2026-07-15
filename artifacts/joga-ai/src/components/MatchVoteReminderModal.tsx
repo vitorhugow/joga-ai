@@ -51,9 +51,11 @@ function popupCta(kind: PopupKind): string {
  */
 export function MatchVoteReminderModal() {
   const { userId, isLinked } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [queue, setQueue] = useState<AppNotification[]>([]);
   const shownRef = useRef<Set<string>>(new Set());
+  const locationRef = useRef(location);
+  locationRef.current = location;
 
   function markSeen(notifId: string) {
     if (!userId) return;
@@ -93,7 +95,13 @@ export function MatchVoteReminderModal() {
         }),
       ).then((results) => {
         const valid = results.filter((n): n is AppNotification => n !== null);
-        if (valid.length > 0) setQueue((current) => [...current, ...valid]);
+        if (valid.length === 0) return;
+
+        // Nunca mostra o popup a quem já está na própria página de destino
+        // (ex.: vote-{id} não aparece a quem já está no pós-jogo/votação
+        // dessa partida) — já foi marcado como visto acima de qualquer forma.
+        const toShow = valid.filter((n) => !n.link || locationRef.current !== n.link);
+        if (toShow.length > 0) setQueue((current) => [...current, ...toShow]);
       });
     });
 

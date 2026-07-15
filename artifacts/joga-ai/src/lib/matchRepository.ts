@@ -1045,11 +1045,17 @@ function pickBestRoster(
     savedAt: number;
   }>,
 ): (typeof candidates)[number] {
+  // Critério primário: escrita mais recente (savedAt) vence. Uma remoção
+  // legítima produz um roster com MENOS jogadores — "mais jogadores ganha"
+  // como critério primário reintroduzia jogadores removidos a partir de uma
+  // cópia local desatualizada. O número de jogadores só desempata quando os
+  // savedAt são (quase) iguais, ex.: escritas na mesma rajada.
+  const SAVED_AT_TIE_TOLERANCE_MS = 1000;
+
   return [...candidates].sort((a, b) => {
-    if (b.players.length !== a.players.length) {
-      return b.players.length - a.players.length;
-    }
-    return b.savedAt - a.savedAt;
+    const savedAtDiff = b.savedAt - a.savedAt;
+    if (Math.abs(savedAtDiff) > SAVED_AT_TIE_TOLERANCE_MS) return savedAtDiff;
+    return b.players.length - a.players.length;
   })[0];
 }
 

@@ -21,6 +21,8 @@ import {
   writeBatch,
   increment,
   deleteField,
+  type Query,
+  type DocumentData,
 } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "./firebase";
 import { OPEN_MATCH_STATUSES, COMMUNITY_ACTIVE_MATCH_STATUSES, loadLocalMatchListings, loadMatchDetails } from "./matchRepository";
@@ -870,6 +872,104 @@ export async function loadAvailableMatches(limitCount = 10, userId?: string): Pr
     const fallback = readLocalMatchListings().filter((m) => isOpenPublicMatch(m));
     return (await excludeMatchesWithActiveLiveSession(fallback)).slice(0, limitCount);
   }
+}
+
+/**
+ * Listener em tempo real das partidas públicas abertas (aba "Descobrir").
+ * Garante que uma pelada some da lista assim que o status deixa de estar em
+ * OPEN_MATCH_STATUSES (ex: alguém a iniciou Ao Vivo ou cancelou), sem
+ * precisar de refresh manual — mesma lógica de filtragem async de
+ * `loadAvailableMatches`, mas recalculada a cada snapshot.
+ */
+export function subscribeAvailableMatches(
+  callback: (matches: MatchListing[]) => void,
+  limitCount = 10,
+  userId?: string,
+): () => void {
+  if (!isFirebaseConfigured()) {
+    void loadAvailableMatches(limitCount, userId).then(callback);
+    return () => {};
+  }
+
+  let cancelled = false;
+  let generation = 0;
+  const byId = new Map<string, MatchListing>();
+  const docsByQuery = new Map<string, Map<string, MatchListing>>();
+
+  const recompute = () => {
+    const myGeneration = ++generation;
+    byId.clear();
+    for (const docs of docsByQuery.values()) {
+      for (const [id, m] of docs) byId.set(id, m);
+    }
+    const candidates = [...byId.values()];
+
+    void (async () => {
+      const flags = await loadCommunityFlagsForMatches(candidates);
+      const remote = candidates
+        .filter((m) => isOpenPublicMatch(m, flags))
+        .sort((a, b) => Number(b.proBadge) - Number(a.proBadge));
+      const withoutLive = await excludeMatchesWithActiveLiveSession(remote);
+      if (cancelled || myGeneration !== generation) return;
+      callback(withoutLive.slice(0, limitCount));
+    })();
+  };
+
+  const subscribeQuery = (key: string, q: Query<DocumentData>) =>
+    onSnapshot(
+      q,
+      (snap) => {
+        const map = new Map<string, MatchListing>();
+        for (const d of snap.docs) map.set(d.id, mapMatchDoc(d.id, d.data()));
+        docsByQuery.set(key, map);
+        recompute();
+      },
+      (err) => {
+        console.warn(`[communityRepository] subscribeAvailableMatches (${key}):`, err);
+        void loadAvailableMatches(limitCount, userId).then(callback);
+      },
+    );
+
+  const unsubs = [
+    subscribeQuery(
+      "public",
+      query(
+        collection(db, "matches"),
+        where("accessMode", "==", "public"),
+        where("status", "in", [...OPEN_MATCH_STATUSES]),
+        orderBy("createdAt", "desc"),
+        limit(Math.max(limitCount * 2, 20)),
+      ),
+    ),
+    subscribeQuery(
+      "pool",
+      query(
+        collection(db, "matches"),
+        where("status", "in", [...OPEN_MATCH_STATUSES]),
+        orderBy("createdAt", "desc"),
+        limit(limitCount * 4),
+      ),
+    ),
+  ];
+
+  if (userId) {
+    unsubs.push(
+      subscribeQuery(
+        "organizer",
+        query(
+          collection(db, "matches"),
+          where("organizerId", "==", userId),
+          where("status", "in", [...OPEN_MATCH_STATUSES]),
+          limit(30),
+        ),
+      ),
+    );
+  }
+
+  return () => {
+    cancelled = true;
+    unsubs.forEach((unsub) => unsub());
+  };
 }
 
 const MY_MATCHES_ACTIVE_STATUSES = [

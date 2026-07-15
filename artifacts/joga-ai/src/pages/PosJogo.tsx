@@ -81,7 +81,6 @@ import { generateResultImage } from "@/lib/resultImage";
 import { hasPlayerPro, isOrganizerProForCommunity } from "@/lib/entitlements";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMatchPhaseGuard } from "@/hooks/useMatchPhaseGuard";
 
 const eventLabels: Record<string, string> = {
@@ -1148,29 +1147,15 @@ export default function PosJogo() {
           {!playerPro && <ProFeatureBadge tier="player" className="scale-90" />}
         </JogaButton>
 
-        <TooltipProvider delayDuration={200}>
-          <div className="mt-2 flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleShareResult()}
-              className="flex-1 rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-              style={{ background: "#10b981" }}
-              data-testid="button-share-result"
-            >
-              📤 Partilhar resultado no grupo
-            </button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex cursor-help">
-                  <ProFeatureBadge tier="player" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[200px] text-center">
-                PRO: alta resolução e sem marca de água.
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </TooltipProvider>
+        <button
+          type="button"
+          onClick={() => void handleShareResult()}
+          className="mt-2 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+          style={{ background: "#10b981" }}
+          data-testid="button-share-result"
+        >
+          📤 Partilhar resultado no grupo
+        </button>
 
         <JogaButton
           variant="gold"
@@ -1341,29 +1326,15 @@ export default function PosJogo() {
         </section>
       )}
 
-      <TooltipProvider delayDuration={200}>
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => void handleShareResult()}
-            className="flex-1 rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
-            style={{ background: "#10b981" }}
-            data-testid="button-share-result"
-          >
-            📤 Partilhar resultado no grupo
-          </button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex cursor-help">
-                <ProFeatureBadge tier="player" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[200px] text-center">
-              PRO: alta resolução e sem marca de água.
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </TooltipProvider>
+      <button
+        type="button"
+        onClick={() => void handleShareResult()}
+        className="mt-4 w-full rounded-2xl py-3.5 font-black text-sm text-white flex items-center justify-center gap-2"
+        style={{ background: "#10b981" }}
+        data-testid="button-share-result"
+      >
+        📤 Partilhar resultado no grupo
+      </button>
 
       <SponsorSlot className="mt-4" />
 

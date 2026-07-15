@@ -336,7 +336,7 @@ function PlayerPicker({
       onClick={onClose}
     >
       <div
-        className="w-full rounded-t-[28px] p-4 max-h-[78vh] overflow-y-auto pb-[calc(env(safe-area-inset-bottom,0px)+5.5rem)]"
+        className="w-full rounded-t-[28px] p-4 max-h-[78vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom,0px)+5.5rem)]"
         style={{ background: "#0a0f1a", border: "1px solid rgba(255,255,255,0.10)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1323,7 +1323,10 @@ export default function PreJogo() {
 
     if (canManageMatch) {
       void removePlayerAndPromote(matchId, playerId).then(async () => {
-        const merged = await loadMatchFromFirestore(matchId);
+        // preferRemote: true — o Firestore já reflete a remoção que acabámos
+        // de escrever; sem isto, o merge local-vs-remoto podia preferir uma
+        // cópia local ainda desatualizada e "ressuscitar" o jogador.
+        const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
         if (merged?.waitlist) setWaitlist(merged.waitlist);
       });
     } else {

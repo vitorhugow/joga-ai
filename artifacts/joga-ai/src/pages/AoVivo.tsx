@@ -516,7 +516,41 @@ export default function AoVivo() {
 
   // Modo leitura: quem não é o controlador ao vivo vê tudo em tempo real.
   if (!isLiveController) {
-    const viewPlayers = remoteMatch?.players ?? preMatch?.players ?? [];
+    const rosterPlayers = remoteMatch?.players ?? preMatch?.players ?? [];
+    const isParticipant = Boolean(
+      userId && rosterPlayers.some((p) => p.userId === userId || p.id === userId),
+    );
+
+    if (!isOrganizer && !isParticipant) {
+      const status = remoteMatch?.status;
+      const blockedMessage =
+        status === "cancelada"
+          ? "Esta pelada foi cancelada."
+          : status === "aguardando_auditoria" || status === "auditada" || status === "concluida"
+            ? "Esta pelada já terminou."
+            : "Esta pelada já está a decorrer.";
+
+      return (
+        <JogaPage theme="arena" padded className="py-6" bottomSpace={false} hideFooterCredit>
+          <JogaCard variant="arena" padding="lg" className="text-center">
+            <p className="text-white font-bold text-sm">{blockedMessage}</p>
+            <p className="text-white/45 text-xs mt-2">
+              Só quem participa nesta pelada pode acompanhar o Ao Vivo.
+            </p>
+            <JogaButton
+              variant="primary"
+              size="md"
+              className="mt-4 w-full"
+              onClick={() => setLocation("/jogos")}
+            >
+              Voltar a Jogos
+            </JogaButton>
+          </JogaCard>
+        </JogaPage>
+      );
+    }
+
+    const viewPlayers = rosterPlayers;
     const viewTeamNames: Record<TeamKey, string> = {
       ...defaultTeamNames,
       ...((setupState?.teamNames || remoteMatch?.teamNames || preMatch?.teamNames || {}) as Partial<Record<TeamKey, string>>),

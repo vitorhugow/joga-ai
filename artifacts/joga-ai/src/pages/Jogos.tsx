@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, SlidersHorizontal, Plus, X } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
-import { loadAvailableMatches, loadMyMatches, type MatchListing } from "@/lib/communityRepository";
+import { loadMyMatches, subscribeAvailableMatches, type MatchListing } from "@/lib/communityRepository";
 import { isListedInPublicBrowse } from "@/lib/matchAccess";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,9 +32,15 @@ export default function Jogos() {
 
   useEffect(() => {
     setLoadingMatches(true);
-    loadAvailableMatches(50, userId ?? undefined)
-      .then(setAllMatches)
-      .finally(() => setLoadingMatches(false));
+    const unsub = subscribeAvailableMatches(
+      (matches) => {
+        setAllMatches(matches);
+        setLoadingMatches(false);
+      },
+      50,
+      userId ?? undefined,
+    );
+    return unsub;
   }, [userId]);
 
   /** Partidas públicas de "Minhas" entram também em Descobrir (exceto privadas/comunidade). */

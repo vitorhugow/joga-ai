@@ -24,6 +24,7 @@ import { PlayerCard } from "@/components/PlayerCard";
 import { JogaLogo } from "@/components/brand";
 import { JogaCard, JogaChip, JogaPage, JogaButton } from "@/components/joga";
 import { SponsorSlot } from "@/components/SponsorSlot";
+import { InstallAppBanner } from "@/components/InstallAppBanner";
 
 const PITCH_SVG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Cpath d='M40 0 L40 80' stroke='rgba(255,255,255,0.03)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='18' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
@@ -580,6 +581,8 @@ export default function Home() {
         </div>
 
         <SponsorSlot />
+
+        <InstallAppBanner />
 
       </div>
     </JogaPage>

@@ -7,6 +7,7 @@ import { LoginPanel } from "@/components/auth/LoginPanel";
 import { PlayerCard } from "@/components/PlayerCard";
 import { JogaLogo } from "@/components/brand";
 import { JogaButton, JogaPage } from "@/components/joga";
+import { InstallAppBanner } from "@/components/InstallAppBanner";
 import { fadeUp } from "@/components/joga/motion";
 import {
   Dialog,
@@ -713,6 +714,10 @@ export default function Login() {
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} onSuccess={handleSuccess} />
 
       <HeroSection onLogin={openLogin} redirect={redirect} />
+
+      <div className="px-4 py-4 max-w-lg mx-auto w-full">
+        <InstallAppBanner />
+      </div>
 
       <div id="app">
         {FEATURE_SECTIONS.map((section) => (

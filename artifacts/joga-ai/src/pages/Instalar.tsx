@@ -58,7 +58,7 @@ export default function Instalar() {
   return (
     <JogaPage theme="dark" padded={false} bottomSpace>
       <div
-        className="relative overflow-hidden px-4 pt-6 pb-8"
+        className="relative overflow-hidden px-4 pt-6 pb-5"
         style={{ background: "linear-gradient(155deg, #031408 0%, #052010 28%, #0a5a1e 65%, #0d6826 100%)" }}
       >
         <div className="flex items-center gap-3 mb-4">
@@ -80,7 +80,7 @@ export default function Instalar() {
         </p>
       </div>
 
-      <div className="px-4 -mt-4 space-y-5">
+      <div className="px-4 pt-5 space-y-5">
         <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.05)" }}>
           <button
             type="button"

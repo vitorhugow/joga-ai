@@ -636,6 +636,14 @@ export default function PosJogo() {
       return;
     }
 
+    if (!profile.profileComplete) {
+      toast({
+        title: "Completa a tua carta primeiro",
+        description: "Precisas de terminar o perfil/carta para partilhar a evolução.",
+      });
+      return;
+    }
+
     const node = evolutionCardRef.current;
     if (!node) return;
     setShareEvolutionBusy(true);
@@ -1140,7 +1148,7 @@ export default function PosJogo() {
           variant="primary"
           size="lg"
           className="mt-4 gap-2"
-          disabled={shareEvolutionBusy || !profile.profileComplete}
+          disabled={shareEvolutionBusy}
           onClick={() => void shareEvolutionCard()}
         >
           Partilhar evolução

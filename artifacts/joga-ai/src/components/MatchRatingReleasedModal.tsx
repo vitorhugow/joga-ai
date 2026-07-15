@@ -41,6 +41,30 @@ function parseMatchIdFromEvoNotification(id: string): string {
   return id.replace(/^evo-/, "");
 }
 
+const SEEN_KEY_PREFIX = "joga:evo-seen:";
+
+/**
+ * Guarda síncrona em localStorage — sobrevive ao refresh, ao contrário do
+ * `shownRef` (useRef morre a cada reload) e sem depender da escrita
+ * assíncrona no Firestore ter chegado a tempo (`markNotificationRead` pode
+ * ainda estar em voo, ou falhar, quando o utilizador atualiza a página).
+ */
+function isSeenLocally(notifId: string): boolean {
+  try {
+    return localStorage.getItem(`${SEEN_KEY_PREFIX}${notifId}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markSeenLocally(notifId: string): void {
+  try {
+    localStorage.setItem(`${SEEN_KEY_PREFIX}${notifId}`, "1");
+  } catch {
+    /* localStorage indisponível — segue só com o Firestore */
+  }
+}
+
 /**
  * Popup celebrativo quando as notas da pelada são reveladas.
  * Dispara uma vez por notificação evo-{matchId} (priority popup).
@@ -52,9 +76,13 @@ export function MatchRatingReleasedModal() {
   const [queue, setQueue] = useState<RatingPopupPayload[]>([]);
   const shownRef = useRef<Set<string>>(new Set());
 
-  function markSeen(notifId: string) {
+  async function markSeen(notifId: string) {
     if (!userId) return;
-    void markNotificationRead(userId, notifId);
+    try {
+      await markNotificationRead(userId, notifId);
+    } catch (err) {
+      console.warn("[RatingModal] markSeen:", err);
+    }
   }
 
   useEffect(() => {
@@ -64,14 +92,21 @@ export function MatchRatingReleasedModal() {
 
     const unsub = subscribeToNotifications(userId, (items) => {
       const pending = items.filter(
-        (n) => isRatingPopupNotification(n) && !n.read && !shownRef.current.has(n.id),
+        (n) =>
+          isRatingPopupNotification(n) &&
+          !n.read &&
+          !shownRef.current.has(n.id) &&
+          !isSeenLocally(n.id),
       );
       if (pending.length === 0) return;
 
       pending.forEach((n) => {
         shownRef.current.add(n.id);
         markPopupNotificationShown(n.id);
-        markSeen(n.id);
+        // Guarda local ANTES de qualquer await — protege mesmo que o
+        // refresh aconteça antes de markNotificationRead chegar ao Firestore.
+        markSeenLocally(n.id);
+        void markSeen(n.id);
       });
 
       void Promise.all(
@@ -116,13 +151,13 @@ export function MatchRatingReleasedModal() {
     : undefined;
 
   function dismiss() {
-    if (current) markSeen(current.notification.id);
+    if (current) void markSeen(current.notification.id);
     setQueue((q) => q.slice(1));
   }
 
   function handleAction() {
     if (!current || !userId) return;
-    markSeen(current.notification.id);
+    void markSeen(current.notification.id);
     dismiss();
     setLocation(matchSummaryPath(current.matchId, { view: "summary" }));
   }

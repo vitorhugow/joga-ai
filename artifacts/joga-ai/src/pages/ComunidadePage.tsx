@@ -15,6 +15,7 @@ import {
   leaveCommunity,
   getJoinRequestStatus,
   isCommunityOrganizerPro,
+  isCommunityAdmin,
   type Community,
   type MatchListing,
   type CommunityMember,
@@ -39,7 +40,6 @@ import { loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository
 import { loadBlockedIds, filterBlocked } from "@/lib/blockRepository";
 import { ReportBlockActions } from "@/components/ReportBlockActions";
 import { MensalistaCard } from "@/components/MensalistaCard";
-import { isOrganizerProForCommunity } from "@/lib/entitlements";
 import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -202,7 +202,7 @@ export default function ComunidadePage() {
   }
 
   const isMember = community.isMember;
-  const isAdmin = community.adminId === userId;
+  const isAdmin = isCommunityAdmin(community, userId);
   const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
   const hasAccess = isMember || isAdmin;
   const coverSrc = imageDisplaySrc(
@@ -212,7 +212,9 @@ export default function ComunidadePage() {
     organizerProActive && community.branding?.primaryColor
       ? community.branding.primaryColor
       : undefined;
-  const orgPro = isOrganizerProForCommunity(profile?.entitlements, id);
+  // Clube PRO é da comunidade (via admin principal), não do perfil de quem
+  // vê — assim um admin adicional também vê o Dashboard já desbloqueado.
+  const orgPro = organizerProActive;
   const displayMemberCount = visibleMembers.length > 0 ? visibleMembers.length : community.memberCount;
 
   async function handleRequestJoin() {

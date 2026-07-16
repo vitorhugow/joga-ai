@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { ChevronLeft, Trash2, Camera } from "lucide-react";
 import {
@@ -10,6 +10,10 @@ import {
   updateCommunity,
   removeCommunityMember,
   deleteCommunity,
+  isCommunityAdmin,
+  isCommunityOrganizerPro,
+  addCommunityAdmin,
+  removeCommunityAdmin,
   CommunityCoverTooLargeError,
   type Community,
   type CommunityMember,
@@ -28,7 +32,8 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { isOrganizerProForCommunity } from "@/lib/entitlements";
+import { isOrganizerPro } from "@/lib/entitlements";
+import { relinkOrganizerProCommunity } from "@/lib/billing";
 import { ProFeatureBadge } from "@/components/ProFeatureBadge";
 import { ProUpgradeDialog } from "@/components/ProUpgradeDialog";
 import { saveCommunityClubSettings } from "@/lib/mensalistaRepository";
@@ -58,7 +63,7 @@ export default function ComunidadeConfiguracoes() {
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { profile } = useUserProfile();
+  const { profile, refresh } = useUserProfile();
   const [proDialogOpen, setProDialogOpen] = useState(false);
   const [mensalistaEnabled, setMensalistaEnabled] = useState(false);
   const [mensalistaPrice, setMensalistaPrice] = useState("10");
@@ -67,9 +72,21 @@ export default function ComunidadeConfiguracoes() {
   const [brandColor, setBrandColor] = useState("#16a34a");
   const [clubSaving, setClubSaving] = useState(false);
 
-  const orgPro = isOrganizerProForCommunity(profile?.entitlements, id);
+  // Clube PRO é uma propriedade da COMUNIDADE (via entitlements do admin
+  // principal), não do perfil de quem está a ver — isto é o que permite a um
+  // admin adicional ver as features de Clube PRO já desbloqueadas mesmo sem
+  // ter entitlements próprios (só o admin principal herda o Jogador PRO
+  // pessoal; o Clube PRO em si é partilhado por todos os admins).
+  const [orgPro, setOrgPro] = useState(false);
+  const relinkAttempted = useRef(false);
 
-  const isAdmin = community?.adminId === userId;
+  const isAdmin = isCommunityAdmin(community, userId);
+  const isPrimaryAdmin = community?.adminId === userId;
+
+  const refreshOrgPro = useCallback(() => {
+    if (!id) return;
+    void isCommunityOrganizerPro(id).then(setOrgPro);
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -94,6 +111,28 @@ export default function ComunidadeConfiguracoes() {
     loadCommunityMembers(id).then(setMembers);
     loadPendingJoinRequests(id).then(setPending);
   }, [id, userId]);
+
+  useEffect(() => {
+    refreshOrgPro();
+  }, [refreshOrgPro]);
+
+  // Auto-reparação: o admin PRINCIPAL tem Clube PRO activo mas não ligado a
+  // ESTA comunidade — sintoma de um bug de webhook que apagava o vínculo em
+  // renovações. Como cada admin só tem uma subscrição Clube PRO de cada vez,
+  // realinha automaticamente em vez de deixar a conta "presa" a ver a
+  // feature como bloqueada.
+  useEffect(() => {
+    if (!isPrimaryAdmin || !id || relinkAttempted.current) return;
+    if (orgPro || !isOrganizerPro(profile?.entitlements)) return;
+
+    relinkAttempted.current = true;
+    void relinkOrganizerProCommunity(id).then((relinked) => {
+      if (relinked) {
+        void refresh();
+        refreshOrgPro();
+      }
+    });
+  }, [isPrimaryAdmin, id, orgPro, profile?.entitlements, refresh, refreshOrgPro]);
 
   if (!community) {
     return (
@@ -411,17 +450,56 @@ export default function ComunidadeConfiguracoes() {
 
       <JogaCard variant="arena" padding="md">
         <h2 className="font-display font-black text-white text-lg mb-3">Membros ({members.length})</h2>
+        <p className="text-white/40 text-xs mb-3 leading-relaxed">
+          Admins adicionais têm os mesmos poderes de gestão, mas só o admin principal
+          ({community.adminId === userId ? "tu" : "quem criou a comunidade"}) herda o Jogador PRO
+          pessoal do Clube PRO.
+        </p>
         <div className="space-y-2">
-          {members.map((m) => (
-            <div key={m.userId} className="flex items-center justify-between">
-              <span className="text-white text-sm">{m.displayName} {m.role === "admin" ? "(Admin)" : ""}</span>
-              {m.role !== "admin" && (
-                <JogaButton size="sm" variant="ghost" onClick={() => void removeCommunityMember(id, m.userId).then(() => loadCommunityMembers(id).then(setMembers))}>
-                  Remover
-                </JogaButton>
-              )}
-            </div>
-          ))}
+          {members.map((m) => {
+            const isPrimary = m.userId === community.adminId;
+            const isSecondaryAdmin = m.role === "admin" && !isPrimary;
+            return (
+              <div key={m.userId} className="flex items-center justify-between gap-2">
+                <span className="text-white text-sm">
+                  {m.displayName} {isPrimary ? "(Admin principal)" : isSecondaryAdmin ? "(Admin)" : ""}
+                </span>
+                <div className="flex gap-2 shrink-0">
+                  {isAdmin && !isPrimary && !isSecondaryAdmin && (
+                    <JogaButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        void addCommunityAdmin(id, m.userId, userId!)
+                          .then(() => loadCommunityMembers(id).then(setMembers))
+                          .catch((err) => toast({ title: err instanceof Error ? err.message : "Erro", variant: "destructive" }))
+                      }
+                    >
+                      Tornar admin
+                    </JogaButton>
+                  )}
+                  {isAdmin && isSecondaryAdmin && (
+                    <JogaButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        void removeCommunityAdmin(id, m.userId, userId!)
+                          .then(() => loadCommunityMembers(id).then(setMembers))
+                          .catch((err) => toast({ title: err instanceof Error ? err.message : "Erro", variant: "destructive" }))
+                      }
+                    >
+                      Remover admin
+                    </JogaButton>
+                  )}
+                  {!isPrimary && !isSecondaryAdmin && (
+                    <JogaButton size="sm" variant="ghost" onClick={() => void removeCommunityMember(id, m.userId).then(() => loadCommunityMembers(id).then(setMembers))}>
+                      Remover
+                    </JogaButton>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </JogaCard>
 

@@ -56,7 +56,7 @@ import {
 } from "@/lib/evolutionUtils";
 import { applyAuthToMatchData } from "@/lib/matchPlayerUtils";
 import { markNotificationRead } from "@/lib/notificationsRepository";
-import { loadCommunity } from "@/lib/communityRepository";
+import { loadCommunity, isCommunityAdmin as checkCommunityAdmin } from "@/lib/communityRepository";
 import { JogaButton, JogaCard, JogaEvolutionBadge, JogaHero, JogaPage } from "@/components/joga";
 import { PlayerCard } from "@/components/PlayerCard";
 import { EvolutionGainsSummary } from "@/components/EvolutionGainsSummary";
@@ -343,7 +343,7 @@ export default function PosJogo() {
     }
     let cancelled = false;
     void loadCommunity(communityId, userId).then((community) => {
-      if (!cancelled) setIsCommunityAdmin(Boolean(community?.adminId === userId));
+      if (!cancelled) setIsCommunityAdmin(checkCommunityAdmin(community, userId));
     });
     return () => {
       cancelled = true;

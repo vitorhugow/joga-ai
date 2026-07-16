@@ -476,12 +476,17 @@ export const updateCommunityClubSettings = onCall(
     const communitySnap = await communityRef.get();
     const community = communitySnap.data();
     if (!community) throw new HttpsError("not-found", "Comunidade não encontrada.");
-    if (community.adminId !== uid) {
-      throw new HttpsError("permission-denied", "Só o administrador pode alterar.");
+    const adminIds: string[] = Array.isArray(community.adminIds) ? community.adminIds : [];
+    if (community.adminId !== uid && !adminIds.includes(uid)) {
+      throw new HttpsError("permission-denied", "Só um administrador pode alterar.");
     }
 
-    const userSnap = await db.doc(`users/${uid}`).get();
-    const entitlements = userSnap.data()?.entitlements as Record<string, unknown> | undefined;
+    // Clube PRO é da comunidade (subscrição do admin PRINCIPAL) — um admin
+    // adicional não tem entitlements próprios, mas continua a poder gerir
+    // estas definições enquanto o clube em si estiver PRO.
+    const primaryAdminId = String(community.adminId ?? "");
+    const primaryAdminSnap = primaryAdminId ? await db.doc(`users/${primaryAdminId}`).get() : null;
+    const entitlements = primaryAdminSnap?.data()?.entitlements as Record<string, unknown> | undefined;
     if (!isOrganizerProOnCommunity(entitlements, communityId)) {
       throw new HttpsError("failed-precondition", "Requer Clube PRO activo nesta comunidade.");
     }

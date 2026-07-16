@@ -12,8 +12,9 @@ service cloud.firestore {
     }
 
     function isCommunityAdmin(communityId) {
+      let data = get(/databases/$(database)/documents/communities/$(communityId)).data;
       return isSignedIn()
-        && get(/databases/$(database)/documents/communities/$(communityId)).data.adminId == request.auth.uid;
+        && (data.adminId == request.auth.uid || request.auth.uid in data.get('adminIds', []));
     }
 
     function matchDoc(matchId) {
@@ -396,12 +397,14 @@ service cloud.firestore {
         && request.resource.data.adminId == request.auth.uid;
       allow update: if isSignedIn() && (
         resource.data.adminId == request.auth.uid
+        || request.auth.uid in resource.data.get('adminIds', [])
         || (
           !resource.data.isPrivate
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount'])
           && request.resource.data.memberCount == resource.data.memberCount + 1
         )
       );
+      // Apagar a comunidade fica só para o admin principal — é irreversível.
       allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid;
 
       match /members/{memberId} {

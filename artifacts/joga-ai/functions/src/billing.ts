@@ -211,6 +211,68 @@ export const createPortalSession = onCall(
   },
 );
 
+/**
+ * Repara o vínculo entre uma subscrição Clube PRO já activa e a comunidade
+ * administrada por quem chama — corrige contas afectadas por um bug em que
+ * eventos de subscrição sem `metadata.communityId` (renovação, alteração via
+ * portal) apagavam o `proCommunityId` mesmo com o Clube PRO continuado.
+ * Nunca concede Clube PRO a quem não o tem — só realinha um que já existe.
+ */
+export const relinkOrganizerProCommunity = onCall(
+  { ...callableBase() },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Inicia sessão.");
+    await assertRateLimit(uid, "relinkOrganizerProCommunity", 10, 60);
+
+    const communityId = typeof request.data?.communityId === "string"
+      ? request.data.communityId.trim()
+      : "";
+    if (!communityId) throw new HttpsError("invalid-argument", "communityId em falta.");
+
+    const db = getFirestore();
+    const communitySnap = await db.doc(`communities/${communityId}`).get();
+    if (!communitySnap.exists || communitySnap.data()?.adminId !== uid) {
+      throw new HttpsError("permission-denied", "Só o admin desta comunidade pode fazer isto.");
+    }
+
+    const userRef = db.doc(`users/${uid}`);
+    const userSnap = await userRef.get();
+    const entitlements = (userSnap.data()?.entitlements ?? {}) as Record<string, unknown>;
+    const organizerPro = readPlanSlotFromFirestore(entitlements, "organizerPro", "organizer_pro");
+
+    if (!isPlanSlotActive(organizerPro)) {
+      throw new HttpsError("failed-precondition", "Sem Clube PRO activo nesta conta.");
+    }
+    if (organizerPro.proCommunityId === communityId) {
+      return { relinked: false };
+    }
+
+    const nextOrganizerPro: PlanEntitlementSlot = { ...organizerPro, proCommunityId: communityId };
+    const currentProCommunities = (entitlements.proCommunities ?? {}) as Record<string, unknown>;
+    const nextProCommunities = {
+      ...currentProCommunities,
+      [communityId]: { proUntil: organizerPro.proUntil, subscriptionId: organizerPro.subscriptionId },
+    };
+
+    await userRef.set(
+      {
+        entitlements: {
+          ...entitlements,
+          organizerPro: nextOrganizerPro,
+          proCommunityId: communityId,
+          proCommunities: nextProCommunities,
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    console.log(`[relinkOrganizerProCommunity] ${uid} -> ${communityId}`);
+    return { relinked: true };
+  },
+);
+
 /** Concede/atualiza/revoga entitlements a partir da subscrição */
 type PlanEntitlementSlot = {
   active: boolean;
@@ -260,7 +322,7 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
     return;
   }
   const plan: Plan = sub.metadata?.plan === "organizer_pro" ? "organizer_pro" : "player_pro";
-  const communityId = typeof sub.metadata?.communityId === "string"
+  const rawCommunityId = typeof sub.metadata?.communityId === "string"
     ? sub.metadata.communityId
     : "";
   const active = sub.status === "active" || sub.status === "trialing";
@@ -277,6 +339,14 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
       ? readPlanSlotFromFirestore(current, "organizerPro", "organizer_pro")
       : readPlanSlotFromFirestore(current, "playerPro", "player_pro");
   const wasActive = isPlanSlotActive(previousSlot);
+
+  // Eventos de subscrição subsequentes (renovação, alteração via portal) nem
+  // sempre trazem `metadata.communityId` na subscrição — sem isto, cada
+  // renovação apagava silenciosamente o vínculo à comunidade mesmo com a
+  // subscrição continuada, e o Clube PRO ficava "activo" mas sem a comunidade
+  // certa associada (mensalistas e outras features com gate por comunidade
+  // ficavam bloqueadas para quem já era Clube PRO há mais tempo).
+  const communityId = rawCommunityId || (plan === "organizer_pro" ? (previousSlot.proCommunityId ?? "") : "");
 
   const updatedSlot: PlanEntitlementSlot = {
     active,
@@ -317,6 +387,25 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
     entitlements.proCommunityId = organizerPro.proCommunityId;
   }
 
+  // IMPORTANTE: `proCommunities` tem de viver DENTRO de `entitlements` — é o
+  // único sítio que o cliente lê (isOrganizerProForCommunity em
+  // entitlements.ts). Escrever num campo `proCommunities` ao nível da raiz do
+  // documento (sibling de `entitlements`) é uma escrita morta que nunca é
+  // lida por ninguém. Mesclado manualmente com o que já existia — um `set`
+  // com merge não mescla objetos aninhados passados por valor, só substitui.
+  const currentProCommunities = (current.proCommunities ?? {}) as Record<string, unknown>;
+  if (plan === "organizer_pro" && communityId) {
+    const nextProCommunities = { ...currentProCommunities };
+    if (active) {
+      nextProCommunities[communityId] = { proUntil, subscriptionId: sub.id };
+    } else {
+      delete nextProCommunities[communityId];
+    }
+    entitlements.proCommunities = nextProCommunities;
+  } else if (Object.keys(currentProCommunities).length > 0) {
+    entitlements.proCommunities = currentProCommunities;
+  }
+
   const patch: Record<string, unknown> = {
     entitlements,
     stripeSubscriptionId: sub.id,
@@ -324,9 +413,6 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   };
 
   if (plan === "organizer_pro" && communityId) {
-    patch[`proCommunities.${communityId}`] = active
-      ? { proUntil, subscriptionId: sub.id }
-      : FieldValue.delete();
     if (active) {
       await db.doc(`communities/${communityId}`).set(
         {

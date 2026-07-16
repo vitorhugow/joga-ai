@@ -58,7 +58,10 @@ export type Community = {
   memberCount: number;
   coverImage?: string;
   coverUrl?: string;
+  /** Admin principal — dono da subscrição Clube PRO (só ele herda o Jogador PRO pessoal). */
   adminId?: string;
+  /** Admins adicionais — mesmos poderes de gestão, sem herdar Jogador PRO pessoal. */
+  adminIds?: string[];
   proActive?: boolean;
   openToExternal?: boolean;
   mensalista?: {
@@ -181,6 +184,7 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
         coverImage: data.coverImage ? String(data.coverImage) : undefined,
         coverUrl: data.coverUrl ? String(data.coverUrl) : undefined,
         adminId: data.adminId,
+        adminIds: Array.isArray(data.adminIds) ? data.adminIds.map(String) : undefined,
         proActive: data.proActive === true,
         openToExternal: data.openToExternal === true,
         mensalista: data.mensalista,
@@ -188,7 +192,9 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
         createdAt: data.createdAt && typeof data.createdAt.toDate === "function"
           ? data.createdAt.toDate().toISOString()
           : undefined,
-        isMember: memberIds.has(d.id) || (userId ? data.adminId === userId : false),
+        isMember:
+          memberIds.has(d.id) ||
+          (userId ? data.adminId === userId || (Array.isArray(data.adminIds) && data.adminIds.includes(userId)) : false),
         joinPending: pendingIds.has(d.id),
       } as Community & { joinPending?: boolean };
     }).sort((a, b) => {
@@ -223,6 +229,7 @@ function mapCommunityDoc(
     coverImage: data.coverImage ? String(data.coverImage) : undefined,
     coverUrl: data.coverUrl ? String(data.coverUrl) : undefined,
     adminId: data.adminId ? String(data.adminId) : undefined,
+    adminIds: Array.isArray(data.adminIds) ? data.adminIds.map(String) : undefined,
     isMember,
     proActive: data.proActive === true,
     openToExternal: data.openToExternal === true,
@@ -263,7 +270,7 @@ export async function loadMyCommunities(userId: string): Promise<Community[]> {
 
     for (const communityDoc of allSnap.docs) {
       const data = communityDoc.data();
-      const isAdmin = data.adminId === userId;
+      const isAdmin = data.adminId === userId || (Array.isArray(data.adminIds) && data.adminIds.includes(userId));
       if (memberIds.has(communityDoc.id) || isAdmin) {
         byId.set(communityDoc.id, mapCommunityDoc(communityDoc.id, data));
       }
@@ -392,7 +399,9 @@ export async function loadCommunity(
         data as Record<string, unknown>,
         isMemberDirect ||
           memberIds.has(snap.id) ||
-          (userId ? data.adminId === userId : false),
+          (userId
+            ? data.adminId === userId || (Array.isArray(data.adminIds) && data.adminIds.includes(userId))
+            : false),
       ),
       joinPending: pendingIds.has(snap.id),
     };
@@ -682,16 +691,98 @@ export async function updateCommunity(
   await updateDoc(communityRef, patch);
 }
 
+/** Admin principal ou adicional — mesmos poderes de gestão (ver isCommunityOrganizerPro para o dono do Clube PRO). */
+export function isCommunityAdmin(
+  community: Pick<Community, "adminId" | "adminIds"> | null | undefined,
+  userId: string | null | undefined,
+): boolean {
+  if (!community || !userId) return false;
+  return community.adminId === userId || Boolean(community.adminIds?.includes(userId));
+}
+
 export async function leaveCommunity(communityId: string, userId: string): Promise<void> {
   if (!isFirebaseConfigured() || !userId) throw new Error("Firebase não configurado");
 
   const communitySnap = await getDoc(doc(db, "communities", communityId));
   if (!communitySnap.exists()) return;
-  if (communitySnap.data().adminId === userId) {
+  const data = communitySnap.data();
+  if (data.adminId === userId) {
     throw new Error("O administrador não pode sair — transfere ou apaga a comunidade.");
+  }
+  if (Array.isArray(data.adminIds) && data.adminIds.includes(userId)) {
+    throw new Error("Remove-te como admin antes de sair da comunidade.");
   }
 
   await removeCommunityMember(communityId, userId);
+}
+
+/**
+ * Adiciona um admin adicional — mesmos poderes de gestão do admin principal,
+ * mas NUNCA herda o Jogador PRO pessoal do Clube PRO (isso fica só para
+ * `adminId`, o dono da subscrição). Só um admin existente pode adicionar.
+ */
+export async function addCommunityAdmin(
+  communityId: string,
+  targetUserId: string,
+  actorUserId: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const communityRef = doc(db, "communities", communityId);
+  const communitySnap = await getDoc(communityRef);
+  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada.");
+
+  const data = communitySnap.data();
+  if (!isCommunityAdmin({ adminId: data.adminId, adminIds: data.adminIds }, actorUserId)) {
+    throw new Error("Só um admin pode adicionar outro admin.");
+  }
+  if (data.adminId === targetUserId) return;
+
+  const members = await loadCommunityMembers(communityId);
+  if (!members.some((m) => m.userId === targetUserId)) {
+    throw new Error("A pessoa tem de ser membro da comunidade primeiro.");
+  }
+
+  const currentAdminIds: string[] = Array.isArray(data.adminIds) ? data.adminIds : [];
+  if (currentAdminIds.includes(targetUserId)) return;
+
+  await updateDoc(communityRef, { adminIds: [...currentAdminIds, targetUserId] });
+  await setDoc(
+    doc(db, "communities", communityId, "members", targetUserId),
+    { role: "admin" },
+    { merge: true },
+  );
+}
+
+/** Remove um admin adicional (nunca o admin principal — isso é transferência/apagar). */
+export async function removeCommunityAdmin(
+  communityId: string,
+  targetUserId: string,
+  actorUserId: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const communityRef = doc(db, "communities", communityId);
+  const communitySnap = await getDoc(communityRef);
+  if (!communitySnap.exists()) return;
+
+  const data = communitySnap.data();
+  if (data.adminId === targetUserId) {
+    throw new Error("O administrador principal não pode ser removido assim.");
+  }
+  if (!isCommunityAdmin({ adminId: data.adminId, adminIds: data.adminIds }, actorUserId)) {
+    throw new Error("Só um admin pode remover outro admin.");
+  }
+
+  const currentAdminIds: string[] = Array.isArray(data.adminIds) ? data.adminIds : [];
+  await updateDoc(communityRef, {
+    adminIds: currentAdminIds.filter((id) => id !== targetUserId),
+  });
+  await setDoc(
+    doc(db, "communities", communityId, "members", targetUserId),
+    { role: "member" },
+    { merge: true },
+  );
 }
 
 export async function removeCommunityMember(

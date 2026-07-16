@@ -101,3 +101,26 @@ export async function openBillingPortal(): Promise<void> {
     });
   }
 }
+
+/**
+ * Repara o vínculo entre uma subscrição Clube PRO já activa e a comunidade —
+ * corrige contas afectadas por um bug em que renovações/alterações via
+ * portal apagavam o `proCommunityId` mesmo com o Clube PRO continuado.
+ * Silencioso: não mostra toast, só devolve se relinkou (para quem chama
+ * decidir se vale a pena recarregar o perfil).
+ */
+export async function relinkOrganizerProCommunity(communityId: string): Promise<boolean> {
+  if (!isFirebaseConfigured() || !communityId) return false;
+  try {
+    const functions = getFunctions(app, "europe-west1");
+    const relink = httpsCallable<{ communityId: string }, { relinked: boolean }>(
+      functions,
+      "relinkOrganizerProCommunity",
+    );
+    const result = await relink({ communityId });
+    return result.data?.relinked === true;
+  } catch (err) {
+    console.warn("[billing] relinkOrganizerProCommunity:", err);
+    return false;
+  }
+}

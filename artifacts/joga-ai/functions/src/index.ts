@@ -13,6 +13,7 @@ initializeApp();
 export {
   createCheckoutSession,
   createPortalSession,
+  relinkOrganizerProCommunity,
   stripeWebhook,
   createConnectOnboarding,
   createPeladaCheckout,

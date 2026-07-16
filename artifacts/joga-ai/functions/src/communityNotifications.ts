@@ -24,19 +24,25 @@ export const onJoinRequestCreatedNotifyAdmin = onDocumentCreated(
     if (!community) return;
 
     const adminId = String(community.adminId ?? "");
-    if (!adminId) return;
+    const adminIds: string[] = Array.isArray(community.adminIds) ? community.adminIds : [];
+    const targets = [...new Set([adminId, ...adminIds].filter(Boolean))];
+    if (targets.length === 0) return;
 
     const displayName = String(request.displayName ?? "Jogador");
     const communityName = String(community.name ?? "comunidade");
 
-    await notifyUser(adminId, {
-      id: `joinreq-${communityId}-${userId}`,
-      type: "community",
-      priority: "center",
-      title: "Novo pedido de adesão",
-      body: `${displayName} quer entrar em «${communityName}».`,
-      link: `/comunidades/${communityId}`,
-    });
+    await Promise.all(
+      targets.map((target) =>
+        notifyUser(target, {
+          id: `joinreq-${communityId}-${userId}`,
+          type: "community",
+          priority: "center",
+          title: "Novo pedido de adesão",
+          body: `${displayName} quer entrar em «${communityName}».`,
+          link: `/comunidades/${communityId}`,
+        }),
+      ),
+    );
   },
 );
 

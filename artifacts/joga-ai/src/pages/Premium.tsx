@@ -2,7 +2,7 @@ import { Crown, Sparkles, Share2, BarChart3, Star, History, TrendingUp, Check } 
 import { startCheckout, openBillingPortal, type BillingInterval } from "@/lib/billing";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAuth } from "@/contexts/AuthContext";
-import { isProActive } from "@/lib/entitlements";
+import { isProActive, hasPlayerPro, isOrganizerPro } from "@/lib/entitlements";
 import { loadMyCommunities, type Community } from "@/lib/communityRepository";
 import { useEffect, useRef, useState } from "react";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -137,6 +137,11 @@ export default function Premium() {
   const { userId } = useAuth();
   const { profile, refresh } = useUserProfile();
   const pro = isProActive(profile?.entitlements);
+  const hasPlayer = hasPlayerPro(profile?.entitlements);
+  const hasOrganizer = isOrganizerPro(profile?.entitlements);
+  const showClubeCard = !hasOrganizer;
+  const showJogadorCard = !hasPlayer;
+  const showPlansSection = showClubeCard || showJogadorCard;
   const proUntil = profile?.entitlements?.proUntil;
   const proCommunityId = profile?.entitlements?.proCommunityId;
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
@@ -150,7 +155,18 @@ export default function Premium() {
   const [successPlan, setSuccessPlan] = useState<EntitlementPlan | null>(null);
   const [activatingPlan, setActivatingPlan] = useState<EntitlementPlan | null>(null);
   const checkoutHandled = useRef(false);
+  const subscriptionPanelRef = useRef<HTMLDivElement>(null);
   useDocumentTitle("Premium");
+
+  // Quem já tem PRO Jogador + Clube PRO não tem mais nenhum plano para ver —
+  // ao entrar em /premium (ex.: clicar em "Premium" no topo), vai direto para
+  // a gestão da assinatura em vez de scrollar por planos que não pode comprar.
+  useEffect(() => {
+    if (!showPlansSection && pro) {
+      subscriptionPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPlansSection, pro]);
 
   useEffect(() => {
     if (!userId) return;
@@ -345,6 +361,7 @@ export default function Premium() {
         ═══════════════════════════════ */}
         {showSubscription && (
           <div
+            ref={subscriptionPanelRef}
             className="rounded-3xl p-5 mb-4"
             style={{ background: "rgba(251,191,36,0.08)", border: "1.5px solid rgba(251,191,36,0.35)" }}
             data-testid="subscription-panel"
@@ -376,10 +393,12 @@ export default function Premium() {
           </div>
         )}
 
+        {showPlansSection && (
         <div>
           <h2 className="font-display font-black text-white text-lg mb-4">Escolhe o Teu Plano</h2>
 
           {/* Annual — highlighted */}
+          {showClubeCard && (
           <div
             className="relative rounded-3xl overflow-hidden mb-3"
             style={{ background: "linear-gradient(145deg, #1a1000, #2a1900, #1f1500)", border: "1.5px solid rgba(251,191,36,0.4)", boxShadow: "0 8px 32px rgba(251,191,36,0.15)" }}
@@ -444,8 +463,10 @@ export default function Premium() {
               />
             </div>
           </div>
+          )}
 
           {/* PRO Jogador */}
+          {showJogadorCard && (
           <div
             className="rounded-3xl overflow-hidden"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
@@ -476,7 +497,9 @@ export default function Premium() {
               />
             </div>
           </div>
+          )}
         </div>
+        )}
 
         {/* Disclaimer */}
         <div className="text-center pb-4 px-4">

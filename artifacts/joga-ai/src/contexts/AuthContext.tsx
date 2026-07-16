@@ -92,42 +92,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onUserChanged(async (user) => {
-      if (!bootstrappedRef.current) {
-        bootstrappedRef.current = true;
-        await handleGoogleRedirectResult();
-        if (!auth.currentUser && !user) {
-          await signInAnonymousSession();
-          return;
+    const unsubscribe = onUserChanged((user) => {
+      void (async () => {
+        if (!bootstrappedRef.current) {
+          bootstrappedRef.current = true;
+          await handleGoogleRedirectResult();
+          if (!auth.currentUser && !user) {
+            await signInAnonymousSession();
+            return;
+          }
         }
-      }
 
-      const current = auth.currentUser ?? user;
-      if (current && !current.isAnonymous) {
-        await migrateLocalProfileIfNeeded(localUserIdRef.current, current.uid);
-        void processPendingRatings(current.uid);
-        void processPendingNotifications(current.uid);
+        const current = auth.currentUser ?? user;
 
-        const pendingClaim = consumePendingGuestClaim();
-        if (pendingClaim) {
-          const token = parseGuestClaimParam(pendingClaim);
+        // Actualiza o estado de auth IMEDIATAMENTE. `waitForAccountLinked()`
+        // (usado pelo LoginPanel para saber quando fechar/navegar após o
+        // login) resolve através do seu PRÓPRIO onAuthStateChanged, mais
+        // rápido do que este — se os efeitos secundários abaixo (migração de
+        // perfil local, notificações pendentes) corressem ANTES do setState,
+        // a app navegava para a página seguinte ainda a mostrar "sem sessão"
+        // até um refresh manual.
+        setState(applyUserState(current, localUserIdRef.current));
+
+        if (current && !current.isAnonymous) {
+          void migrateLocalProfileIfNeeded(localUserIdRef.current, current.uid);
+          void processPendingRatings(current.uid);
+          void processPendingNotifications(current.uid);
+
+          const pendingClaim = consumePendingGuestClaim();
+          if (pendingClaim) {
+            const token = parseGuestClaimParam(pendingClaim);
+            if (token) {
+              void claimGuestCard(current.uid, token);
+            }
+          }
+        }
+
+        const claimParam = new URLSearchParams(window.location.search).get("claim");
+        if (current && !current.isAnonymous && claimParam?.startsWith("guest-")) {
+          const token = parseGuestClaimParam(claimParam);
           if (token) {
             void claimGuestCard(current.uid, token);
           }
+        } else if (claimParam?.startsWith("guest-")) {
+          storePendingGuestClaim(claimParam);
         }
-      }
-
-      const claimParam = new URLSearchParams(window.location.search).get("claim");
-      if (current && !current.isAnonymous && claimParam?.startsWith("guest-")) {
-        const token = parseGuestClaimParam(claimParam);
-        if (token) {
-          void claimGuestCard(current.uid, token);
-        }
-      } else if (claimParam?.startsWith("guest-")) {
-        storePendingGuestClaim(claimParam);
-      }
-
-      setState(applyUserState(current, localUserIdRef.current));
+      })();
     });
 
     return unsubscribe;

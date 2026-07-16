@@ -16,6 +16,8 @@ import {
   getJoinRequestStatus,
   isCommunityOrganizerPro,
   isCommunityAdmin,
+  createCommunityInvite,
+  joinCommunityViaInvite,
   type Community,
   type MatchListing,
   type CommunityMember,
@@ -25,11 +27,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
-import { loadCommunityMatchResults, type MatchResult } from "@/lib/matchHistoryRepository";
+import { loadCommunityMatchResults, type MatchResult, type MatchPlayerResult } from "@/lib/matchHistoryRepository";
 import { generateMatchNarrative } from "@/lib/matchNarrative";
 import { RankingList } from "@/components/RankingList";
 import {
   loadCommunityPlayerStats,
+  loadCommunityPlayerStatsForPeriod,
   computeLeaderboard,
   loadCommunityRivalries,
   type CommunityPlayerStats,
@@ -60,6 +63,32 @@ function parseCommunityTab(): CommunityTab {
   return COMMUNITY_TABS.includes(tab as CommunityTab) ? (tab as CommunityTab) : "partidas";
 }
 
+const MATCH_RANKING_LABELS: Record<"goals" | "assists" | "saves" | "rating", string> = {
+  goals: "golos",
+  assists: "assist.",
+  saves: "defesas",
+  rating: "nota",
+};
+
+/** Ranking dos jogadores de UMA partida (goals/assists/saves/rating). */
+function buildMatchRanking(
+  players: MatchPlayerResult[],
+  metric: "goals" | "assists" | "saves" | "rating",
+) {
+  const valueLabel = MATCH_RANKING_LABELS[metric];
+  return [...players]
+    .filter((p) => (metric === "rating" ? p.rating > 0 : true))
+    .sort((a, b) => b[metric] - a[metric])
+    .map((p, index) => ({
+      rank: index + 1,
+      name: p.name,
+      position: "MEM",
+      overall: Math.round(p.rating * 10) || 50,
+      value: metric === "rating" ? p.rating.toFixed(1) : p[metric],
+      valueLabel,
+    }));
+}
+
 export default function ComunidadePage() {
   const { requireLinked } = useAuthGate();
   const { userId, isLinked } = useAuth();
@@ -67,6 +96,9 @@ export default function ComunidadePage() {
   const [, params] = useRoute("/comunidades/:id");
   const [activeTab, setActiveTab] = useState<CommunityTab>(parseCommunityTab);
   const id = params?.id || "";
+  const inviteToken = new URLSearchParams(window.location.search).get("invite") || "";
+  const [invitingBusy, setInvitingBusy] = useState(false);
+  const [acceptingInvite, setAcceptingInvite] = useState(false);
 
   function selectTab(tab: CommunityTab) {
     setActiveTab(tab);
@@ -88,6 +120,9 @@ export default function ComunidadePage() {
   const [results, setResults] = useState<MatchResult[]>([]);
   const [joining, setJoining] = useState(false);
   const [playerStats, setPlayerStats] = useState<CommunityPlayerStats[]>([]);
+  const [monthlyPlayerStats, setMonthlyPlayerStats] = useState<CommunityPlayerStats[]>([]);
+  const [leaguePeriod, setLeaguePeriod] = useState<"month" | "season">("month");
+  const [showLastMatchRanking, setShowLastMatchRanking] = useState(false);
   const [rivalries, setRivalries] = useState<Awaited<ReturnType<typeof loadCommunityRivalries>>>([]);
   const [duelTargetId, setDuelTargetId] = useState<string>("");
   const [memberProfiles, setMemberProfiles] = useState<Map<string, PublicUserProfile>>(new Map());
@@ -124,6 +159,7 @@ export default function ComunidadePage() {
       void loadCommunityMatchResults(id).then(setResults);
     });
     loadCommunityPlayerStats(id).then(setPlayerStats);
+    loadCommunityPlayerStatsForPeriod(id, "month").then(setMonthlyPlayerStats);
     if (userId) {
       loadCommunityRivalries(id, userId).then(setRivalries);
     }
@@ -185,6 +221,13 @@ export default function ComunidadePage() {
     () => filterBlocked(playerStats, blockedIds),
     [playerStats, blockedIds],
   );
+
+  const visibleMonthlyPlayerStats = useMemo(
+    () => filterBlocked(monthlyPlayerStats, blockedIds),
+    [monthlyPlayerStats, blockedIds],
+  );
+
+  const visibleLeagueStats = leaguePeriod === "month" ? visibleMonthlyPlayerStats : visiblePlayerStats;
 
   const visibleRivalries = useMemo(
     () =>
@@ -256,6 +299,54 @@ export default function ComunidadePage() {
       toast({ title: "Erro ao entrar", variant: "destructive" });
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function handleAcceptInvite() {
+    if (!requireLinked({ mode: "register", title: "Cria conta para aceitar o convite" })) {
+      return;
+    }
+    if (!community || isMember || isAdmin || !inviteToken) return;
+
+    setAcceptingInvite(true);
+    try {
+      await joinCommunityViaInvite(id, inviteToken, userId, profile.displayName || "Jogador");
+      await refreshCommunity();
+      loadCommunityMembers(id).then(setMembers);
+      trackEvent("community_join_via_invite", { communityId: id });
+      toast({ title: "Entraste na comunidade!", description: `Bem-vindo a ${community.name}.` });
+    } catch (err) {
+      toast({
+        title: "Não foi possível aceitar o convite",
+        description: err instanceof Error ? err.message : "Tenta outra vez.",
+        variant: "destructive",
+      });
+    } finally {
+      setAcceptingInvite(false);
+    }
+  }
+
+  async function handleInvitePlayers() {
+    if (!userId) return;
+    setInvitingBusy(true);
+    try {
+      const token = await createCommunityInvite(id, userId);
+      const url = `${window.location.origin}/comunidades/${id}?invite=${token}`;
+      if (navigator.share) {
+        await navigator.share({ title: `Junta-te a ${community?.name ?? "esta comunidade"}`, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast({ title: "Link copiado!", description: "Partilha com quem quiseres convidar." });
+      }
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      toast({
+        title: "Não foi possível criar o convite",
+        description: err instanceof Error ? err.message : "Tenta outra vez.",
+        variant: "destructive",
+      });
+    } finally {
+      setInvitingBusy(false);
     }
   }
 
@@ -379,6 +470,16 @@ export default function ComunidadePage() {
             <Link href={`/comunidades/${id}/configuracoes`} className="flex-1">
               <JogaButton variant="ghost" size="sm" className="w-full">⚙️ Configurar</JogaButton>
             </Link>
+            <JogaButton
+              variant="ghost"
+              size="sm"
+              className="flex-1"
+              disabled={invitingBusy}
+              onClick={() => void handleInvitePlayers()}
+              data-testid="button-invite-players"
+            >
+              👥 Convidar
+            </JogaButton>
             {orgPro && (
               <Link href={`/comunidades/${id}/dashboard`} className="flex-1">
                 <JogaButton
@@ -443,7 +544,24 @@ export default function ComunidadePage() {
           </JogaButton>
         )}
 
-        {!isMember && !isAdmin && isLinked && (
+        {!isMember && !isAdmin && inviteToken && (
+          <JogaCard variant="arena" padding="md" className="border-emerald-400/25 bg-emerald-400/8">
+            <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-widest">Convite</p>
+            <p className="text-white text-sm mt-1">Foste convidado para esta comunidade.</p>
+            <JogaButton
+              variant="primary"
+              size="lg"
+              className="w-full mt-3"
+              disabled={acceptingInvite}
+              onClick={() => void handleAcceptInvite()}
+              data-testid="button-accept-invite"
+            >
+              Aceitar convite e entrar
+            </JogaButton>
+          </JogaCard>
+        )}
+
+        {!isMember && !isAdmin && isLinked && !inviteToken && (
           <JogaButton
             variant="primary"
             size="lg"
@@ -459,7 +577,7 @@ export default function ComunidadePage() {
           </JogaButton>
         )}
 
-        {!isLinked && (
+        {!isLinked && !inviteToken && (
           <JogaButton
             variant="primary"
             size="lg"
@@ -510,7 +628,7 @@ export default function ComunidadePage() {
             {results.length === 0 ? (
               <p className="text-white/40 text-sm text-center py-8">Sem resultados registados.</p>
             ) : (
-              results.map((r) => (
+              results.map((r, index) => (
                 <JogaCard key={r.matchId} variant="arena">
                   <p className="font-display font-black text-white">{r.title}</p>
                   <p className="text-white/40 text-xs mt-1">
@@ -532,6 +650,30 @@ export default function ComunidadePage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Ranking completo da partida — só disponível para a última
+                      (mais recente). Partidas mais antigas não mostram o botão. */}
+                  {index === 0 && (
+                    <>
+                      <JogaButton
+                        variant="ghost"
+                        size="sm"
+                        className="w-full mt-3"
+                        onClick={() => setShowLastMatchRanking((v) => !v)}
+                        data-testid="button-toggle-match-ranking"
+                      >
+                        {showLastMatchRanking ? "Fechar ranking da partida" : "Ver ranking da partida"}
+                      </JogaButton>
+                      {showLastMatchRanking && (
+                        <div className="mt-3 space-y-3">
+                          <RankingList title="Golos" entries={buildMatchRanking(r.players, "goals")} />
+                          <RankingList title="Assistências" entries={buildMatchRanking(r.players, "assists")} />
+                          <RankingList title="Defesas" entries={buildMatchRanking(r.players, "saves")} />
+                          <RankingList title="Notas" entries={buildMatchRanking(r.players, "rating")} />
+                        </div>
+                      )}
+                    </>
+                  )}
                 </JogaCard>
               ))
             )}
@@ -540,25 +682,42 @@ export default function ComunidadePage() {
 
         {hasAccess && activeTab === "liga" && (
           <div className="space-y-4">
-            {visiblePlayerStats.length === 0 ? (
-              <p className="text-white/40 text-sm text-center py-8">Sem dados de liga ainda.</p>
+            <div className="flex gap-2">
+              <JogaChip
+                label="Liga mensal"
+                active={leaguePeriod === "month"}
+                onClick={() => setLeaguePeriod("month")}
+                testId="liga-tab-mensal"
+              />
+              <JogaChip
+                label="Liga época"
+                active={leaguePeriod === "season"}
+                onClick={() => setLeaguePeriod("season")}
+                testId="liga-tab-epoca"
+              />
+            </div>
+
+            {visibleLeagueStats.length === 0 ? (
+              <p className="text-white/40 text-sm text-center py-8">
+                {leaguePeriod === "month" ? "Sem jogos este mês ainda." : "Sem dados de liga ainda."}
+              </p>
             ) : (
               <>
                 <RankingList
                   title="Golos"
-                  entries={computeLeaderboard(visiblePlayerStats, "goals")}
+                  entries={computeLeaderboard(visibleLeagueStats, "goals")}
                 />
                 <RankingList
                   title="Assistências"
-                  entries={computeLeaderboard(visiblePlayerStats, "assists")}
+                  entries={computeLeaderboard(visibleLeagueStats, "assists")}
                 />
                 <RankingList
                   title="Nota média"
-                  entries={computeLeaderboard(visiblePlayerStats, "avgRating")}
+                  entries={computeLeaderboard(visibleLeagueStats, "avgRating")}
                 />
                 <RankingList
                   title="MVP"
-                  entries={computeLeaderboard(visiblePlayerStats, "mvp")}
+                  entries={computeLeaderboard(visibleLeagueStats, "mvp")}
                 />
               </>
             )}

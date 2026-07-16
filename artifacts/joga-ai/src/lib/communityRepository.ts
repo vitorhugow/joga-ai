@@ -648,6 +648,72 @@ export async function joinCommunityPublic(
   await updateDoc(doc(db, "communities", communityId), { memberCount: count + 1 });
 }
 
+function generateInviteToken(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Cria um convite reutilizável para a comunidade — quem abrir o link entra
+ * automaticamente (mesmo em comunidades privadas), sem esperar aprovação.
+ * Só um admin pode criar. O token nunca expira nem é single-use por omissão:
+ * é pensado para partilhar num grupo (WhatsApp, etc.), não para 1 pessoa só.
+ */
+export async function createCommunityInvite(
+  communityId: string,
+  actorUserId: string,
+): Promise<string> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const communitySnap = await getDoc(doc(db, "communities", communityId));
+  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada.");
+  const data = communitySnap.data();
+  if (!isCommunityAdmin({ adminId: data.adminId, adminIds: data.adminIds }, actorUserId)) {
+    throw new Error("Só um admin pode criar convites.");
+  }
+
+  const token = generateInviteToken();
+  await setDoc(doc(db, "communities", communityId, "invites", token), {
+    createdBy: actorUserId,
+    createdAt: serverTimestamp(),
+  });
+
+  return token;
+}
+
+/** Entra na comunidade através de um link de convite — ignora isPrivate. */
+export async function joinCommunityViaInvite(
+  communityId: string,
+  token: string,
+  userId: string,
+  displayName: string,
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+  if (!token) throw new Error("Convite inválido.");
+
+  const inviteSnap = await getDoc(doc(db, "communities", communityId, "invites", token));
+  if (!inviteSnap.exists()) throw new Error("Este convite não é válido.");
+
+  const communitySnap = await getDoc(doc(db, "communities", communityId));
+  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada.");
+
+  const memberRef = doc(db, "communities", communityId, "members", userId);
+  const existing = await getDoc(memberRef);
+  if (existing.exists()) return;
+
+  await setDoc(memberRef, {
+    userId,
+    displayName: displayName.trim() || "Jogador",
+    role: "member",
+    joinedAt: serverTimestamp(),
+    inviteToken: token,
+  });
+
+  const count = Number(communitySnap.data().memberCount ?? 0);
+  await updateDoc(doc(db, "communities", communityId), { memberCount: count + 1 });
+}
+
 export async function updateCommunity(
   communityId: string,
   input: UpdateCommunityInput,

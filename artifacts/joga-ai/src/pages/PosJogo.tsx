@@ -35,7 +35,9 @@ import {
   hasVoteEvolutionApplied,
   hasParticipationApplied,
   loadMatchResult,
+  type MatchResult,
 } from "@/lib/matchHistoryRepository";
+import { NotesPodium } from "@/components/NotesPodium";
 import { getVotes } from "@/lib/auditRepository";
 import {
   buildMatchResultPayload,
@@ -274,6 +276,7 @@ export default function PosJogo() {
     if (!matchId) return;
     loadMatchResult(matchId).then((result) => {
       if (result?.ratingsReleased) setRatingsReleased(true);
+      setMatchResult(result);
     });
   }, [matchId]);
 
@@ -321,6 +324,8 @@ export default function PosJogo() {
   const [selectedEventType, setSelectedEventType] = useState("golo");
   const [voteRecords, setVoteRecords] = useState<MatchVoteRecord[]>([]);
   const [ratingsReleased, setRatingsReleased] = useState(false);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [showNotesPodium, setShowNotesPodium] = useState(false);
   const [finalizeBusy, setFinalizeBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [, setLocation] = useLocation();
@@ -1118,6 +1123,31 @@ export default function PosJogo() {
           receivedRating={receivedRating}
         />
 
+        <JogaButton
+          variant="outline"
+          size="lg"
+          className="mt-4"
+          onClick={() => setShowNotesPodium((v) => !v)}
+          data-testid="button-toggle-notes-podium"
+        >
+          {showNotesPodium ? "Fechar pódio de notas" : "Ver pódio de notas"}
+        </JogaButton>
+
+        {showNotesPodium && (
+          <JogaCard variant="arena" padding="lg" className="mt-3">
+            {ratingsReleased && matchResult ? (
+              <NotesPodium
+                players={matchResult.players.map((p) => ({ id: p.playerId, name: p.name, rating: p.rating }))}
+              />
+            ) : (
+              <p className="text-white/45 text-sm text-center py-4">
+                As notas ainda não saíram — aparecem aqui quando todos votarem, o organizador
+                finalizar, ou 24h após o fim da pelada.
+              </p>
+            )}
+          </JogaCard>
+        )}
+
         <div
           ref={evolutionCardRef}
           className="fixed left-0 top-0 -z-50 opacity-0 pointer-events-none w-[340px]"
@@ -1332,6 +1362,31 @@ export default function PosJogo() {
             ))}
           </div>
         </section>
+      )}
+
+      <JogaButton
+        variant="outline"
+        size="lg"
+        className="mt-4 w-full"
+        onClick={() => setShowNotesPodium((v) => !v)}
+        data-testid="button-toggle-notes-podium"
+      >
+        {showNotesPodium ? "Fechar pódio de notas" : "Ver pódio de notas"}
+      </JogaButton>
+
+      {showNotesPodium && (
+        <JogaCard variant="arena" padding="lg" className="mt-3">
+          {ratingsReleased && matchResult ? (
+            <NotesPodium
+              players={matchResult.players.map((p) => ({ id: p.playerId, name: p.name, rating: p.rating }))}
+            />
+          ) : (
+            <p className="text-white/45 text-sm text-center py-4">
+              As notas ainda não saíram — aparecem aqui quando todos votarem, o organizador
+              finalizar, ou 24h após o fim da pelada.
+            </p>
+          )}
+        </JogaCard>
       )}
 
       <button

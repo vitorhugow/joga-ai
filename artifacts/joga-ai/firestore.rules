@@ -409,7 +409,9 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if isSignedIn();
-        // Self-join só em comunidades públicas; em privadas, só o admin
+        // Self-join em comunidades públicas, OU com um convite válido
+        // (exists() confirma que o token é real — ver createCommunityInvite/
+        // joinCommunityViaInvite) — em privadas sem convite, só o admin
         // (via aprovação de joinRequest) pode criar o membro.
         allow create: if isSignedIn() && (
           isCommunityAdmin(communityId)
@@ -417,10 +419,21 @@ service cloud.firestore {
             memberId == request.auth.uid
             && get(/databases/$(database)/documents/communities/$(communityId)).data.isPrivate != true
           )
+          || (
+            memberId == request.auth.uid
+            && request.resource.data.inviteToken is string
+            && exists(/databases/$(database)/documents/communities/$(communityId)/invites/$(request.resource.data.inviteToken))
+          )
         );
         allow update: if isCommunityAdmin(communityId);
         allow delete: if isCommunityAdmin(communityId)
           || (isSignedIn() && memberId == request.auth.uid);
+      }
+
+      match /invites/{token} {
+        allow read: if isSignedIn();
+        allow create: if isCommunityAdmin(communityId);
+        allow update, delete: if isCommunityAdmin(communityId);
       }
 
       match /joinRequests/{requestUserId} {

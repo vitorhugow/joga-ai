@@ -95,6 +95,29 @@ export async function loadCommunityPlayerStats(
   );
 }
 
+export type LeaguePeriod = "month" | "season";
+
+/** Liga mensal: só jogos concluídos dentro do mês corrente. */
+function isWithinCurrentMonth(iso: string): boolean {
+  const time = new Date(iso).getTime();
+  if (Number.isNaN(time)) return false;
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  return time >= monthStart;
+}
+
+export async function loadCommunityPlayerStatsForPeriod(
+  communityId: string,
+  period: LeaguePeriod,
+): Promise<CommunityPlayerStats[]> {
+  const results = await loadCommunityMatchResults(communityId, 50);
+  const filtered =
+    period === "month" ? results.filter((r) => isWithinCurrentMonth(r.completedAt)) : results;
+  return [...aggregateFromResults(filtered).values()].sort(
+    (a, b) => b.goals - a.goals || b.avgRating - a.avgRating,
+  );
+}
+
 export type LeaderboardMetric = "goals" | "assists" | "avgRating" | "mvp";
 
 export function computeLeaderboard(

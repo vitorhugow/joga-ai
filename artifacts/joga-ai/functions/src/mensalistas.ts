@@ -111,6 +111,21 @@ async function assertOrganizerChargesEnabled(stripe: Stripe, accountId: string):
       "A conta do organizador ainda está em verificação no Stripe.",
     );
   }
+
+  // MB WAY exige o capability "mb_way_payments" na própria conta Connect —
+  // contas Express não o pedem sozinhas no onboarding (só card_payments +
+  // transfers). Sem isto, o MB WAY nunca aparece no checkout desta conta,
+  // mesmo que esteja "ativado" no Dashboard da plataforma (esse ativa só a
+  // conta da plataforma, não cada conta Connect). Pedido aqui de forma
+  // preguiçosa/idempotente para contas já criadas antes deste capability
+  // existir no onboarding — ver também organizerAccountParams em billing.ts.
+  const capabilities = account.capabilities as Record<string, string> | undefined;
+  const mbWayStatus = capabilities?.mb_way_payments;
+  if (mbWayStatus !== "active" && mbWayStatus !== "pending") {
+    await stripe.accounts.update(accountId, {
+      capabilities: { mb_way_payments: { requested: true } },
+    } as unknown as Stripe.AccountUpdateParams);
+  }
 }
 
 async function countActiveMensalistas(db: Firestore, communityId: string): Promise<number> {

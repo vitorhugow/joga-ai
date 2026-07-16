@@ -619,7 +619,12 @@ function organizerAccountParams(
     capabilities: {
       card_payments: { requested: true },
       transfers: { requested: true },
-    },
+      // MB WAY (Portugal) — contas Express não o pedem sozinhas no
+      // Dashboard próprio; tem de ser pedido pela plataforma. Ver também
+      // assertOrganizerChargesEnabled em mensalistas.ts, que pede isto
+      // retroactivamente para contas já criadas antes desta linha existir.
+      mb_way_payments: { requested: true },
+    } as unknown as Stripe.AccountCreateParams.Capabilities,
     business_profile: {
       mcc: "7941",
       product_description: "Organização de peladas de futebol amador",

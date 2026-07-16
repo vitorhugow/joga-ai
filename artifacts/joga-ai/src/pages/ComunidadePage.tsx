@@ -30,6 +30,7 @@ import { JogaButton, JogaCard, JogaChip, JogaPage } from "@/components/joga";
 import { loadCommunityMatchResults, type MatchResult, type MatchPlayerResult } from "@/lib/matchHistoryRepository";
 import { generateMatchNarrative } from "@/lib/matchNarrative";
 import { RankingList } from "@/components/RankingList";
+import { PlayerRankingBoard, type RankingBoardEntry } from "@/components/PlayerRankingBoard";
 import {
   loadCommunityPlayerStats,
   loadCommunityPlayerStatsForPeriod,
@@ -63,29 +64,28 @@ function parseCommunityTab(): CommunityTab {
   return COMMUNITY_TABS.includes(tab as CommunityTab) ? (tab as CommunityTab) : "partidas";
 }
 
-const MATCH_RANKING_LABELS: Record<"goals" | "assists" | "saves" | "rating", string> = {
-  goals: "golos",
-  assists: "assist.",
-  saves: "defesas",
-  rating: "nota",
-};
+type MatchRankingMetric = "rating" | "goals" | "assists" | "saves";
 
-/** Ranking dos jogadores de UMA partida (goals/assists/saves/rating). */
+const MATCH_RANKING_TABS: { metric: MatchRankingMetric; label: string; valueLabel: string }[] = [
+  { metric: "rating", label: "Nota", valueLabel: "nota" },
+  { metric: "goals", label: "Gols", valueLabel: "golos" },
+  { metric: "assists", label: "Assistências", valueLabel: "assist." },
+  { metric: "saves", label: "Defesas", valueLabel: "defesas" },
+];
+
+/** Ranking dos jogadores de UMA partida (rating/goals/assists/saves). */
 function buildMatchRanking(
   players: MatchPlayerResult[],
-  metric: "goals" | "assists" | "saves" | "rating",
-) {
-  const valueLabel = MATCH_RANKING_LABELS[metric];
+  metric: MatchRankingMetric,
+): RankingBoardEntry[] {
   return [...players]
     .filter((p) => (metric === "rating" ? p.rating > 0 : true))
     .sort((a, b) => b[metric] - a[metric])
-    .map((p, index) => ({
-      rank: index + 1,
+    .map((p) => ({
+      id: p.playerId,
+      userId: p.userId,
       name: p.name,
-      position: "MEM",
-      overall: Math.round(p.rating * 10) || 50,
       value: metric === "rating" ? p.rating.toFixed(1) : p[metric],
-      valueLabel,
     }));
 }
 
@@ -123,6 +123,7 @@ export default function ComunidadePage() {
   const [monthlyPlayerStats, setMonthlyPlayerStats] = useState<CommunityPlayerStats[]>([]);
   const [leaguePeriod, setLeaguePeriod] = useState<"month" | "season">("month");
   const [showLastMatchRanking, setShowLastMatchRanking] = useState(false);
+  const [matchRankingMetric, setMatchRankingMetric] = useState<MatchRankingMetric>("rating");
   const [rivalries, setRivalries] = useState<Awaited<ReturnType<typeof loadCommunityRivalries>>>([]);
   const [duelTargetId, setDuelTargetId] = useState<string>("");
   const [memberProfiles, setMemberProfiles] = useState<Map<string, PublicUserProfile>>(new Map());
@@ -665,11 +666,26 @@ export default function ComunidadePage() {
                         {showLastMatchRanking ? "Fechar ranking da partida" : "Ver ranking da partida"}
                       </JogaButton>
                       {showLastMatchRanking && (
-                        <div className="mt-3 space-y-3">
-                          <RankingList title="Golos" entries={buildMatchRanking(r.players, "goals")} />
-                          <RankingList title="Assistências" entries={buildMatchRanking(r.players, "assists")} />
-                          <RankingList title="Defesas" entries={buildMatchRanking(r.players, "saves")} />
-                          <RankingList title="Notas" entries={buildMatchRanking(r.players, "rating")} />
+                        <div className="mt-3">
+                          <div className="flex gap-1.5 overflow-x-auto pb-1">
+                            {MATCH_RANKING_TABS.map((tab) => (
+                              <JogaChip
+                                key={tab.metric}
+                                label={tab.label}
+                                active={matchRankingMetric === tab.metric}
+                                onClick={() => setMatchRankingMetric(tab.metric)}
+                                testId={`match-ranking-tab-${tab.metric}`}
+                              />
+                            ))}
+                          </div>
+                          <div className="mt-3">
+                            <PlayerRankingBoard
+                              entries={buildMatchRanking(r.players, matchRankingMetric)}
+                              valueLabel={
+                                MATCH_RANKING_TABS.find((t) => t.metric === matchRankingMetric)!.valueLabel
+                              }
+                            />
+                          </div>
                         </div>
                       )}
                     </>

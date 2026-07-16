@@ -37,7 +37,7 @@ import {
   loadMatchResult,
   type MatchResult,
 } from "@/lib/matchHistoryRepository";
-import { NotesPodium } from "@/components/NotesPodium";
+import { PlayerRankingBoard } from "@/components/PlayerRankingBoard";
 import { getVotes } from "@/lib/auditRepository";
 import {
   buildMatchResultPayload,
@@ -1136,8 +1136,17 @@ export default function PosJogo() {
         {showNotesPodium && (
           <JogaCard variant="arena" padding="lg" className="mt-3">
             {ratingsReleased && matchResult ? (
-              <NotesPodium
-                players={matchResult.players.map((p) => ({ id: p.playerId, name: p.name, rating: p.rating }))}
+              <PlayerRankingBoard
+                entries={[...matchResult.players]
+                  .filter((p) => p.rating > 0)
+                  .sort((a, b) => b.rating - a.rating)
+                  .map((p) => ({
+                    id: p.playerId,
+                    userId: p.userId,
+                    name: p.name,
+                    value: p.rating.toFixed(1),
+                  }))}
+                valueLabel="nota"
               />
             ) : (
               <p className="text-white/45 text-sm text-center py-4">
@@ -1377,8 +1386,17 @@ export default function PosJogo() {
       {showNotesPodium && (
         <JogaCard variant="arena" padding="lg" className="mt-3">
           {ratingsReleased && matchResult ? (
-            <NotesPodium
-              players={matchResult.players.map((p) => ({ id: p.playerId, name: p.name, rating: p.rating }))}
+            <PlayerRankingBoard
+              entries={[...matchResult.players]
+                .filter((p) => p.rating > 0)
+                .sort((a, b) => b.rating - a.rating)
+                .map((p) => ({
+                  id: p.playerId,
+                  userId: p.userId,
+                  name: p.name,
+                  value: p.rating.toFixed(1),
+                }))}
+              valueLabel="nota"
             />
           ) : (
             <p className="text-white/45 text-sm text-center py-4">

@@ -10,6 +10,7 @@ import {
   loadCommunity,
   loadCommunityMatches,
   loadCommunityMembers,
+  isCommunityOrganizerPro,
   type Community,
   type MatchListing,
 } from "@/lib/communityRepository";
@@ -20,8 +21,6 @@ import {
 } from "@/lib/communityStatsRepository";
 import { countActiveMensalistas } from "@/lib/mensalistaRepository";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfile } from "@/hooks/useUserProfile";
-import { isOrganizerProForCommunity } from "@/lib/entitlements";
 import { loadMatchFromFirestore } from "@/lib/matchRepository";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
@@ -31,7 +30,6 @@ function formatEuro(cents: number): string {
 
 export default function ClubeDashboard() {
   const { userId } = useAuth();
-  const { profile } = useUserProfile();
   const [, params] = useRoute("/comunidades/:id/dashboard");
   const id = params?.id ?? "";
 
@@ -43,7 +41,9 @@ export default function ClubeDashboard() {
   const [monthRevenueCents, setMonthRevenueCents] = useState(0);
   const [proDialogOpen, setProDialogOpen] = useState(false);
 
-  const orgPro = isOrganizerProForCommunity(profile?.entitlements, id);
+  // Clube PRO é da comunidade (via entitlements do admin principal), não do
+  // perfil de quem vê — assim um admin adicional também acede ao Dashboard.
+  const [orgPro, setOrgPro] = useState(false);
   useDocumentTitle(community ? `Dashboard · ${community.name}` : "Dashboard");
 
   useEffect(() => {
@@ -52,6 +52,7 @@ export default function ClubeDashboard() {
     void loadCommunityMatches(id, 30).then(setMatches);
     void loadCommunityPlayerStats(id).then(setStats);
     void countActiveMensalistas(id).then(setMensalistaCount);
+    void isCommunityOrganizerPro(id).then(setOrgPro);
   }, [id, userId]);
 
   useEffect(() => {

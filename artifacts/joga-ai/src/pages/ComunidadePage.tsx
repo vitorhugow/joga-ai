@@ -40,6 +40,7 @@ import { loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository
 import { loadBlockedIds, filterBlocked } from "@/lib/blockRepository";
 import { ReportBlockActions } from "@/components/ReportBlockActions";
 import { MensalistaCard } from "@/components/MensalistaCard";
+import { getContrastTextColor } from "@/lib/colorContrast";
 import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -384,7 +385,7 @@ export default function ComunidadePage() {
                   variant="gold"
                   size="sm"
                   className="w-full"
-                  style={brandColor ? { background: brandColor } : undefined}
+                  style={brandColor ? { background: brandColor, color: getContrastTextColor(brandColor) } : undefined}
                 >
                   📊 Dashboard
                 </JogaButton>

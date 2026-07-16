@@ -31,12 +31,25 @@ const ALLOWED_ORIGINS = new Set([
 
 const MIN_MENSALISTA_PRICE_CENTS = 500;
 
+/**
+ * DECIDIDO: mensalidade deixou de ser subscrição Stripe recorrente — passa a
+ * ser um pagamento avulso que cobre ~30 dias, repetido manualmente todo mês
+ * pelo jogador (sem auto-cobrança). Isto é o que permite activar MB WAY no
+ * Stripe: MB WAY não funciona em `mode: "subscription"`, só em `payment`.
+ * Subscrições ANTERIORES a esta mudança continuam a funcionar como estavam
+ * (upsertMensalistaFromSubscription, createMensalistaPortal,
+ * scheduleMensalistaCancellations) até o jogador as cancelar — não foram
+ * migradas/canceladas automaticamente.
+ */
+const MENSALISTA_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
 type MensalistaDoc = {
   active?: boolean;
   subscriptionId?: string;
   currentPeriodEnd?: string;
   priceCents?: number;
   cancelAtPeriodEnd?: boolean;
+  lastPaymentAt?: string;
   updatedAt?: unknown;
 };
 
@@ -215,9 +228,14 @@ export const createMensalistaCheckout = onCall(
     const origin = safeOrigin(request.data?.origin);
     const communityName = String(community.name ?? "Comunidade").slice(0, 60);
 
+    // mode: "payment" (não "subscription") — pagamento avulso repetido
+    // manualmente todo mês, sem auto-cobrança. É o que permite MB WAY (não
+    // suportado em subscrições Stripe). Sem payment_method_types explícito,
+    // o Stripe mostra automaticamente os métodos activados na conta Connect
+    // do organizador (incluindo MB WAY, quando activado no dashboard Stripe).
     const session = await stripe.checkout.sessions.create(
       {
-        mode: "subscription",
+        mode: "payment",
         customer: customerId,
         client_reference_id: uid,
         line_items: [
@@ -226,16 +244,15 @@ export const createMensalistaCheckout = onCall(
             price_data: {
               currency: "eur",
               unit_amount: priceCents,
-              recurring: { interval: "month" },
               product_data: {
-                name: `Mensalista — ${communityName}`,
-                description: "Passe mensal: isento de pagamento por pelada nesta comunidade.",
+                name: `Mensalidade — ${communityName}`,
+                description: "Passe mensal: isento de pagamento por pelada nesta comunidade durante ~30 dias.",
               },
             },
           },
         ],
-        subscription_data: {
-          application_fee_percent: MENSALISTA_FEE_PERCENT,
+        payment_intent_data: {
+          application_fee_amount: Math.round((priceCents * MENSALISTA_FEE_PERCENT) / 100),
           metadata: {
             kind: "mensalista",
             communityId,
@@ -380,6 +397,70 @@ async function upsertMensalistaFromSubscription(
         link: `/comunidades/${communityId}/dashboard`,
       });
     }
+  }
+}
+
+/**
+ * Pagamento avulso de mensalidade (mode: "payment") confirmado — activa o
+ * período de ~30 dias. Sem subscriptionId/cancelAtPeriodEnd: não há nada
+ * recorrente para gerir, o jogador volta a pagar manualmente no mês seguinte.
+ */
+async function handleMensalistaPaymentCompleted(
+  session: Stripe.Checkout.Session,
+  stripeAccountId: string,
+): Promise<void> {
+  const communityId = String(session.metadata?.communityId ?? "");
+  const uid = String(session.metadata?.uid ?? "");
+  if (!communityId || !uid) {
+    console.warn("[mensalistas] checkout.session sem communityId/uid:", session.id);
+    return;
+  }
+
+  const db = getFirestore();
+  const communitySnap = await db.doc(`communities/${communityId}`).get();
+  const community = communitySnap.data();
+  if (!community) return;
+
+  const priceCents = Number(session.amount_total ?? (community.mensalista as { priceCents?: number } | undefined)?.priceCents ?? 0);
+  const paidAtIso = new Date().toISOString();
+  const currentPeriodEnd = new Date(Date.now() + MENSALISTA_PERIOD_MS).toISOString();
+
+  const ref = db.doc(`communities/${communityId}/mensalistas/${uid}`);
+  await ref.set(
+    {
+      active: true,
+      priceCents,
+      currentPeriodEnd,
+      lastPaymentAt: paidAtIso,
+      stripeAccountId,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  const communityName = String(community.name ?? "comunidade");
+  const endLabel = new Date(currentPeriodEnd).toLocaleDateString("pt-PT");
+
+  await notifyUser(uid, {
+    id: `mensalista-paid-${session.id}`,
+    priority: "center",
+    type: "community",
+    title: "Mensalidade paga ✅",
+    body: `Estás isento de pagar peladas em «${communityName}» até ${endLabel}. No próximo mês tens de voltar a pagar.`,
+    link: `/comunidades/${communityId}`,
+  });
+
+  const organizerId = String(community.adminId ?? "");
+  if (organizerId) {
+    const playerName = (await db.doc(`users/${uid}`).get()).data()?.displayName ?? "Jogador";
+    await notifyUser(organizerId, {
+      id: `mensalista-payment-${communityId}-${uid}-${session.id}`,
+      priority: "center",
+      type: "community",
+      title: "Mensalidade recebida",
+      body: `${String(playerName)} pagou a mensalidade de «${communityName}».`,
+      link: `/comunidades/${communityId}/dashboard`,
+    });
   }
 }
 
@@ -577,8 +658,17 @@ export const stripeConnectWebhook = onRequest(
         case "customer.subscription.created":
         case "customer.subscription.updated":
         case "customer.subscription.deleted": {
+          // Só subscrições ANTERIORES à mudança para pagamento avulso ainda
+          // geram estes eventos — mantido para não deixar cair quem já as tinha.
           const sub = event.data.object as Stripe.Subscription;
           await upsertMensalistaFromSubscription(sub, accountId);
+          break;
+        }
+        case "checkout.session.completed": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          if (session.mode === "payment" && session.metadata?.kind === "mensalista") {
+            await handleMensalistaPaymentCompleted(session, accountId);
+          }
           break;
         }
         case "invoice.payment_failed": {

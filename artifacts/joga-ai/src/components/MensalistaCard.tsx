@@ -42,10 +42,10 @@ export function MensalistaCard({ community, userId }: MensalistaCardProps) {
     setBusy(true);
     try {
       const url = await startMensalistaCheckout(community.id);
-      window.location.href = url;
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
       toast({
-        title: "Não foi possível subscrever",
+        title: "Não foi possível pagar a mensalidade",
         description: err instanceof Error ? err.message : "Tenta mais tarde.",
         variant: "destructive",
       });
@@ -71,7 +71,11 @@ export function MensalistaCard({ community, userId }: MensalistaCardProps) {
   }
 
   const isActive = status?.active === true;
-  const renewLabel = status?.currentPeriodEnd
+  // Pagamentos avulsos (novo modelo) não têm subscriptionId — só quem ainda
+  // tem uma subscrição Stripe de antes da mudança para MB WAY é que pode
+  // "gerir" (cancelar) algo recorrente.
+  const hasLegacySubscription = Boolean(status?.subscriptionId);
+  const validUntilLabel = status?.currentPeriodEnd
     ? new Date(status.currentPeriodEnd).toLocaleDateString("pt-PT")
     : null;
 
@@ -97,26 +101,28 @@ export function MensalistaCard({ community, userId }: MensalistaCardProps) {
         )}
       </div>
 
-      {isActive && renewLabel && (
+      {isActive && validUntilLabel && (
         <p className="text-white/45 text-xs mt-3">
-          {status?.cancelAtPeriodEnd
-            ? `Termina a ${renewLabel} — até lá continuas isento.`
-            : `Renova a ${renewLabel}.`}
+          {hasLegacySubscription
+            ? status?.cancelAtPeriodEnd
+              ? `Termina a ${validUntilLabel} — até lá continuas isento.`
+              : `Renova a ${validUntilLabel}.`
+            : `Válido até ${validUntilLabel}. No mês seguinte tens de pagar outra vez — não há renovação automática.`}
         </p>
       )}
 
       <div className="mt-4">
-        {isActive ? (
+        {isActive && hasLegacySubscription ? (
           <JogaButton variant="ghost" size="sm" className="w-full" disabled={busy} onClick={() => void handleManage()}>
             Gerir subscrição
           </JogaButton>
-        ) : slotsLeft === 0 ? (
+        ) : isActive ? null : slotsLeft === 0 ? (
           <JogaButton variant="ghost" size="sm" className="w-full" disabled>
             Esgotado
           </JogaButton>
         ) : (
           <JogaButton variant="gold" size="sm" className="w-full" disabled={busy} onClick={() => void handleSubscribe()}>
-            Subscrever mensalidade
+            Pagar mensalidade
           </JogaButton>
         )}
       </div>

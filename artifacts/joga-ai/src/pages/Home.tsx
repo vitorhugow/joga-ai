@@ -3,7 +3,6 @@ import { Link } from "wouter";
 import { Plus, Search, ChevronRight, Flame } from "lucide-react";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { loadCommunities, loadMyCommunities, loadAvailableMatches, loadMyMatches, type Community, type MatchListing } from "@/lib/communityRepository";
-import { isListedInPublicBrowse } from "@/lib/matchAccess";
 import {
   computeMatchPriority,
   fetchLiveClockStatus,
@@ -87,20 +86,10 @@ export default function Home() {
   const [myMatches, setMyMatches] = useState<EnrichedMatchListing[]>([]);
 
   const available = useMemo(() => {
-    const byId = new Map(discoverPool.map((m) => [m.id, m]));
-    for (const m of myMatches) {
-      if (
-        isListedInPublicBrowse({
-          accessMode: m.accessMode,
-          openToExternal: m.openToExternal,
-          communityId: m.communityId,
-          status: m.status,
-        })
-      ) {
-        byId.set(m.id, m);
-      }
-    }
-    return [...byId.values()].filter((m) => m.spotsRemaining !== "Lotado");
+    const myIds = new Set(myMatches.map((m) => m.id));
+    return discoverPool
+      .filter((m) => !myIds.has(m.id))
+      .filter((m) => m.spotsRemaining !== "Lotado");
   }, [discoverPool, myMatches]);
 
   // Hidrata comunidades e partidas do Firestore em background

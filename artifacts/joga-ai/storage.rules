@@ -7,8 +7,9 @@ service firebase.storage {
     }
 
     function isCommunityAdmin(communityId) {
+      let data = firestore.get(/databases/(default)/documents/communities/$(communityId)).data;
       return isSignedIn()
-        && firestore.get(/databases/(default)/documents/communities/$(communityId)).data.adminId == request.auth.uid;
+        && (data.adminId == request.auth.uid || request.auth.uid in data.get('adminIds', []));
     }
 
     function isValidBrandingImage() {

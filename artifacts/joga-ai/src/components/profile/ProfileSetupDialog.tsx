@@ -141,8 +141,7 @@ export function ProfileSetupDialog({
 
     if (isEditing && !pro) {
       const nameChanged = name !== (profile?.displayName ?? "").trim();
-      const positionChanged = position !== (profile?.position ?? "AVA");
-      if (nameChanged || positionChanged) {
+      if (nameChanged) {
         setShowProEditDialog(true);
         return;
       }
@@ -206,9 +205,11 @@ export function ProfileSetupDialog({
       const saveTask = isEditing
         ? updateUserProfile(
             userId,
-            pro
-              ? { displayName: name, position, ...(photoUrl !== undefined ? { photoUrl } : {}) }
-              : { ...(photoUrl !== undefined ? { photoUrl } : {}) },
+            {
+              position,
+              ...(pro ? { displayName: name } : {}),
+              ...(photoUrl !== undefined ? { photoUrl } : {}),
+            },
             !isLinked,
           )
         : completeUserProfile(userId, input, !isLinked);
@@ -288,10 +289,10 @@ export function ProfileSetupDialog({
             {isEditing
               ? pro
                 ? "Atualiza nome, posição e foto. Os atributos não mudam aqui."
-                : "Atualiza a foto. Nome e posição são recursos PRO."
+                : "Atualiza a posição e a foto. Nome é recurso PRO."
               : step === "attributes"
                 ? `Reparte ${ALLOCATION_TOTAL_POINTS} pontos pelos 6 atributos, no máximo ${ALLOCATION_MAX_PER_ATTRIBUTE} em cada. É a tua carta — decide onde é que és melhor.`
-                : "Nome, posição e foto — leva 10 segundos. A posição só pode ser escolhida agora."}
+                : "Nome, posição e foto — leva 10 segundos."}
           </DialogDescription>
         </DialogHeader>
 
@@ -464,72 +465,29 @@ export function ProfileSetupDialog({
             />
           </div>
 
-          {isEditing ? (
-            <div>
-              <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40">
-                Posição
-                <ProFeatureBadge tier="player" />
-              </label>
-              {pro ? (
-                <div className="grid grid-cols-2 gap-2 mt-1.5">
-                  {POSITIONS.map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setPosition(p.value)}
-                      className="rounded-xl py-2.5 text-sm font-bold transition-colors"
-                      style={
-                        position === p.value
-                          ? { background: "rgba(74,222,128,0.15)", border: "1.5px solid rgba(74,222,128,0.4)", color: "#4ade80" }
-                          : { background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }
-                      }
-                      data-testid={`setup-position-${p.value}`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div
-                  className="mt-1.5 rounded-xl px-4 py-3 text-sm font-bold"
-                  style={{
-                    background: "rgba(255,255,255,0.05)",
-                    border: "1.5px solid rgba(255,255,255,0.08)",
-                    color: "rgba(255,255,255,0.55)",
-                  }}
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+              Posição
+            </label>
+            <div className="grid grid-cols-2 gap-2 mt-1.5">
+              {POSITIONS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPosition(p.value)}
+                  className="rounded-xl py-2.5 text-sm font-bold transition-colors"
+                  style={
+                    position === p.value
+                      ? { background: "rgba(74,222,128,0.15)", border: "1.5px solid rgba(74,222,128,0.4)", color: "#4ade80" }
+                      : { background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }
+                  }
+                  data-testid={`setup-position-${p.value}`}
                 >
-                  {POSITIONS.find((p) => p.value === position)?.label ?? position}
-                </div>
-              )}
+                  {p.label}
+                </button>
+              ))}
             </div>
-          ) : (
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-white/40">
-                Posição
-              </label>
-              <div className="grid grid-cols-2 gap-2 mt-1.5">
-                {POSITIONS.map((p) => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => setPosition(p.value)}
-                    className="rounded-xl py-2.5 text-sm font-bold transition-colors"
-                    style={
-                      position === p.value
-                        ? { background: "rgba(74,222,128,0.15)", border: "1.5px solid rgba(74,222,128,0.4)", color: "#4ade80" }
-                        : { background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }
-                    }
-                    data-testid={`setup-position-${p.value}`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-white/30 text-[11px] mt-1.5">
-                Escolhe com cuidado — não podes mudar depois.
-              </p>
-            </div>
-          )}
+          </div>
 
           {error && <p className="text-red-400 text-sm">{error}</p>}
 
@@ -552,8 +510,8 @@ export function ProfileSetupDialog({
         open={showProEditDialog}
         onOpenChange={setShowProEditDialog}
         tier="player"
-        featureTitle="Editar nome e posição"
-        featureDescription="Alterar o nome e a posição na carta é exclusivo PRO Jogador."
+        featureTitle="Editar nome"
+        featureDescription="Alterar o nome na carta é exclusivo PRO Jogador."
       />
     </>
   );

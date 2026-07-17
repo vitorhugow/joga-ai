@@ -3,7 +3,6 @@ import { Search, SlidersHorizontal, Plus, X } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
 import { loadMyMatches, subscribeAvailableMatches, type MatchListing } from "@/lib/communityRepository";
-import { isListedInPublicBrowse } from "@/lib/matchAccess";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaChip, JogaPage } from "@/components/joga";
@@ -43,22 +42,10 @@ export default function Jogos() {
     return unsub;
   }, [userId]);
 
-  /** Partidas públicas de "Minhas" entram também em Descobrir (exceto privadas/comunidade). */
+  /** Partidas já presentes em "Minhas" não repetem em Descobrir. */
   const discoverMatches = useMemo(() => {
-    const byId = new Map(allMatches.map((m) => [m.id, m]));
-    for (const m of myMatches) {
-      if (
-        isListedInPublicBrowse({
-          accessMode: m.accessMode,
-          openToExternal: m.openToExternal,
-          communityId: m.communityId,
-          status: m.status,
-        })
-      ) {
-        byId.set(m.id, m);
-      }
-    }
-    return [...byId.values()];
+    const myIds = new Set(myMatches.map((m) => m.id));
+    return allMatches.filter((m) => !myIds.has(m.id));
   }, [allMatches, myMatches]);
 
   useEffect(() => {

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Plus, Search, ChevronRight, Trophy, Flame } from "lucide-react";
+import { Plus, Search, ChevronRight, Flame } from "lucide-react";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { calculateOverall } from "@/lib/cardUtils";
 import { loadCommunities, loadMyCommunities, loadAvailableMatches, loadMyMatches, type Community, type MatchListing } from "@/lib/communityRepository";
 import { isListedInPublicBrowse } from "@/lib/matchAccess";
 import {
@@ -22,7 +21,7 @@ import { profileToPlayerCard } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { PlayerCard } from "@/components/PlayerCard";
 import { JogaLogo } from "@/components/brand";
-import { JogaCard, JogaChip, JogaPage, JogaButton } from "@/components/joga";
+import { JogaCard, JogaPage, JogaButton } from "@/components/joga";
 import { SponsorSlot } from "@/components/SponsorSlot";
 import { InstallAppBanner } from "@/components/InstallAppBanner";
 
@@ -82,7 +81,6 @@ export default function Home() {
   const { openAuth, requireLinked } = useAuthGate();
   const { profile, needsSetup } = useUserProfile();
   const player = profileToPlayerCard(profile);
-  const overall = calculateOverall(player.attributes);
 
   const [communities, setCommunities] = useState<Community[]>([]);
   const [discoverPool, setDiscoverPool] = useState<MatchListing[]>([]);
@@ -148,28 +146,6 @@ export default function Home() {
     }
     loadAvailableMatches(20, userId ?? undefined).then(setDiscoverPool);
   }, [userId]);
-
-  const [rankingTab, setRankingTab] = useState<"overall" | "notas" | "golos">("overall");
-
-  const rankingTabs = [
-    { key: "overall", label: "Overall" },
-    { key: "notas", label: "Notas" },
-    { key: "golos", label: "Golos" },
-  ] as const;
-
-  const rankingSets = {
-    overall: profile.profileComplete
-      ? [{ rank: 1, name: player.name, position: player.position, value: overall, isMe: true }]
-      : [],
-    notas: profile.profileComplete && (profile.lastMatchRating ?? profile.seasonStats.averageRating)
-      ? [{ rank: 1, name: player.name, position: player.position, value: (profile.lastMatchRating ?? profile.seasonStats.averageRating ?? 0).toFixed(1), isMe: true }]
-      : [],
-    golos: profile.profileComplete && profile.seasonStats.goals > 0
-      ? [{ rank: 1, name: player.name, position: player.position, value: player.seasonStats.goals, isMe: true }]
-      : [],
-  };
-
-  const ranking = rankingSets[rankingTab];
 
   function matchHref(match: EnrichedMatchListing) {
     if (match.voted && match.status === "aguardando_auditoria") {
@@ -364,7 +340,7 @@ export default function Home() {
             </JogaCard>
           ) : (
             <div className="space-y-3">
-              {myMatches.slice(0, 5).map((match) => {
+              {myMatches.slice(0, 2).map((match) => {
                 const emphasis = matchCardEmphasis(match.priority);
                 return (
                   <Link key={match.id} href={matchHref(match)}>
@@ -469,112 +445,6 @@ export default function Home() {
                   <Plus className="w-5 h-5" style={{ color: "rgba(255,255,255,0.3)" }} />
                 </div>
                 <p className="text-[11px] font-medium" style={{ color: "rgba(255,255,255,0.3)" }}>Explorar</p>
-              </div>
-            </Link>
-          </div>
-        </div>
-
-        {/* JOGOS DISPONÍVEIS */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">Jogos Disponíveis</h2>
-            <Link href="/jogos"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todos <ChevronRight className="w-3.5 h-3.5" /></span></Link>
-          </div>
-          <div className="space-y-2.5">
-            {available.length === 0 ? (
-              <JogaCard variant="arena" padding="md" className="text-center">
-                <p className="text-white/50 text-sm">Ainda não há jogos abertos.</p>
-                <JogaButton
-                  variant="primary"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => {
-                    if (requireLinked({
-                      mode: "register",
-                      title: "Cria conta para organizar partidas",
-                    })) {
-                      window.location.href = "/criar-partida";
-                    }
-                  }}
-                >
-                  Criar primeira partida
-                </JogaButton>
-              </JogaCard>
-            ) : (
-            available.map((m) => (
-              <Link key={m.id} href={`/partida/${m.id}/pre-jogo`}>
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3.5 joga-tap" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 2px 10px rgba(0,0,0,0.2)" }} data-testid={`home-match-${m.id}`}>
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-xl" style={{ background: "rgba(22,163,74,0.1)" }}>⚽</div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-display font-bold text-white text-sm leading-tight truncate">{m.title}</p>
-                  <p className="text-[11px] mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.35)" }}>📍 {m.location}, {m.city}</p>
-                  <p className="text-[11px] mt-0.5 font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>{m.date} · {m.gameType} · {m.level}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}>{m.spotsRemaining}</span>
-                  <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.25)" }}>{m.price}</span>
-                </div>
-              </div>
-              </Link>
-            ))
-            )}
-          </div>
-        </div>
-
-        {/* RANKING SEMANAL */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">Ranking Semanal</h2>
-            <Link href="/ranking"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver tudo <ChevronRight className="w-3.5 h-3.5" /></span></Link>
-          </div>
-          <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>
-            <div className="px-4 py-3 flex items-center gap-2" style={{ background: "linear-gradient(135deg, rgba(180,130,20,0.3), rgba(251,191,36,0.2))", borderBottom: "1px solid rgba(251,191,36,0.15)" }}>
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span className="font-display font-bold text-amber-300 text-sm uppercase tracking-wider">Top Jogadores</span>
-              <span className="ml-auto text-amber-400/50 text-xs font-medium">Esta semana</span>
-            </div>
-            <div className="px-3 py-2 flex gap-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-              {rankingTabs.map((tab) => (
-                <JogaChip
-                  key={tab.key}
-                  label={tab.label}
-                  active={rankingTab === tab.key}
-                  onClick={() => setRankingTab(tab.key)}
-                  testId={`home-ranking-tab-${tab.key}`}
-                  className="flex-1 text-center text-[11px] uppercase tracking-wide"
-                />
-              ))}
-            </div>
-            <div>
-              {ranking.length === 0 ? (
-                <p className="px-4 py-6 text-center text-white/40 text-sm">
-                  Ainda não há ranking — joga peladas para apareceres aqui.
-                </p>
-              ) : ranking.map((r, idx) => (
-                <div
-                  key={r.rank}
-                  className="px-4 py-3 flex items-center gap-3"
-                  style={{
-                    background: r.isMe ? "rgba(22,163,74,0.07)" : "transparent",
-                    borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : undefined,
-                  }}
-                  data-testid={`home-rank-${r.rank}`}
-                >
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-base font-display font-black">
-                    {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>{r.rank}º</span>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate" style={{ color: r.isMe ? "#4ade80" : "rgba(255,255,255,0.85)" }}>{r.name}{r.isMe ? " (Tu)" : ""}</p>
-                    <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>{r.position}</p>
-                  </div>
-                  <span className="font-display font-black text-xl" style={{ color: r.rank === 1 ? "#fbbf24" : r.isMe ? "#4ade80" : "rgba(255,255,255,0.7)" }}>{r.value}</span>
-                </div>
-              ))}
-            </div>
-            <Link href="/ranking">
-              <div className="px-4 py-3 flex items-center justify-center gap-1 active:opacity-70 transition-opacity" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                <span className="text-emerald-400 text-sm font-semibold">Ver ranking completo</span>
-                <ChevronRight className="w-4 h-4 text-emerald-400" />
               </div>
             </Link>
           </div>

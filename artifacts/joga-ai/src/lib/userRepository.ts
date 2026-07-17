@@ -474,19 +474,38 @@ export async function migrateLocalProfileIfNeeded(
   if (toHasData) return;
 
   const migrated: UserProfile = { ...from, uid: toUserId, isAnonymous: false };
-  writeLocalProfile(migrated);
 
-  if (!isFirebaseConfigured() || !migrated.profileComplete) return;
+  if (!isFirebaseConfigured() || !migrated.profileComplete) {
+    writeLocalProfile(migrated);
+    return;
+  }
 
   try {
     const userRef = doc(db, "users", toUserId);
     const snap = await getDoc(userRef);
-    if (snap.exists() && snap.data()?.profileComplete) return;
+    if (snap.exists() && snap.data()?.profileComplete) {
+      writeLocalProfile(migrated);
+      return;
+    }
 
-    let photoUrl = validatePhotoUrlForFirestore(migrated.photoUrl);
+    // Conta nova: o perfil convidado (demo sem conta, feita no Início) não
+    // conta como "já editaste a carta desta conta" — sem isto, quem tinha
+    // montado a carta como convidado via ao criar conta já com a posição
+    // trancada atrás de PRO, sem nunca ter tido a escolha livre a sério.
+    // Os atributos redistribuem-se de novo no ecrã seguinte (ver
+    // ProfileSetupDialog), o que é inofensivo com 0 jogos disputados.
+    const isNewAccount = !snap.exists();
+    const finalProfile: UserProfile = isNewAccount
+      ? { ...migrated, profileComplete: false }
+      : migrated;
 
-    await persistProfile(userRef, { ...migrated, photoUrl }, !snap.exists());
-    writeLocalProfile({ ...migrated, photoUrl });
+    writeLocalProfile(finalProfile);
+    if (!finalProfile.profileComplete) return;
+
+    const photoUrl = validatePhotoUrlForFirestore(finalProfile.photoUrl);
+
+    await persistProfile(userRef, { ...finalProfile, photoUrl }, isNewAccount);
+    writeLocalProfile({ ...finalProfile, photoUrl });
   } catch (err) {
     console.warn("[userRepository] migrateLocalProfileIfNeeded:", err);
   }

@@ -46,9 +46,10 @@ service firebase.storage {
 
     match /communities/{communityId}/cover/{fileName} {
       allow read: if true;
-      // DIAGNÓSTICO TEMPORÁRIO — isValidBrandingImage() removido para isolar
-      // se o 403 vem daqui ou de isCommunityAdmin(). Reverter depois do teste.
-      allow write: if isCommunityAdmin(communityId);
+      // DIAGNÓSTICO TEMPORÁRIO 2 — agora só isSignedIn(), para isolar se o
+      // bloqueio é o request.auth em si ou a leitura cruzada Storage→
+      // Firestore dentro de isCommunityAdmin(). Reverter depois do teste.
+      allow write: if isSignedIn();
       allow delete: if isCommunityAdmin(communityId);
     }
   }

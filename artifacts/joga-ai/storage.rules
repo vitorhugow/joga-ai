@@ -46,10 +46,12 @@ service firebase.storage {
 
     match /communities/{communityId}/cover/{fileName} {
       allow read: if true;
-      // DIAGNÓSTICO TEMPORÁRIO 2 — agora só isSignedIn(), para isolar se o
-      // bloqueio é o request.auth em si ou a leitura cruzada Storage→
-      // Firestore dentro de isCommunityAdmin(). Reverter depois do teste.
-      allow write: if isSignedIn();
+      // DIAGNÓSTICO TEMPORÁRIO 3 — isSignedIn() confirmado ok. Agora testa só
+      // a leitura cruzada (exists), sem comparar adminId, para saber se é o
+      // firestore.get() em si que falha ou a comparação do campo. Reverter
+      // depois do teste.
+      allow write: if isSignedIn()
+        && firestore.exists(/databases/(default)/documents/communities/$(communityId));
       allow delete: if isCommunityAdmin(communityId);
     }
   }

@@ -46,7 +46,9 @@ service firebase.storage {
 
     match /communities/{communityId}/cover/{fileName} {
       allow read: if true;
-      allow write: if isCommunityAdmin(communityId) && isValidBrandingImage();
+      // DIAGNÓSTICO TEMPORÁRIO — isValidBrandingImage() removido para isolar
+      // se o 403 vem daqui ou de isCommunityAdmin(). Reverter depois do teste.
+      allow write: if isCommunityAdmin(communityId);
       allow delete: if isCommunityAdmin(communityId);
     }
   }

@@ -3,6 +3,9 @@
   "target": {
     "namespace": "android_app",
     "package_name": "pt.jogaai.app",
-    "sha256_cert_fingerprints": ["BD:23:C8:A3:1B:46:DC:92:C4:02:DE:7D:E8:A3:75:2B:1F:32:49:DA:2F:50:2C:AA:1C:DB:37:65:78:46:E8:A9"]
+    "sha256_cert_fingerprints": [
+      "BD:23:C8:A3:1B:46:DC:92:C4:02:DE:7D:E8:A3:75:2B:1F:32:49:DA:2F:50:2C:AA:1C:DB:37:65:78:46:E8:A9",
+      "47:20:60:B5:A0:5C:DB:43:BB:DA:25:F1:CB:22:9D:54:75:A1:55:F7:E3:75:30:C7:D4:70:BA:9C:C2:25:32:A8"
+    ]
   }
 }]

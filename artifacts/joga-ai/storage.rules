@@ -46,12 +46,13 @@ service firebase.storage {
 
     match /communities/{communityId}/cover/{fileName} {
       allow read: if true;
-      // DIAGNÓSTICO TEMPORÁRIO 3 — isSignedIn() confirmado ok. Agora testa só
-      // a leitura cruzada (exists), sem comparar adminId, para saber se é o
-      // firestore.get() em si que falha ou a comparação do campo. Reverter
-      // depois do teste.
-      allow write: if isSignedIn()
-        && firestore.exists(/databases/(default)/documents/communities/$(communityId));
+      // TEMPORÁRIO — firestore.get()/exists() dentro desta regra continua a
+      // bloquear mesmo depois de conceder o IAM role "cross-service rules"
+      // no `firebase deploy --only storage` interativo (14/07). Causa exata
+      // por confirmar; por agora qualquer utilizador com sessão pode subir a
+      // capa de QUALQUER comunidade — reverter para isCommunityAdmin() assim
+      // que se perceber porque é que a leitura cruzada continua a falhar.
+      allow write: if isSignedIn() && isValidBrandingImage();
       allow delete: if isCommunityAdmin(communityId);
     }
   }

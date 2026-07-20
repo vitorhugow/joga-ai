@@ -14,7 +14,11 @@
 }
 
 .joga-new-player-card-wrap--profile {
-  width: clamp(340px, 54vw, 470px);
+  /* Mínimo antes era 340px fixo — em ecrãs estreitos (~360px) isso excedia
+     o espaço disponível dentro de modais com padding lateral, cortando a
+     carta. Agora escala com o viewport em vez de forçar um mínimo maior
+     que muitos telemóveis reais. */
+  width: clamp(260px, 88vw, 470px);
 }
 
 /* Perfil / modal: conteúdo ligeiramente mais alto — stats afastados da borda dourada */
@@ -434,7 +438,10 @@
 
 @media (max-width: 520px) {
   .joga-new-player-card-wrap--profile {
-    width: min(92vw, 390px);
+    /* 92vw sem margem de segurança para o padding lateral de modais (ex.:
+       px-4 = 32px) excedia o espaço disponível em ecrãs de ~320-360px,
+       cortando a carta. 88vw deixa folga suficiente. */
+    width: min(88vw, 390px);
   }
 
   .joga-profile-card-stage {

@@ -1015,11 +1015,11 @@ export async function loadAvailableMatches(limitCount = 10, userId?: string): Pr
 
     const flags = await loadCommunityFlagsForMatches([...byId.values()]);
     const remote = [...byId.values()]
-      .filter((m) => isOpenPublicMatch(m, flags))
+      .filter((m) => isOpenPublicMatch(m, flags) && !isStaleConfiguringMatch(m))
       .sort((a, b) => {
         const proDiff = Number(b.proBadge) - Number(a.proBadge);
         if (proDiff !== 0) return proDiff;
-        return 0;
+        return matchSortKey(a).localeCompare(matchSortKey(b));
       });
 
     const withoutLive = await excludeMatchesWithActiveLiveSession(remote);
@@ -1064,8 +1064,12 @@ export function subscribeAvailableMatches(
     void (async () => {
       const flags = await loadCommunityFlagsForMatches(candidates);
       const remote = candidates
-        .filter((m) => isOpenPublicMatch(m, flags))
-        .sort((a, b) => Number(b.proBadge) - Number(a.proBadge));
+        .filter((m) => isOpenPublicMatch(m, flags) && !isStaleConfiguringMatch(m))
+        .sort((a, b) => {
+          const proDiff = Number(b.proBadge) - Number(a.proBadge);
+          if (proDiff !== 0) return proDiff;
+          return matchSortKey(a).localeCompare(matchSortKey(b));
+        });
       const withoutLive = await excludeMatchesWithActiveLiveSession(remote);
       if (cancelled || myGeneration !== generation) return;
       callback(withoutLive.slice(0, limitCount));
@@ -1161,7 +1165,8 @@ export async function loadMyMatches(userId: string): Promise<MatchListing[]> {
           isMatchPlayer(m as unknown as Record<string, unknown>, userId),
       )
       .map((m) => mapMatchDoc(m.matchId, m as unknown as Record<string, unknown>))
-      .sort((a, b) => b.date.localeCompare(a.date));
+      .filter((m) => !isStaleConfiguringMatch(m))
+      .sort((a, b) => matchSortKey(a).localeCompare(matchSortKey(b)));
   }
 
   const candidateIds = new Set<string>();
@@ -1209,7 +1214,9 @@ export async function loadMyMatches(userId: string): Promise<MatchListing[]> {
     const status = String(data.status ?? "configurando");
     if (!MY_MATCHES_ACTIVE_STATUSES.includes(status as (typeof MY_MATCHES_ACTIVE_STATUSES)[number])) return;
     if (!isMatchPlayer(data, userId)) return;
-    results.push(mapMatchDoc(id, data));
+    const mapped = mapMatchDoc(id, data);
+    if (isStaleConfiguringMatch(mapped)) return;
+    results.push(mapped);
   });
 
   for (const id of candidateIds) {
@@ -1239,10 +1246,12 @@ export async function loadMyMatches(userId: string): Promise<MatchListing[]> {
     const status = String((local as Record<string, unknown>).status ?? "configurando");
     if (!MY_MATCHES_ACTIVE_STATUSES.includes(status as (typeof MY_MATCHES_ACTIVE_STATUSES)[number])) continue;
     if (!isMatchPlayer(local as Record<string, unknown>, userId)) continue;
-    results.push(mapMatchDoc(id, local as Record<string, unknown>));
+    const mappedLocal = mapMatchDoc(id, local as Record<string, unknown>);
+    if (isStaleConfiguringMatch(mappedLocal)) continue;
+    results.push(mappedLocal);
   }
 
-  results.sort((a, b) => b.date.localeCompare(a.date));
+  results.sort((a, b) => matchSortKey(a).localeCompare(matchSortKey(b)));
   return results;
 }
 
@@ -1277,7 +1286,8 @@ export async function loadCommunityMatches(
 
     return snap.docs
       .map((d) => mapMatchDoc(d.id, d.data()))
-      .filter(isListedInCommunityFeed)
+      .filter((m) => isListedInCommunityFeed(m) && !isStaleConfiguringMatch(m))
+      .sort((a, b) => matchSortKey(a).localeCompare(matchSortKey(b)))
       .slice(0, limitCount);
   } catch (err) {
     console.warn("[communityRepository] loadCommunityMatches:", err);
@@ -1319,7 +1329,8 @@ export function subscribeCommunityMatches(
     (snap) => {
       const remote = snap.docs
         .map((d) => mapMatchDoc(d.id, d.data()))
-        .filter(isListedInCommunityFeed);
+        .filter((m) => isListedInCommunityFeed(m) && !isStaleConfiguringMatch(m))
+        .sort((a, b) => matchSortKey(a).localeCompare(matchSortKey(b)));
       callback(remote.slice(0, limitCount));
     },
     (err) => {
@@ -1327,6 +1338,32 @@ export function subscribeCommunityMatches(
       void loadCommunityMatches(communityId, limitCount).then(callback);
     },
   );
+}
+
+/**
+ * Chave de ordenação cronológica (data+hora) — partidas sem data ficam
+ * sempre no fim. `.date.localeCompare` sozinho ignora a hora e, se usado em
+ * ordem descendente, mostra os jogos mais distantes primeiro.
+ */
+function matchSortKey(m: MatchListing): string {
+  if (!m.scheduledDate) return "9999-99-99T99:99";
+  const time = (m.scheduledTime ?? "23:59").slice(0, 5);
+  return `${m.scheduledDate}T${time}`;
+}
+
+/**
+ * Partida "configurando" cujo horário agendado já passou há mais de 6h e que
+ * nunca chegou a ir Ao Vivo — fica escondida das listagens sem esperar pelo
+ * closeExpiredMatches (que só corre de hora a hora e usa expiresAt, ancorado
+ * à criação em partidas antigas). Outros estados (ao_vivo, aguardando
+ * auditoria, auditada) continuam visíveis normalmente após a hora marcada.
+ */
+function isStaleConfiguringMatch(m: MatchListing): boolean {
+  if (m.status !== "configurando" || !m.scheduledDate) return false;
+  const scheduled = new Date(`${m.scheduledDate}T${m.scheduledTime || "23:59"}`);
+  if (Number.isNaN(scheduled.getTime())) return false;
+  const graceMs = 6 * 60 * 60 * 1000;
+  return Date.now() > scheduled.getTime() + graceMs;
 }
 
 function mapMatchDoc(id: string, data: Record<string, unknown>): MatchListing {

@@ -660,6 +660,16 @@ export default function PreJogo() {
   });
   const canManageMatch = isOrganizer || isLiveController;
   const [showCommunityList, setShowCommunityList] = useState(false);
+
+  // Re-busca ao abrir a lista — sem isto, um membro que entrou na comunidade
+  // depois do carregamento da página só aparecia depois de recarregar.
+  useEffect(() => {
+    if (!showCommunityList) return;
+    const communityId = matchCommunityId ?? matchDetails?.communityId;
+    if (!communityId) return;
+    void loadCommunityMembers(communityId).then(setCommunityMembers);
+  }, [showCommunityList, matchCommunityId, matchDetails?.communityId]);
+
   const [sortMode, setSortMode] = useState<SortMode>("teams");
 
   const activeTeams = (["A", "B", "C", "D"] as TeamKey[]).slice(0, teamCount);

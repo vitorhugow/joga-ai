@@ -234,12 +234,29 @@ function generateMatchId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/**
+ * expiresAt para closeExpiredMatches (functions/src/closeExpiredMatches.ts).
+ * Ancorado à data/hora agendada + margem, não à criação — uma partida
+ * marcada para ontem não pode continuar "configurando" só porque foi criada
+ * hoje. Sem data definida ("A definir"), mantém o fallback de 7 dias.
+ */
+function computeExpiresAt(date: string, time: string): string {
+  if (date) {
+    const scheduled = new Date(`${date}T${time || "23:59"}`);
+    if (!Number.isNaN(scheduled.getTime())) {
+      const graceMs = 6 * 60 * 60 * 1000; // 6h após o horário agendado
+      return new Date(scheduled.getTime() + graceMs).toISOString();
+    }
+  }
+  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+}
+
 /** Cria partida nova e devolve o id */
 export async function createMatch(input: CreateMatchInput): Promise<string> {
   const matchId = generateMatchId();
   const gameMode = mapGameMode(input.gameType);
   const createdAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = computeExpiresAt(input.date, input.time);
   const maxPlayers = Math.max(4, input.maxPlayers);
   const spotsLeft = Math.max(0, maxPlayers - 1);
 

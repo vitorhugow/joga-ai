@@ -508,7 +508,18 @@ export default function Perfil() {
 
       {/* HERO — arena escura */}
       <div className="relative overflow-hidden joga-hero-arena">
-        <div className="absolute inset-0" style={{ backgroundImage: PITCH_BG, backgroundSize: "80px 80px", opacity: 0.55 }} />
+        <img
+          src="/home/hero-ball.webp"
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ objectPosition: "center 35%" }}
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+        />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(3,20,8,0.75) 0%, rgba(5,32,16,0.72) 30%, rgba(8,25,13,0.78) 70%, rgba(10,15,26,0.9) 100%)" }} />
+        <div className="absolute inset-0" style={{ backgroundImage: PITCH_BG, backgroundSize: "80px 80px", opacity: 0.4 }} />
         <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(74,222,128,0.12) 0%, transparent 50%)" }} />
         <div className="absolute bottom-0 left-0 right-0 h-8" style={{ background: "linear-gradient(to top, #0a0f1a, transparent)" }} />
 

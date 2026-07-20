@@ -210,6 +210,17 @@ export default function Comunidades() {
         className="relative overflow-hidden"
         style={{ background: "linear-gradient(155deg, #031408 0%, #052010 28%, #0a5a1e 65%, #0d6826 100%)" }}
       >
+        <img
+          src="/home/hero-ball.webp"
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ objectPosition: "center 35%" }}
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+        />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(155deg, rgba(3,20,8,0.55) 0%, rgba(5,32,16,0.5) 28%, rgba(10,90,30,0.38) 65%, rgba(13,104,38,0.28) 100%)" }} />
         <div className="absolute inset-0" style={{ backgroundImage: PITCH_BG, backgroundSize: "80px 80px" }} />
         <div
           className="absolute inset-0"

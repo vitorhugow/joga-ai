@@ -58,7 +58,7 @@ export function DeleteAccountSection() {
 
   return (
     <>
-      <JogaCard variant="arena" className="border-red-500/20">
+      <JogaCard variant="arena" style={{ background: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.25)" }}>
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">

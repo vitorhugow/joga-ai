@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { ChevronLeft, MapPin, Users, Euro, FileText, Globe, Lock, Repeat, CreditCard, Link2 } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
@@ -135,11 +135,24 @@ export default function CriarPartida() {
     communityId ? "community" : "public",
   );
   const [selectedCommunityId, setSelectedCommunityId] = useState(communityId ?? "");
+  const autoSelectedCommunityRef = useRef(false);
 
   useEffect(() => {
     if (!userId) return;
-    void loadMyCommunities(userId).then(setMyCommunities);
-  }, [userId]);
+    void loadMyCommunities(userId).then((list) => {
+      setMyCommunities(list);
+      // Sem comunidade vinda do URL (ex.: botão "Criar" genérico do Início
+      // ou de Jogos) e com uma única comunidade, associa-a automaticamente
+      // — sem isto, a partida ficava sem communityId e não aparecia na
+      // comunidade nem deixava adicionar os membros dela. Com mais do que
+      // uma, deixa-se por escolher no picker (accessMode "community").
+      if (!communityId && !autoSelectedCommunityRef.current && list.length === 1) {
+        autoSelectedCommunityRef.current = true;
+        setSelectedCommunityId(list[0].id);
+        setAccessMode("community");
+      }
+    });
+  }, [userId, communityId]);
 
   const effectiveCommunityId =
     accessMode === "community" ? (selectedCommunityId || communityId) : communityId;

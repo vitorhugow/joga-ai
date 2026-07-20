@@ -34,8 +34,8 @@ import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
 import { formatCentsEuro, peladaCheckoutTotalCents, peladaPriceCents } from "@/lib/peladaWallet";
-import { createIncompleteSeedProfile, getWhatsappUrl, loadUserProfile } from "@/lib/userRepository";
-import { loadCommunityMembers } from "@/lib/communityRepository";
+import { createIncompleteSeedProfile, getWhatsappUrl, loadUserProfile, loadPublicProfiles, type PublicUserProfile } from "@/lib/userRepository";
+import { subscribeCommunityMembers, type CommunityMember } from "@/lib/communityRepository";
 import { loadMensalistaStatus } from "@/lib/mensalistaRepository";
 import { linkPlayersInRoster } from "@/lib/matchPlayerUtils";
 import { isUserLiveController } from "@/lib/liveControllerUtils";
@@ -626,18 +626,33 @@ export default function PreJogo() {
     };
   }, [matchId, userId]);
 
-  const [communityMembers, setCommunityMembers] = useState<
-    Awaited<ReturnType<typeof loadCommunityMembers>>
-  >([]);
+  const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
+  const [communityMemberProfiles, setCommunityMemberProfiles] = useState<
+    Map<string, PublicUserProfile>
+  >(new Map());
 
+  // Assinatura em tempo real — quem entra na comunidade aparece na lista de
+  // "Adicionar jogador" sem precisar de reabrir a lista nem recarregar.
   useEffect(() => {
     const communityId = matchCommunityId ?? matchDetails?.communityId;
     if (!communityId) {
       setCommunityMembers([]);
       return;
     }
-    void loadCommunityMembers(communityId).then(setCommunityMembers);
+    return subscribeCommunityMembers(communityId, setCommunityMembers);
   }, [matchCommunityId, matchDetails?.communityId]);
+
+  // O displayName gravado no membro fica desatualizado se a pessoa completar
+  // o perfil depois de entrar na comunidade — resolve sempre o nome real
+  // (mesma fonte que addCommunityPlayer usa ao adicionar de facto).
+  useEffect(() => {
+    const userIds = communityMembers.map((m) => m.userId).filter(Boolean);
+    if (userIds.length === 0) {
+      setCommunityMemberProfiles(new Map());
+      return;
+    }
+    void loadPublicProfiles(userIds).then(setCommunityMemberProfiles);
+  }, [communityMembers]);
 
   useEffect(() => {
     if (!userId || !rosterHydrated) return;
@@ -660,16 +675,6 @@ export default function PreJogo() {
   });
   const canManageMatch = isOrganizer || isLiveController;
   const [showCommunityList, setShowCommunityList] = useState(false);
-
-  // Re-busca ao abrir a lista — sem isto, um membro que entrou na comunidade
-  // depois do carregamento da página só aparecia depois de recarregar.
-  useEffect(() => {
-    if (!showCommunityList) return;
-    const communityId = matchCommunityId ?? matchDetails?.communityId;
-    if (!communityId) return;
-    void loadCommunityMembers(communityId).then(setCommunityMembers);
-  }, [showCommunityList, matchCommunityId, matchDetails?.communityId]);
-
   const [sortMode, setSortMode] = useState<SortMode>("teams");
 
   const activeTeams = (["A", "B", "C", "D"] as TeamKey[]).slice(0, teamCount);
@@ -1417,16 +1422,19 @@ export default function PreJogo() {
     const query = manualName.trim().toLowerCase();
     return communityMembers
       .filter((member) => !inMatchIds.has(member.userId))
-      .filter((member) => !query || member.displayName.toLowerCase().includes(query))
-      .map((member) => ({
-        id: member.userId,
-        userId: member.userId,
-        name: member.displayName,
-        position: "MEI",
-        overall: MANUAL_PLAYER_OVR,
-        paid: false,
-      }));
-  }, [communityMembers, players, manualName]);
+      .map((member) => {
+        const profile = communityMemberProfiles.get(member.userId);
+        return {
+          id: member.userId,
+          userId: member.userId,
+          name: profile?.displayName || member.displayName,
+          position: profile?.position || "MEI",
+          overall: profile?.overall ?? MANUAL_PLAYER_OVR,
+          paid: false,
+        };
+      })
+      .filter((player) => !query || player.name.toLowerCase().includes(query));
+  }, [communityMembers, communityMemberProfiles, players, manualName]);
 
   const totalPaid = players.filter((player) => player.paid).length;
   const benchCount = teamBuckets.BENCH.length;

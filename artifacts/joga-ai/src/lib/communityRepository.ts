@@ -576,6 +576,38 @@ export async function loadCommunityMembers(communityId: string): Promise<Communi
   }
 }
 
+/**
+ * Como loadCommunityMembers, mas em tempo real — quem entra na comunidade
+ * aparece na lista sem precisar de reabrir/recarregar (ex.: picker de
+ * "Adicionar jogador" numa partida já aberta).
+ */
+export function subscribeCommunityMembers(
+  communityId: string,
+  callback: (members: CommunityMember[]) => void,
+): () => void {
+  if (!isFirebaseConfigured()) {
+    callback([]);
+    return () => {};
+  }
+
+  return onSnapshot(
+    collection(db, "communities", communityId, "members"),
+    (snap) => {
+      callback(
+        snap.docs.map((d) => ({
+          userId: d.data().userId ?? d.id,
+          displayName: d.data().displayName ?? "Jogador",
+          role: (d.data().role as CommunityMember["role"]) ?? "member",
+        })),
+      );
+    },
+    (err) => {
+      console.warn("[communityRepository] subscribeCommunityMembers:", err);
+      void loadCommunityMembers(communityId).then(callback);
+    },
+  );
+}
+
 /** Corrige memberCount no documento com base na subcoleção members */
 export async function syncCommunityMemberCount(communityId: string): Promise<number> {
   const members = await loadCommunityMembers(communityId);

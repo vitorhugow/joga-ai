@@ -26,8 +26,6 @@ import { InstallAppBanner } from "@/components/InstallAppBanner";
 
 const PITCH_SVG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Cpath d='M40 0 L40 80' stroke='rgba(255,255,255,0.03)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='18' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
-const STADIUM_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 320' preserveAspectRatio='xMidYMax meet'%3E%3Cg fill='rgba(0,0,0,0.18)'%3E%3Crect x='0' y='180' width='60' height='140'/%3E%3Crect x='55' y='160' width='50' height='160'/%3E%3Crect x='100' y='145' width='45' height='175'/%3E%3Crect x='140' y='135' width='40' height='185'/%3E%3Crect x='175' y='128' width='35' height='192'/%3E%3Crect x='168' y='60' width='8' height='75'/%3E%3Ccircle cx='172' cy='56' r='12'/%3E%3Crect x='590' y='128' width='35' height='192'/%3E%3Crect x='620' y='135' width='40' height='185'/%3E%3Crect x='655' y='145' width='45' height='175'/%3E%3Crect x='695' y='160' width='50' height='160'/%3E%3Crect x='740' y='180' width='60' height='140'/%3E%3Crect x='624' y='60' width='8' height='75'/%3E%3Ccircle cx='628' cy='56' r='12'/%3E%3Crect x='205' y='240' width='390' height='80'/%3E%3Cellipse cx='400' cy='240' rx='195' ry='30' /%3E%3C/g%3E%3C/svg%3E")`;
-
 function HeroCard({ player }: {
   player: ReturnType<typeof profileToPlayerCard>;
 }) {
@@ -153,18 +151,31 @@ export default function Home() {
       <div
         className="relative overflow-hidden"
         style={{
-          background: "linear-gradient(155deg, #011206 0%, #021a09 20%, #041f0b 40%, #072b12 60%, #0a3d1a 80%, #0c4a1f 100%)",
-          paddingBottom: 44,
+          background: "linear-gradient(155deg, #011206 0%, #04140A 55%, #07090D 100%)",
+          paddingBottom: 28,
         }}
       >
-        <div className="absolute bottom-0 left-0 right-0" style={{ height: "100%", backgroundImage: STADIUM_SVG, backgroundSize: "cover", backgroundPosition: "bottom center", backgroundRepeat: "no-repeat", opacity: 0.9 }} />
-        <div className="absolute inset-0" style={{ backgroundImage: PITCH_SVG, backgroundSize: "80px 80px", opacity: 0.6 }} />
-        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% -5%, rgba(255,255,200,0.09) 0%, transparent 45%)" }} />
-        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 120%, rgba(22,163,74,0.25) 0%, transparent 55%)" }} />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(0,0,0,0.35) 0%, transparent 25%, transparent 75%, rgba(0,0,0,0.35) 100%)" }} />
-        <div className="absolute bottom-0 left-0 right-0 h-14" style={{ background: "linear-gradient(to top, #0a0f1a, transparent)" }} />
+        {/* Foto real (se falhar, fica o gradiente acima) */}
+        <img
+          src="/home/hero-ball.webp"
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="async"
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ objectPosition: "center 50%" }}
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+        />
+        {/* Textura subtil por cima da foto */}
+        <div className="absolute inset-0" style={{ backgroundImage: PITCH_SVG, backgroundSize: "80px 80px", opacity: 0.22 }} />
+        {/* Véu — garante leitura sobre QUALQUER foto */}
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(180deg, rgba(7,9,13,0.55) 0%, rgba(7,9,13,0.05) 30%, rgba(7,9,13,0.10) 50%, rgba(7,9,13,0.82) 86%, #07090D 100%)" }}
+        />
 
-        <div className="relative flex items-center justify-between px-5 pt-5 pb-4">
+        {/* Topbar — igual ao original */}
+        <div className="relative z-10 flex items-center justify-between px-5 pt-5 pb-4">
           <JogaLogo variant="full" size="md" className="max-w-[180px]" />
           <div className="flex items-center gap-2">
             <NotificationsBell userId={userId} isLinked={isLinked} />
@@ -177,20 +188,25 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="home-feature-card relative flex items-center justify-between gap-3 px-4">
+        {/* Carta à esquerda + nome/posição/stats ao lado — como no Perfil */}
+        <div className="relative z-10 flex items-center gap-4 px-5 pt-1 pb-1">
           <HeroCard player={player} />
           <div className="flex-1 min-w-0">
-            <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Em Destaque</p>
-            <h1 className="font-display font-black text-white uppercase leading-none tracking-tight" style={{ fontSize: "1.25rem" }}>{player.name.split(" ")[0]}</h1>
-            <h1 className="font-display font-black text-white uppercase leading-none tracking-tight -mt-0.5" style={{ fontSize: "1.25rem" }}>{player.name.split(" ").slice(1).join(" ")}</h1>
-            <div className="flex items-center gap-2 mt-2">
+            <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-[0.24em] mb-1">Em destaque</p>
+            <h1 className="font-display font-black text-white uppercase leading-none tracking-tight" style={{ fontSize: "1.35rem" }}>
+              {player.name.split(" ")[0]}
+            </h1>
+            <h1 className="font-display font-black text-white uppercase leading-none tracking-tight -mt-0.5" style={{ fontSize: "1.35rem" }}>
+              {player.name.split(" ").slice(1).join(" ")}
+            </h1>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider" style={{ background: "rgba(74,222,128,0.2)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }}>{player.position}</span>
               <span className="text-white/40 text-[10px]">·</span>
               <span className="text-white/60 text-[11px] font-medium">{player.title}</span>
             </div>
             <div className="flex items-center gap-4 mt-4">
               {[{ v: player.seasonStats.goals, l: "Golos" }, { v: player.seasonStats.assists, l: "Assist." }, { v: player.seasonStats.matches, l: "Jogos" }].map((s, i) => (
-                <div key={s.l} className="flex items-center gap-3">
+                <div key={s.l} className="flex items-center gap-4">
                   {i > 0 && <div className="w-px h-6" style={{ background: "rgba(255,255,255,0.15)" }} />}
                   <div>
                     <p className="font-display font-black text-white text-xl leading-none">{s.v}</p>
@@ -344,8 +360,19 @@ export default function Home() {
                       {emphasis.pulse && (
                         <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-red-400 animate-pulse" />
                       )}
+                      <img
+                        src="/home/band-cage.webp"
+                        alt=""
+                        aria-hidden="true"
+                        loading="lazy"
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{ opacity: 0.5 }}
+                        onError={(e) => { e.currentTarget.remove(); }}
+                      />
+                      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(7,9,13,0.9) 0%, rgba(7,9,13,0.55) 60%, rgba(7,9,13,0.35) 100%)" }} />
                       <div
-                        className="h-1"
+                        className="h-1 relative z-10"
                         style={{
                           background:
                             match.priority === 1
@@ -355,7 +382,7 @@ export default function Home() {
                                 : "linear-gradient(90deg, #16a34a, #059669)",
                         }}
                       />
-                      <div className="px-4 pt-3.5 pb-3">
+                      <div className="px-4 pt-3.5 pb-3 relative z-10">
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
@@ -402,9 +429,20 @@ export default function Home() {
             </JogaCard>
           ) : (
           <Link href={`/partida/${available[0].id}/pre-jogo`}>
-          <div className="rounded-2xl overflow-hidden joga-tap" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>
-            <div className="h-1" style={{ background: "linear-gradient(90deg, #16a34a, #059669, #2563eb)" }} />
-            <div className="px-4 pt-3.5 pb-3">
+          <div className="relative rounded-2xl overflow-hidden joga-tap" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)" }}>
+            <img
+              src="/home/band-cage.webp"
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ opacity: 0.42, objectPosition: "center 60%" }}
+              onError={(e) => { e.currentTarget.remove(); }}
+            />
+            <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(7,9,13,0.9) 0%, rgba(7,9,13,0.55) 60%, rgba(7,9,13,0.35) 100%)" }} />
+            <div className="h-1 relative z-10" style={{ background: "linear-gradient(90deg, #16a34a, #059669, #2563eb)" }} />
+            <div className="px-4 pt-3.5 pb-3 relative z-10">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-display font-black text-white text-lg leading-tight">{available[0].title}</p>
@@ -420,22 +458,58 @@ export default function Home() {
           )}
         </div>
 
+        {/* EVOLUÇÃO (teaser para o perfil) */}
+        <Link href="/perfil">
+          <div className="relative rounded-2xl overflow-hidden joga-tap" style={{ minHeight: 120, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <img
+              src="/home/band-player.webp"
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ objectPosition: "center 28%" }}
+              onError={(e) => { e.currentTarget.remove(); }}
+            />
+            <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(7,9,13,0.92) 0%, rgba(7,9,13,0.5) 60%, rgba(7,9,13,0.15) 100%)" }} />
+            <div className="relative z-10 p-4">
+              <p className="text-emerald-400 text-[9.5px] font-bold uppercase tracking-[0.2em]">A tua evolução</p>
+              <h3 className="font-display font-black text-white text-lg mt-1">Vê o teu histórico</h3>
+              <p className="text-white/70 text-xs mt-0.5 max-w-[220px]">Como a tua carta evoluiu ao longo das peladas.</p>
+              <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold mt-2">Ver o meu perfil <ChevronRight className="w-3.5 h-3.5" /></span>
+            </div>
+          </div>
+        </Link>
+
         {/* COMUNIDADES */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-black text-white text-lg">Comunidades</h2>
             <Link href="/comunidades"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todas <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
-          <div className="flex gap-6 overflow-x-auto pb-1 -mx-4 px-4">
-            {communities.map((c) => <CommunityPill key={c.id} c={c} />)}
-            <Link href="/comunidades">
-              <div className="shrink-0 flex flex-col items-center gap-2 active:scale-95 transition-transform">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center border-2 border-dashed" style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.12)" }}>
-                  <Plus className="w-5 h-5" style={{ color: "rgba(255,255,255,0.3)" }} />
+          <div className="relative rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+            <img
+              src="/home/band-stands.webp"
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ opacity: 0.35, objectPosition: "center 40%" }}
+              onError={(e) => { e.currentTarget.remove(); }}
+            />
+            <div className="absolute inset-0" style={{ background: "linear-gradient(0deg, rgba(7,9,13,0.9) 0%, rgba(7,9,13,0.6) 100%)" }} />
+            <div className="relative z-10 flex gap-6 overflow-x-auto px-4 pt-4 pb-4">
+              {communities.map((c) => <CommunityPill key={c.id} c={c} />)}
+              <Link href="/comunidades">
+                <div className="shrink-0 flex flex-col items-center gap-2 active:scale-95 transition-transform">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border-2 border-dashed" style={{ background: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.18)" }}>
+                    <Plus className="w-5 h-5" style={{ color: "rgba(255,255,255,0.5)" }} />
+                  </div>
+                  <p className="text-[11px] font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>Explorar</p>
                 </div>
-                <p className="text-[11px] font-medium" style={{ color: "rgba(255,255,255,0.3)" }}>Explorar</p>
-              </div>
-            </Link>
+              </Link>
+            </div>
           </div>
         </div>
 

@@ -89,7 +89,7 @@ export function BottomNavigation() {
                 )}
               </div>
               <span
-                className="w-full text-center truncate px-0.5 text-[10px] font-bold leading-none transition-colors duration-200"
+                className="w-full text-center truncate px-0.5 text-[10px] font-bold leading-[1.4] transition-colors duration-200"
                 style={{
                   color: item.gold
                     ? isActive ? GOLD_ACTIVE : GOLD_INACTIVE

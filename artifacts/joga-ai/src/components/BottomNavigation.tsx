@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Home, Calendar, Users, Trophy, Award, User } from "lucide-react";
+import { Home, Calendar, Users, Trophy, User } from "lucide-react";
 import { subscribeActiveTournamentConfig } from "@/lib/tournamentRepository";
 
 const baseNavItems = [
-  { path: "/", icon: Home, label: "Início" },
-  { path: "/jogos", icon: Calendar, label: "Jogos" },
-  { path: "/comunidades", icon: Users, label: "Clubes" },
-  { path: "/ranking", icon: Trophy, label: "Ranking" },
-  { path: "/perfil", icon: User, label: "Perfil" },
+  { path: "/", icon: Home, label: "Início", emoji: undefined, gold: false },
+  { path: "/jogos", icon: Calendar, label: "Jogos", emoji: undefined, gold: false },
+  { path: "/comunidades", icon: Users, label: "Clubes", emoji: undefined, gold: false },
+  { path: "/ranking", icon: Trophy, label: "Ranking", emoji: undefined, gold: false },
+  { path: "/perfil", icon: User, label: "Perfil", emoji: undefined, gold: false },
 ];
+
+const GOLD_ACTIVE = "#f2d47a";
+const GOLD_INACTIVE = "rgba(242,212,122,0.45)";
 
 export function BottomNavigation() {
   const [location] = useLocation();
@@ -24,7 +27,7 @@ export function BottomNavigation() {
     ? [
         baseNavItems[0],
         baseNavItems[1],
-        { path: "/cup", icon: Award, label: cupLabel },
+        { path: "/cup", icon: Trophy, label: cupLabel, emoji: "🏆", gold: true },
         ...baseNavItems.slice(2),
       ]
     : baseNavItems;
@@ -54,22 +57,44 @@ export function BottomNavigation() {
               )}
               <div
                 className="flex items-center justify-center w-11 h-7 rounded-xl transition-all duration-200"
-                style={isActive ? { background: "rgba(22,163,74,0.15)" } : undefined}
+                style={
+                  isActive
+                    ? { background: item.gold ? "rgba(242,212,122,0.15)" : "rgba(22,163,74,0.15)" }
+                    : undefined
+                }
               >
-                <Icon
-                  className="transition-all duration-200"
-                  style={{
-                    width: 20,
-                    height: 20,
-                    color: isActive ? "#4ade80" : "rgba(255,255,255,0.32)",
-                    strokeWidth: isActive ? 2.5 : 1.8,
-                    transform: isActive ? "scale(1.1)" : "scale(1)",
-                  }}
-                />
+                {item.emoji ? (
+                  <span
+                    className="transition-all duration-200"
+                    style={{
+                      fontSize: 20,
+                      lineHeight: 1,
+                      filter: isActive ? "none" : "grayscale(0.55) opacity(0.55)",
+                      transform: isActive ? "scale(1.1)" : "scale(1)",
+                    }}
+                  >
+                    {item.emoji}
+                  </span>
+                ) : (
+                  <Icon
+                    className="transition-all duration-200"
+                    style={{
+                      width: 20,
+                      height: 20,
+                      color: isActive ? "#4ade80" : "rgba(255,255,255,0.32)",
+                      strokeWidth: isActive ? 2.5 : 1.8,
+                      transform: isActive ? "scale(1.1)" : "scale(1)",
+                    }}
+                  />
+                )}
               </div>
               <span
                 className="w-full text-center truncate px-0.5 text-[10px] font-bold leading-none transition-colors duration-200"
-                style={{ color: isActive ? "#4ade80" : "rgba(255,255,255,0.28)" }}
+                style={{
+                  color: item.gold
+                    ? isActive ? GOLD_ACTIVE : GOLD_INACTIVE
+                    : isActive ? "#4ade80" : "rgba(255,255,255,0.28)",
+                }}
               >
                 {item.label}
               </span>

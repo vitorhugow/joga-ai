@@ -12,8 +12,8 @@ const baseNavItems = [
   { path: "/perfil", icon: User, label: "Perfil", emoji: undefined, gold: false },
 ];
 
-const GOLD_ACTIVE = "#f2d47a";
-const GOLD_INACTIVE = "rgba(242,212,122,0.45)";
+const GOLD_ACTIVE = "#ffd54f";
+const GOLD_INACTIVE = "#e0ab1f";
 
 export function BottomNavigation() {
   const [location] = useLocation();
@@ -69,7 +69,7 @@ export function BottomNavigation() {
                     style={{
                       fontSize: 20,
                       lineHeight: 1,
-                      filter: isActive ? "none" : "grayscale(0.55) opacity(0.55)",
+                      filter: isActive ? "none" : "opacity(0.85)",
                       transform: isActive ? "scale(1.1)" : "scale(1)",
                     }}
                   >

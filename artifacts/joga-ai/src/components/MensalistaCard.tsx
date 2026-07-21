@@ -86,7 +86,7 @@ export function MensalistaCard({ community, userId }: MensalistaCardProps) {
           <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.2em]">Passe mensal</p>
           <h3 className="font-display font-black text-white text-lg mt-1">Mensalista</h3>
           <p className="text-white/55 text-sm mt-1">
-            {priceLabel} — isento de pagar cada pelada nesta comunidade.
+            {priceLabel} — isento de pagar cada pelada neste clube.
           </p>
           {slotsLeft != null && !isActive && (
             <p className="text-amber-300/90 text-xs font-semibold mt-2">

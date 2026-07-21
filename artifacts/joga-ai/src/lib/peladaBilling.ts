@@ -130,7 +130,7 @@ export async function payPelada(matchId: string): Promise<PayPeladaResult> {
         trackEvent("payment_started", { matchId, method: "mensalista" });
         toast({
           title: "Mensalista ✓",
-          description: "Presença confirmada — estás isento nesta comunidade.",
+          description: "Presença confirmada — estás isento neste clube.",
         });
         return "mensalista";
       }
@@ -163,7 +163,7 @@ export async function payPelada(matchId: string): Promise<PayPeladaResult> {
       trackEvent("payment_started", { matchId, method: "mensalista" });
       toast({
         title: "Mensalista ✓",
-        description: "Presença confirmada — estás isento nesta comunidade.",
+        description: "Presença confirmada — estás isento neste clube.",
       });
       return "mensalista";
     }

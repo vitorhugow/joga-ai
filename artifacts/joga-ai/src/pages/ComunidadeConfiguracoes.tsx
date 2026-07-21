@@ -145,7 +145,7 @@ export default function ComunidadeConfiguracoes() {
   if (!isAdmin) {
     return (
       <JogaPage theme="dark" className="py-10 text-center">
-        <p className="text-white/50">Apenas o administrador pode configurar esta comunidade.</p>
+        <p className="text-white/50">Apenas o administrador pode configurar este clube.</p>
         <Link href={`/comunidades/${id}`} className="text-emerald-400 text-sm mt-4 inline-block">Voltar</Link>
       </JogaPage>
     );
@@ -166,7 +166,7 @@ export default function ComunidadeConfiguracoes() {
         setCommunity(refreshed);
         setCoverImage(resolveCommunityCover(refreshed) ?? "");
       }
-      toast({ title: "Comunidade actualizada" });
+      toast({ title: "Clube actualizado" });
     } catch (err) {
       if (err instanceof CommunityCoverTooLargeError) {
         toast({ title: err.message, variant: "destructive" });
@@ -217,7 +217,7 @@ export default function ComunidadeConfiguracoes() {
   }
 
   async function handleDeleteCommunity() {
-    if (!window.confirm("Apagar esta comunidade? Esta acção não pode ser desfeita.")) return;
+    if (!window.confirm("Apagar este clube? Esta acção não pode ser desfeita.")) return;
     try {
       await deleteCommunity(id);
       window.location.href = "/comunidades";
@@ -251,7 +251,7 @@ export default function ComunidadeConfiguracoes() {
             <input value={city} onChange={(e) => setCity(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-3 bg-white/6 border border-white/10 text-white text-sm" />
           </div>
           <div>
-            <label className="text-[10px] font-bold uppercase text-white/40">Capa da comunidade</label>
+            <label className="text-[10px] font-bold uppercase text-white/40">Capa do clube</label>
             <p className="text-white/35 text-xs mt-1 mb-2">
               Tamanho ideal: <span className="text-emerald-300/90 font-semibold">{COMMUNITY_COVER_LABEL}</span> (proporção do banner)
             </p>
@@ -303,7 +303,7 @@ export default function ComunidadeConfiguracoes() {
             outputHeight={COMMUNITY_COVER_OUTPUT_HEIGHT}
             jpegQuality={0.78}
             cropTitle="Enquadrar capa"
-            cropDescription={`Ajusta como no banner da comunidade (${COMMUNITY_COVER_LABEL}).`}
+            cropDescription={`Ajusta como no banner do clube (${COMMUNITY_COVER_LABEL}).`}
             applyLabel="Aplicar capa"
             onApply={(dataUrl) => {
               setCoverImage(dataUrl);
@@ -313,7 +313,7 @@ export default function ComunidadeConfiguracoes() {
           />
           <label className="flex items-center gap-2 text-sm text-white/70">
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} className="accent-emerald-500" />
-            Comunidade privada
+            Clube privado
           </label>
           <JogaButton type="submit" variant="primary" disabled={saving}>{saving ? "A guardar…" : "Guardar"}</JogaButton>
         </form>
@@ -452,7 +452,7 @@ export default function ComunidadeConfiguracoes() {
         <h2 className="font-display font-black text-white text-lg mb-3">Membros ({members.length})</h2>
         <p className="text-white/40 text-xs mb-3 leading-relaxed">
           Admins adicionais têm os mesmos poderes de gestão, mas só o admin principal
-          ({community.adminId === userId ? "tu" : "quem criou a comunidade"}) herda o Jogador PRO
+          ({community.adminId === userId ? "tu" : "quem criou o clube"}) herda o Jogador PRO
           pessoal do Clube PRO.
         </p>
         <div className="space-y-2">
@@ -505,7 +505,7 @@ export default function ComunidadeConfiguracoes() {
 
       <JogaButton variant="danger" size="lg" className="w-full gap-2" onClick={() => void handleDeleteCommunity()}>
         <Trash2 className="w-4 h-4" />
-        Apagar comunidade
+        Apagar clube
       </JogaButton>
     </JogaPage>
   );

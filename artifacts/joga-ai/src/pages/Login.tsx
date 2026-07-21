@@ -37,7 +37,7 @@ const HERO_PLAYER = {
 const STATS = [
   { value: "Carta", label: "Evolui a cada pelada" },
   { value: "Ao vivo", label: "Golos e stats em tempo real" },
-  { value: "Comunidade", label: "A tua malta num só sítio" },
+  { value: "Clube", label: "A tua malta num só sítio" },
 ];
 
 const HERO_BULLETS = [
@@ -202,7 +202,7 @@ const FEATURE_SECTIONS: FeatureSectionData[] = [
     title: "Quem manda no bairro? Os números respondem.",
     intro: "Rankings por overall, golos, assistências e notas — sem discussão no café.",
     description:
-      "O ecrã inicial e os rankings da comunidade mostram quem lidera em cada métrica. Compara-te com a malta, vê a tua posição e usa os dados para rivalidades saudáveis. Cada jogo conta para subires — ou para calar os críticos.",
+      "O ecrã inicial e os rankings do clube mostram quem lidera em cada métrica. Compara-te com a malta, vê a tua posição e usa os dados para rivalidades saudáveis. Cada jogo conta para subires — ou para calar os críticos.",
     before: [
       "Discussão sobre o melhor jogador",
       "Rankings inventados",
@@ -224,27 +224,27 @@ const FEATURE_SECTIONS: FeatureSectionData[] = [
   },
   {
     id: "comunidades",
-    tag: "Comunidades",
+    tag: "Clubes",
     title: "A tua malta, num só lugar.",
-    intro: "Peladas fixas, membros, jogos abertos e estatísticas da comunidade — sem grupo morto no telemóvel.",
+    intro: "Peladas fixas, membros, jogos abertos e estatísticas do clube — sem grupo morto no telemóvel.",
     description:
-      "Cria ou entra em comunidades da tua zona, vê próximos jogos, membros activos e o historial da pelada. Organizadores gerem tudo num hub; jogadores encontram jogos e evoluem dentro da mesma malta. É o centro nervoso da tua pelada.",
+      "Cria ou entra em clubes da tua zona, vê próximos jogos, membros activos e o historial da pelada. Organizadores gerem tudo num hub; jogadores encontram jogos e evoluem dentro da mesma malta. É o centro nervoso da tua pelada.",
     before: [
       "Grupos de WhatsApp caóticos",
       "Partidas anunciadas e perdidas",
-      "Sem visão da comunidade",
+      "Sem visão do clube",
       "Difícil juntar jogadores novos",
     ],
     after: [
       "Hub dedicado por pelada",
       "Jogos e membros organizados",
-      "Stats e rankings da comunidade",
+      "Stats e rankings do clube",
       "Peladas abertas para novos jogadores",
     ],
     screenshot: {
       src: "/screenshots/06-comunidade.png",
-      alt: "Comunidades e peladas",
-      label: "Comunidades",
+      alt: "Clubes e peladas",
+      label: "Clubes",
     },
   },
 ];
@@ -617,7 +617,7 @@ function LandingHeader({ onLogin }: { onLogin: () => void }) {
           {[
             { label: "Como funciona", id: "problema" },
             { label: "App", id: "ao-vivo" },
-            { label: "Comunidades", id: "comunidades" },
+            { label: "Clubes", id: "comunidades" },
           ].map((link) => (
             <button
               key={link.id}
@@ -743,7 +743,7 @@ export default function Login() {
             <div className="flex items-center justify-center gap-3 mb-6 pb-4 border-b border-white/10">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">
-                Ao vivo · Comunidades
+                Ao vivo · Clubes
               </span>
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             </div>
@@ -798,7 +798,7 @@ export default function Login() {
             Jogos
           </Link>
           <Link href="/comunidades" className="text-white/35 text-xs joga-tap hover:text-white/55">
-            Comunidades
+            Clubes
           </Link>
         </div>
         <p className="text-white/20 text-[11px]">© Joga AI · Feito para quem joga a sério</p>

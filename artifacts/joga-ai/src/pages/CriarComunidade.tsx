@@ -17,7 +17,7 @@ const GAME_TYPES = [
 ] as const;
 
 export default function CriarComunidade() {
-  useDocumentTitle("Criar Comunidade");
+  useDocumentTitle("Criar Clube");
   const { userId } = useAuth();
   const { profile } = useUserProfile();
   const [, setLocation] = useLocation();
@@ -30,7 +30,7 @@ export default function CriarComunidade() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (name.trim().length < 2) {
-      toast({ title: "Nome obrigatório", description: "Indica o nome da comunidade.", variant: "destructive" });
+      toast({ title: "Nome obrigatório", description: "Indica o nome do clube.", variant: "destructive" });
       return;
     }
     if (city.trim().length < 2) {
@@ -49,7 +49,7 @@ export default function CriarComunidade() {
         adminDisplayName: profile.displayName || "Organizador",
       });
       trackEvent("community_created", { gameType });
-      toast({ title: "Comunidade criada!", description: "Já podes convidar a malta." });
+      toast({ title: "Clube criado!", description: "Já podes convidar a malta." });
       setLocation("/comunidades");
     } catch {
       toast({
@@ -71,8 +71,8 @@ export default function CriarComunidade() {
           </div>
         </Link>
         <div>
-          <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em]">Comunidades</p>
-          <h1 className="font-display font-black text-white text-2xl">Criar comunidade</h1>
+          <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em]">Clubes</p>
+          <h1 className="font-display font-black text-white text-2xl">Criar clube</h1>
         </div>
       </div>
 
@@ -131,10 +131,10 @@ export default function CriarComunidade() {
               onChange={(e) => setIsPrivate(e.target.checked)}
               className="w-4 h-4 accent-emerald-500"
             />
-            <span className="text-white/70 text-sm">Comunidade privada (pedido de entrada)</span>
+            <span className="text-white/70 text-sm">Clube privado (pedido de entrada)</span>
           </label>
           <JogaButton type="submit" variant="primary" size="lg" className="w-full" disabled={saving}>
-            {saving ? "A criar…" : "Criar comunidade"}
+            {saving ? "A criar…" : "Criar clube"}
           </JogaButton>
         </form>
       </JogaCard>

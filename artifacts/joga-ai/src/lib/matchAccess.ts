@@ -38,7 +38,7 @@ export function isListedInPublicBrowse(input: {
 
 export function accessModeLabel(mode: MatchAccessMode): string {
   if (mode === "public") return "Público";
-  if (mode === "community") return "Apenas comunidade";
+  if (mode === "community") return "Apenas clube";
   return "Privado (só com link)";
 }
 

@@ -123,7 +123,7 @@ export default function ComunidadePage() {
   }, [id]);
 
   const [community, setCommunity] = useState<Community | null>(null);
-  useDocumentTitle(community?.name ?? "Comunidade");
+  useDocumentTitle(community?.name ?? "Clube");
   const [matches, setMatches] = useState<MatchListing[]>([]);
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [joinStatus, setJoinStatus] = useState<JoinRequestStatus | null>(null);
@@ -275,7 +275,7 @@ export default function ComunidadePage() {
   if (!community) {
     return (
       <JogaPage theme="dark" className="py-10 text-center">
-        <p className="text-white/50">A carregar comunidade…</p>
+        <p className="text-white/50">A carregar clube…</p>
       </JogaPage>
     );
   }
@@ -298,7 +298,7 @@ export default function ComunidadePage() {
   const displayMemberCount = visibleMembers.length > 0 ? visibleMembers.length : community.memberCount;
 
   async function handleRequestJoin() {
-    if (!requireLinked({ mode: "register", title: "Cria conta para entrar na comunidade" })) {
+    if (!requireLinked({ mode: "register", title: "Cria conta para entrar no clube" })) {
       return;
     }
     if (!community || isMember || isAdmin) return;
@@ -320,14 +320,14 @@ export default function ComunidadePage() {
         await refreshCommunity();
         toast({
           title: "Pedido enviado",
-          description: "Aguarda aprovação do administrador para entrar na comunidade.",
+          description: "Aguarda aprovação do administrador para entrar no clube.",
         });
       } else {
         await joinCommunityPublic(id, userId, profile.displayName || "Jogador");
         await refreshCommunity();
         loadCommunityMembers(id).then(setMembers);
         toast({
-          title: "Entraste na comunidade!",
+          title: "Entraste no clube!",
           description: `Bem-vindo a ${community.name}.`,
         });
       }
@@ -350,7 +350,7 @@ export default function ComunidadePage() {
       await refreshCommunity();
       loadCommunityMembers(id).then(setMembers);
       trackEvent("community_join_via_invite", { communityId: id });
-      toast({ title: "Entraste na comunidade!", description: `Bem-vindo a ${community.name}.` });
+      toast({ title: "Entraste no clube!", description: `Bem-vindo a ${community.name}.` });
     } catch (err) {
       toast({
         title: "Não foi possível aceitar o convite",
@@ -369,7 +369,7 @@ export default function ComunidadePage() {
       const token = await createCommunityInvite(id, userId);
       const url = `${window.location.origin}/comunidades/${id}?invite=${token}`;
       if (navigator.share) {
-        await navigator.share({ title: `Junta-te a ${community?.name ?? "esta comunidade"}`, url });
+        await navigator.share({ title: `Junta-te a ${community?.name ?? "este clube"}`, url });
       } else {
         await navigator.clipboard.writeText(url);
         toast({ title: "Link copiado!", description: "Partilha com quem quiseres convidar." });
@@ -434,13 +434,13 @@ export default function ComunidadePage() {
   }
 
   async function handleLeave() {
-    if (!window.confirm("Queres sair desta comunidade?")) return;
+    if (!window.confirm("Queres sair deste clube?")) return;
     setJoining(true);
     try {
       await leaveCommunity(id, userId);
       setMembers([]);
       await refreshCommunity();
-      toast({ title: "Saíste da comunidade" });
+      toast({ title: "Saíste do clube" });
     } catch (err) {
       toast({
         title: "Não foi possível sair",
@@ -618,7 +618,7 @@ export default function ComunidadePage() {
 
         {isAdmin && isMember && (
           <p className="text-emerald-400 text-xs font-semibold text-center mt-5 pt-1">
-            És o administrador desta comunidade
+            És o administrador deste clube
           </p>
         )}
 
@@ -627,7 +627,7 @@ export default function ComunidadePage() {
           <JogaCard variant="arena" padding="md">
             <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2">Sobre</p>
             <p className="text-white/80 text-sm leading-relaxed">
-              Comunidade de {gameTypeLabel[community.gameType] || community.gameType} em {community.city}.
+              Clube de {gameTypeLabel[community.gameType] || community.gameType} em {community.city}.
               {community.isPrivate
                 ? " Entrada sujeita a aprovação do administrador."
                 : " Entrada livre — junta-te à malta."}
@@ -659,14 +659,14 @@ export default function ComunidadePage() {
             onClick={() => void handleLeave()}
             data-testid="button-leave-community"
           >
-            Sair da comunidade
+            Sair do clube
           </JogaButton>
         )}
 
         {!isMember && !isAdmin && inviteToken && (
           <JogaCard variant="arena" padding="md" className="border-emerald-400/25 bg-emerald-400/8">
             <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-widest">Convite</p>
-            <p className="text-white text-sm mt-1">Foste convidado para esta comunidade.</p>
+            <p className="text-white text-sm mt-1">Foste convidado para este clube.</p>
             <JogaButton
               variant="primary"
               size="lg"
@@ -692,7 +692,7 @@ export default function ComunidadePage() {
               ? "Pedido pendente"
               : community.isPrivate
                 ? "Pedir para entrar"
-                : "Entrar na comunidade"}
+                : "Entrar no clube"}
           </JogaButton>
         )}
 
@@ -703,7 +703,7 @@ export default function ComunidadePage() {
             onClick={() =>
               requireLinked({
                 mode: "register",
-                title: "Cria conta para entrar na comunidade",
+                title: "Cria conta para entrar no clube",
               })
             }
           >
@@ -728,13 +728,13 @@ export default function ComunidadePage() {
             {(isAdmin || isMember) && (
               <Link href={`/criar-partida?communityId=${id}`}>
                 <JogaButton variant="primary" size="md" className="w-full">
-                  Criar partida na comunidade
+                  Criar partida no clube
                 </JogaButton>
               </Link>
             )}
             <div className={`space-y-3 ${(isAdmin || isMember) ? "mt-6" : ""}`}>
               {matches.length === 0 ? (
-                <p className="text-white/40 text-sm text-center py-8">Sem partidas nesta comunidade.</p>
+                <p className="text-white/40 text-sm text-center py-8">Sem partidas neste clube.</p>
               ) : (
                 matches.map((m) => <MatchCard key={m.id} {...m} returnTo={`/comunidades/${id}`} />)
               )}

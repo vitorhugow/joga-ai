@@ -13,7 +13,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
 const FALLBACK_DESCRIPTION =
-  "A primeira edição da Joga Aí Cup reúne comunidades num só campeonato — monta o teu clube, joga a sério, e vê a tua carta evoluir a cada jogo.";
+  "A primeira edição da Joga Aí Cup reúne clubes num só campeonato — monta o teu clube, joga a sério, e vê a tua carta evoluir a cada jogo.";
 
 const FALLBACK_RULES = [
   "Formato: fase de grupos + mata-mata.",

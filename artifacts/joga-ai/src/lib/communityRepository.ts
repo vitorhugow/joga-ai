@@ -176,7 +176,7 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
       const data = d.data();
       return {
         id: d.id,
-        name: data.name ?? "Comunidade",
+        name: data.name ?? "Clube",
         city: data.city ?? "",
         gameType: data.gameType ?? "fut7",
         isPrivate: Boolean(data.isPrivate),
@@ -221,7 +221,7 @@ function mapCommunityDoc(
   const brandingRaw = data.branding as Record<string, unknown> | undefined;
   return {
     id,
-    name: String(data.name ?? "Comunidade"),
+    name: String(data.name ?? "Clube"),
     city: String(data.city ?? ""),
     gameType: (data.gameType as Community["gameType"]) ?? "fut7",
     isPrivate: Boolean(data.isPrivate),
@@ -498,7 +498,7 @@ export async function loadPendingJoinRequestsForAdmin(
 
         requests.push({
           communityId: communityDoc.id,
-          communityName: communityDoc.data().name ?? "Comunidade",
+          communityName: communityDoc.data().name ?? "Clube",
           userId: requestDoc.id,
           displayName: data.displayName ?? "Jogador",
           requestedAt,
@@ -662,8 +662,8 @@ export async function joinCommunityPublic(
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
   const communitySnap = await getDoc(doc(db, "communities", communityId));
-  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada");
-  if (communitySnap.data().isPrivate) throw new Error("Comunidade privada");
+  if (!communitySnap.exists()) throw new Error("Clube não encontrado");
+  if (communitySnap.data().isPrivate) throw new Error("Clube privado");
 
   const memberRef = doc(db, "communities", communityId, "members", userId);
   const existing = await getDoc(memberRef);
@@ -699,7 +699,7 @@ export async function createCommunityInvite(
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
   const communitySnap = await getDoc(doc(db, "communities", communityId));
-  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada.");
+  if (!communitySnap.exists()) throw new Error("Clube não encontrado.");
   const data = communitySnap.data();
   if (!isCommunityAdmin({ adminId: data.adminId, adminIds: data.adminIds }, actorUserId)) {
     throw new Error("Só um admin pode criar convites.");
@@ -728,7 +728,7 @@ export async function joinCommunityViaInvite(
   if (!inviteSnap.exists()) throw new Error("Este convite não é válido.");
 
   const communitySnap = await getDoc(doc(db, "communities", communityId));
-  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada.");
+  if (!communitySnap.exists()) throw new Error("Clube não encontrado.");
 
   const memberRef = doc(db, "communities", communityId, "members", userId);
   const existing = await getDoc(memberRef);
@@ -805,10 +805,10 @@ export async function leaveCommunity(communityId: string, userId: string): Promi
   if (!communitySnap.exists()) return;
   const data = communitySnap.data();
   if (data.adminId === userId) {
-    throw new Error("O administrador não pode sair — transfere ou apaga a comunidade.");
+    throw new Error("O administrador não pode sair — transfere ou apaga o clube.");
   }
   if (Array.isArray(data.adminIds) && data.adminIds.includes(userId)) {
-    throw new Error("Remove-te como admin antes de sair da comunidade.");
+    throw new Error("Remove-te como admin antes de sair do clube.");
   }
 
   await removeCommunityMember(communityId, userId);
@@ -828,7 +828,7 @@ export async function addCommunityAdmin(
 
   const communityRef = doc(db, "communities", communityId);
   const communitySnap = await getDoc(communityRef);
-  if (!communitySnap.exists()) throw new Error("Comunidade não encontrada.");
+  if (!communitySnap.exists()) throw new Error("Clube não encontrado.");
 
   const data = communitySnap.data();
   if (!isCommunityAdmin({ adminId: data.adminId, adminIds: data.adminIds }, actorUserId)) {
@@ -838,7 +838,7 @@ export async function addCommunityAdmin(
 
   const members = await loadCommunityMembers(communityId);
   if (!members.some((m) => m.userId === targetUserId)) {
-    throw new Error("A pessoa tem de ser membro da comunidade primeiro.");
+    throw new Error("A pessoa tem de ser membro do clube primeiro.");
   }
 
   const currentAdminIds: string[] = Array.isArray(data.adminIds) ? data.adminIds : [];

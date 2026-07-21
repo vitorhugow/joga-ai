@@ -137,7 +137,7 @@ function CommunityCard({
 }
 
 export default function Comunidades() {
-  useDocumentTitle("Comunidades");
+  useDocumentTitle("Clubes");
   const { userId } = useAuth();
   const { requireLinked } = useAuthGate();
   const [, setLocation] = useLocation();
@@ -230,7 +230,7 @@ export default function Comunidades() {
         <div className="relative flex items-center justify-between px-5 pt-5 pb-3">
           <div>
             <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.22em]">Explorar</p>
-            <h1 className="font-display font-black text-white text-2xl tracking-tight">Comunidades</h1>
+            <h1 className="font-display font-black text-white text-2xl tracking-tight">Clubes</h1>
           </div>
           <button
             type="button"
@@ -238,7 +238,7 @@ export default function Comunidades() {
             style={{ background: "rgba(74,222,128,0.15)", border: "1.5px solid rgba(74,222,128,0.3)" }}
             data-testid="button-create-community"
             onClick={() => {
-              if (requireLinked({ mode: "register", title: "Cria conta para criar comunidade" })) {
+              if (requireLinked({ mode: "register", title: "Cria conta para criar clube" })) {
                 setLocation("/comunidades/criar");
               }
             }}
@@ -253,7 +253,7 @@ export default function Comunidades() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/35 pointer-events-none" />
             <input
               type="search"
-              placeholder="Pesquisar comunidades, cidade..."
+              placeholder="Pesquisar clubes, cidade..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-3 rounded-2xl text-sm focus:outline-hidden"
@@ -340,7 +340,7 @@ export default function Comunidades() {
         </div>
 
         {loadingCommunities && (
-          <p className="text-white/40 text-sm text-center py-4">A carregar comunidades…</p>
+          <p className="text-white/40 text-sm text-center py-4">A carregar clubes…</p>
         )}
 
         {!loadingCommunities && view === "minhas" ? (
@@ -364,11 +364,11 @@ export default function Comunidades() {
                 </div>
                 <div>
                   <p className="font-display font-bold text-white text-lg">
-                    {mergedMyCommunities.length === 0 ? "Ainda não entraste em nenhuma" : "Sem resultados"}
+                    {mergedMyCommunities.length === 0 ? "Ainda não entraste em nenhum" : "Sem resultados"}
                   </p>
                   <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
                     {mergedMyCommunities.length === 0
-                      ? "Explora em «Descobrir» e entra numa comunidade da tua zona."
+                      ? "Explora em «Descobrir» e entra num clube da tua zona."
                       : "Tenta outra pesquisa ou filtro."}
                   </p>
                 </div>
@@ -404,9 +404,9 @@ export default function Comunidades() {
                     🏟️
                   </div>
                   <div>
-                    <p className="font-display font-bold text-white text-lg">Sem comunidades ainda</p>
+                    <p className="font-display font-bold text-white text-lg">Sem clubes ainda</p>
                     <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
-                      Sê o primeiro a criar uma comunidade para a tua malta.
+                      Sê o primeiro a criar um clube para a tua malta.
                     </p>
                   </div>
                 </div>

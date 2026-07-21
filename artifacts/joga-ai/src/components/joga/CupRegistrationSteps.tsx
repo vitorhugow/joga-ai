@@ -5,7 +5,7 @@ import { JogaCard } from "./JogaCard";
 const STEPS = [
   {
     title: "Cria o teu clube",
-    body: "Ainda não tens clube? Cria o teu no separador Comunidades — leva menos de um minuto.",
+    body: "Ainda não tens clube? Cria o teu no separador Clubes — leva menos de um minuto.",
   },
   {
     title: "Inscreve o clube na Cup",
@@ -48,7 +48,7 @@ export function CupRegistrationSteps() {
           Criar o teu clube <span className="ml-1">→</span>
         </JogaButton>
       </Link>
-      <p className="text-white/35 text-[11px] text-center mt-2">abre a página de criar clube em Comunidades</p>
+      <p className="text-white/35 text-[11px] text-center mt-2">abre a página de criar clube em Clubes</p>
 
       <div
         className="mt-4 rounded-2xl p-4 text-center"

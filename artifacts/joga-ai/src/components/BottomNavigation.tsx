@@ -7,7 +7,7 @@ import { subscribeActiveTournamentConfig } from "@/lib/tournamentRepository";
 const baseNavItems = [
   { path: "/", icon: Home, label: "Início" },
   { path: "/jogos", icon: Calendar, label: "Jogos" },
-  { path: "/comunidades", icon: Users, label: "Comunidades" },
+  { path: "/comunidades", icon: Users, label: "Clubes" },
   { path: "/ranking", icon: Trophy, label: "Ranking" },
   { path: "/perfil", icon: User, label: "Perfil" },
 ];
@@ -42,7 +42,7 @@ export function BottomNavigation() {
             <Link
               key={item.path}
               href={item.path}
-              className="flex-1 flex flex-col items-center justify-center gap-1 py-2 group relative cursor-pointer joga-tap"
+              className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-2 group relative cursor-pointer joga-tap"
               data-testid={`nav-${item.label.toLowerCase()}`}
             >
               {isActive && (
@@ -68,7 +68,7 @@ export function BottomNavigation() {
                 />
               </div>
               <span
-                className="text-[10px] font-bold leading-none transition-colors duration-200"
+                className="w-full text-center truncate px-0.5 text-[10px] font-bold leading-none transition-colors duration-200"
                 style={{ color: isActive ? "#4ade80" : "rgba(255,255,255,0.28)" }}
               >
                 {item.label}

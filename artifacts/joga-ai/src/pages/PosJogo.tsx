@@ -508,7 +508,7 @@ export default function PosJogo() {
       setVoteMode(false);
       toast({
         title: "Esta pelada já foi finalizada",
-        description: "Já não é possível votar — as estatísticas ficam disponíveis na comunidade e no teu perfil.",
+        description: "Já não é possível votar — as estatísticas ficam disponíveis no clube e no teu perfil.",
       });
     }
   }, [voteMode, data?.status]);
@@ -938,7 +938,7 @@ export default function PosJogo() {
       setVoteMode(false);
       toast({
         title: "Esta pelada já foi finalizada",
-        description: "Já não é possível votar — as estatísticas ficam disponíveis na comunidade e no teu perfil.",
+        description: "Já não é possível votar — as estatísticas ficam disponíveis no clube e no teu perfil.",
       });
       return;
     }
@@ -1426,7 +1426,7 @@ export default function PosJogo() {
           data-testid="organizer-voting-panel"
         >
           <p className="text-blue-200/70 text-[10px] font-black uppercase tracking-[0.2em]">
-            {isOrganizer ? "Admin da pelada" : "Admin da comunidade"}
+            {isOrganizer ? "Admin da pelada" : "Admin do clube"}
           </p>
           <h2 className="font-display font-black text-white text-xl mt-1">Estado da votação</h2>
           <p className="text-white/45 text-xs mt-1">
@@ -1478,7 +1478,7 @@ export default function PosJogo() {
           )}
           {!ratingsReleased && votedUserIds.length === 0 && (
             <p className="text-white/35 text-xs mt-2 text-center">
-              Como {isOrganizer ? "organizador" : "admin da comunidade"}, podes finalizar a qualquer momento — mesmo sem votos.
+              Como {isOrganizer ? "organizador" : "admin do clube"}, podes finalizar a qualquer momento — mesmo sem votos.
             </p>
           )}
           {allVoted && !ratingsReleased && (
@@ -1634,7 +1634,7 @@ export default function PosJogo() {
               Esta pelada já foi finalizada — já não é possível votar.
             </p>
             <p className="text-white/35 text-xs mt-1">
-              As estatísticas ficam disponíveis na comunidade e no teu perfil.
+              As estatísticas ficam disponíveis no clube e no teu perfil.
             </p>
           </div>
         ) : (

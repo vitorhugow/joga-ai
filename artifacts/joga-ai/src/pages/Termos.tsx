@@ -24,7 +24,7 @@ export default function Termos() {
         <section>
           <h2 className="text-white font-bold text-base mb-2">1. O serviço</h2>
           <p>
-            O Joga AI é uma plataforma para organizar peladas de futebol amador, gerir comunidades,
+            O Joga AI é uma plataforma para organizar peladas de futebol amador, gerir clubes,
             estatísticas e resultados. O serviço é fornecido em evolução contínua (“como está”).
           </p>
         </section>
@@ -41,7 +41,7 @@ export default function Termos() {
           <h2 className="text-white font-bold text-base mb-2">3. Conteúdo e conduta</h2>
           <p>
             Concordas em usar a plataforma de forma respeitosa. És responsável pelo conteúdo que
-            publicas (nomes de peladas, comunidades, notas). Estatísticas reflectem jogos entre
+            publicas (nomes de peladas, clubes, notas). Estatísticas reflectem jogos entre
             amigos — não constituem competição oficial. O organizador de cada partida é responsável
             pelos dados inseridos no resumo pós-jogo.
           </p>

@@ -484,7 +484,7 @@ export default function Home() {
         {/* COMUNIDADES */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-black text-white text-lg">Comunidades</h2>
+            <h2 className="font-display font-black text-white text-lg">Clubes</h2>
             <Link href="/comunidades"><span className="joga-link text-emerald-400 text-sm font-semibold flex items-center gap-0.5">Ver todas <ChevronRight className="w-3.5 h-3.5" /></span></Link>
           </div>
           <div className="relative rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>

@@ -280,7 +280,7 @@ export function NotificationsBell({
                   </div>
                   <p className="text-white/70 text-sm font-semibold">Sem notificações</p>
                   <p className="text-white/35 text-xs mt-1">
-                    Avisos de peladas, notas e comunidades aparecem aqui.
+                    Avisos de peladas, notas e clubes aparecem aqui.
                   </p>
                 </div>
               ) : (
@@ -337,7 +337,7 @@ export function NotificationsBell({
                 </div>
                 <p className="text-white/70 text-sm font-semibold">Sem pedidos pendentes</p>
                 <p className="text-white/35 text-xs mt-1">
-                  Quando alguém pedir para entrar numa tua comunidade, aparece aqui.
+                  Quando alguém pedir para entrar num teu clube, aparece aqui.
                 </p>
               </div>
             ) : (

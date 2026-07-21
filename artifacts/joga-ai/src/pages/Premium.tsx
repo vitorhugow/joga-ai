@@ -17,7 +17,7 @@ import { toast } from "@/hooks/use-toast";
 const benefits = [
   { icon: Star,      label: "Skins exclusivas",        desc: "Fogo, Raio e Diamante para a tua carta" },
   { icon: BarChart3, label: "Stats avançadas",         desc: "Compara-te com a média da pelada pós-jogo" },
-  { icon: History,   label: "Histórico completo",      desc: "Todas as partidas com filtros por comunidade" },
+  { icon: History,   label: "Histórico completo",      desc: "Todas as partidas com filtros por clube" },
   { icon: TrendingUp,label: "Evolução ilimitada",      desc: "Sem limite de 90 dias no gráfico de evolução" },
   { icon: Sparkles,  label: "Título e Instagram",      desc: "Alcunha na carta e link do Instagram no perfil" },
   { icon: Share2,    label: "Carta em HD",             desc: "Download da carta em alta resolução (4x)" },
@@ -250,7 +250,7 @@ export default function Premium() {
     if (plan === "organizer_pro" && !organizerCommunityId) {
       toast({
         title: "Escolhe o clube",
-        description: "O Clube PRO é activado por comunidade — selecciona qual queres tornar PRO.",
+        description: "O Clube PRO é activado por clube — selecciona qual queres tornar PRO.",
         variant: "destructive",
       });
       return;
@@ -444,7 +444,7 @@ export default function Premium() {
                 className="w-full rounded-2xl px-4 py-3 text-sm text-white bg-[#0f172a] border border-amber-400/25 outline-none mb-4 [color-scheme:dark]"
                 data-testid="select-pro-community"
               >
-                <option value="" className="bg-[#0f172a] text-white">Escolhe o clube/comunidade</option>
+                <option value="" className="bg-[#0f172a] text-white">Escolhe o clube</option>
                 {myCommunities.map((c) => (
                   <option key={c.id} value={c.id} className="bg-[#0f172a] text-white">
                     {c.name}

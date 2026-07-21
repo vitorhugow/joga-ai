@@ -198,7 +198,7 @@ export default function CriarPartida() {
     if (!form.time.trim()) return "Preenche a hora.";
     if (!form.maxPlayers.trim() || Number(form.maxPlayers) < 4) return "Indica o número de jogadores (mín. 4).";
     if (accessMode === "community" && !(selectedCommunityId || communityId)) {
-      return "Escolhe a comunidade para o modo «Apenas da comunidade».";
+      return "Escolhe o clube para o modo «Apenas do clube».";
     }
     return null;
   }
@@ -526,7 +526,7 @@ export default function CriarPartida() {
           <div className="grid grid-cols-1 gap-2">
             {([
               { mode: "public" as const, icon: Globe, title: "Qualquer jogador", desc: "Aparece no Encontrar Jogos" },
-              { mode: "community" as const, icon: Lock, title: "Apenas da comunidade", desc: "Só membros do clube escolhido" },
+              { mode: "community" as const, icon: Lock, title: "Apenas do clube", desc: "Só membros do clube escolhido" },
               { mode: "private" as const, icon: Link2, title: "Privado", desc: "Só quem tiver o link privado" },
             ]).map((opt) => {
               const active = accessMode === opt.mode;
@@ -561,7 +561,7 @@ export default function CriarPartida() {
               data-testid="select-community-access"
               required
             >
-              <option value="" className="bg-[#0f172a] text-white">Escolhe a comunidade</option>
+              <option value="" className="bg-[#0f172a] text-white">Escolhe o clube</option>
               {myCommunities.map((c) => (
                 <option key={c.id} value={c.id} className="bg-[#0f172a] text-white">
                   {c.name}

@@ -26,7 +26,7 @@ const SECTIONS = [
       <ul className="list-disc pl-5 space-y-1">
         <li><strong>Conta:</strong> e-mail, identificador de utilizador (Firebase Auth), nome de exibição, foto de perfil (opcional).</li>
         <li><strong>Perfil de jogador:</strong> posição, atributos da carta, estatísticas de época, histórico de peladas e evolução.</li>
-        <li><strong>Peladas e comunidades:</strong> títulos, datas, locais, listas de presença, resultados, notas e imagens de capa de comunidade.</li>
+        <li><strong>Peladas e clubes:</strong> títulos, datas, locais, listas de presença, resultados, notas e imagens de capa de clube.</li>
         <li><strong>Pagamentos:</strong> quando usas subscrições PRO ou pagamentos de pelada, o processamento é feito pela <strong>Stripe</strong>. Não guardamos números de cartão — apenas identificadores de cliente Stripe, estado de pagamento e subscrição associados à tua conta.</li>
         <li><strong>Organizadores (Stripe Connect):</strong> identificador da conta Express Stripe para receber pagamentos de peladas, conforme o onboarding Stripe.</li>
         <li><strong>Técnicos:</strong> dados de utilização da app, tipo de dispositivo, endereço IP aproximado e registos necessários à segurança e funcionamento do serviço.</li>
@@ -40,7 +40,7 @@ const SECTIONS = [
     body: (
       <ul className="list-disc pl-5 space-y-1">
         <li>Criar e gerir a tua conta e perfil de jogador.</li>
-        <li>Organizar peladas, comunidades, convocatórias, resultados e estatísticas.</li>
+        <li>Organizar peladas, clubes, convocatórias, resultados e estatísticas.</li>
         <li>Processar subscrições PRO e pagamentos de peladas (via Stripe).</li>
         <li>Enviar notificações relacionadas com jogos e pagamentos (quando activadas).</li>
         <li>Prevenir fraude, abuso e garantir a segurança da plataforma.</li>
@@ -88,7 +88,7 @@ const SECTIONS = [
         </ul>
         <p className="mt-2">
           Outros jogadores e organizadores podem ver informação que escolhes tornar pública no
-          contexto de peladas e comunidades (nome, carta, estatísticas de jogo).
+          contexto de peladas e clubes (nome, carta, estatísticas de jogo).
         </p>
       </>
     ),

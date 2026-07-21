@@ -1774,7 +1774,7 @@ export default function PreJogo() {
                 )}
                 {mensalistaActive && paymentsOn && (
                   <p className="text-cyan-200/90 text-xs mt-2 font-semibold">
-                    ✓ Mensalista — isento de pagamento nesta comunidade
+                    ✓ Mensalista — isento de pagamento neste clube
                   </p>
                 )}
                 <JogaButton
@@ -1967,7 +1967,7 @@ export default function PreJogo() {
                 setManualName(event.target.value);
                 setShowCommunityList(true);
               }}
-              placeholder="Buscar na comunidade ou adicionar manual"
+              placeholder="Buscar no clube ou adicionar manual"
               className="flex-1 rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white outline-hidden"
               disabled={!canManageMatch}
             />

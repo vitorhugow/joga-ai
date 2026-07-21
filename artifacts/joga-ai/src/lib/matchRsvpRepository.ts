@@ -54,14 +54,14 @@ async function assertMatchAccess(
 ): Promise<void> {
   if (accessMode !== "community") return;
   if (!communityId) {
-    throw new Error("Esta pelada é só para membros da comunidade.");
+    throw new Error("Esta pelada é só para membros do clube.");
   }
   const community = await loadCommunity(communityId);
   if (community?.openToExternal && (await isCommunityOrganizerPro(communityId))) return;
 
   const members = await loadCommunityMembers(communityId);
   if (!members.some((m) => m.userId === userId)) {
-    throw new Error("Esta pelada é só para membros da comunidade.");
+    throw new Error("Esta pelada é só para membros do clube.");
   }
 }
 
@@ -177,7 +177,7 @@ export async function confirmPresence(
       await assertMatchAccess(communityId, accessMode, userId);
     }
   } else if (accessMode === "community") {
-    throw new Error("Esta pelada é só para membros da comunidade.");
+    throw new Error("Esta pelada é só para membros do clube.");
   } else {
     await assertMatchAccess(communityId, accessMode, userId);
   }

@@ -185,7 +185,7 @@ export default function Perfil() {
   async function handleLogout() {
     const ok = await confirm({
       title: "Sair da conta?",
-      description: "Vais precisar de entrar novamente para aceder ao teu perfil, comunidades e peladas.",
+      description: "Vais precisar de entrar novamente para aceder ao teu perfil, clubes e peladas.",
       confirmLabel: "Sair",
       cancelLabel: "Cancelar",
       destructive: true,
@@ -840,10 +840,10 @@ export default function Perfil() {
                 {historyCommunityOptions.length > 0 && (
                   <Select value={historyCommunityFilter} onValueChange={setHistoryCommunityFilter}>
                     <SelectTrigger className="w-[160px] h-9 bg-white/5 border-white/10 text-white text-xs">
-                      <SelectValue placeholder="Comunidade" />
+                      <SelectValue placeholder="Clube" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todas as comunidades</SelectItem>
+                      <SelectItem value="all">Todos os clubes</SelectItem>
                       {historyCommunityOptions.map((c) => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
@@ -918,9 +918,9 @@ export default function Perfil() {
 
         {!isViewingOther && (
         <div>
-          <h2 className="font-display font-black text-white text-lg mb-3">Comunidades</h2>
+          <h2 className="font-display font-black text-white text-lg mb-3">Clubes</h2>
           {myCommunities.length === 0 ? (
-            <p className="text-white/40 text-sm">Ainda não pertences a nenhuma comunidade.</p>
+            <p className="text-white/40 text-sm">Ainda não pertences a nenhum clube.</p>
           ) : (
           <div className="flex gap-2.5 overflow-x-auto pb-1">
             {myCommunities.slice(0, 6).map((c) => (

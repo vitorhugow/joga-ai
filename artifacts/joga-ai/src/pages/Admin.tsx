@@ -371,7 +371,7 @@ export default function Admin() {
                   style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
                 >
                   <p className="text-white text-sm font-bold">
-                    {report.targetType === "community" ? "Comunidade" : "Jogador"} · {report.reason}
+                    {report.targetType === "community" ? "Clube" : "Jogador"} · {report.reason}
                   </p>
                   <p className="text-white/40 text-xs font-mono break-all">
                     alvo: {report.targetId} · de: {report.reporterId}

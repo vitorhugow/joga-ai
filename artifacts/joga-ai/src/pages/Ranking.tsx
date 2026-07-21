@@ -151,7 +151,7 @@ export default function Ranking() {
         ) : (
           <>
             <p className="text-white/35 text-xs text-center mb-1">
-              Top {ranked.length} jogadores de todas as comunidades, por {cat.label.toLowerCase()}.
+              Top {ranked.length} jogadores de todos os clubes, por {cat.label.toLowerCase()}.
             </p>
             <div className="space-y-2">
               {ranked.map((entry) => {

@@ -253,7 +253,7 @@ export async function processPendingNotifications(userId: string): Promise<void>
         const notifId = `join-${communityId}-${status}`;
         if (hasNotificationId(local, notifId)) continue;
 
-        let communityName = "Comunidade";
+        let communityName = "Clube";
         try {
           const communitySnap = await getDoc(doc(db, "communities", communityId));
           if (communitySnap.exists()) {

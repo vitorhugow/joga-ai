@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProfileSetupGate } from "@/components/profile/ProfileSetupGate";
 import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
 import { MatchRatingReleasedModal } from "@/components/MatchRatingReleasedModal";
+import { CupJoinRequestModal } from "@/components/CupJoinRequestModal";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { PushPermissionPrompt } from "@/components/PushPermissionPrompt";
 import { initAppCheck } from "@/lib/firebase";
@@ -37,6 +38,7 @@ function AppServicesInner() {
       <ProfileSetupGate />
       <MatchVoteReminderModal />
       <MatchRatingReleasedModal />
+      <CupJoinRequestModal />
       <PushPermissionPrompt userId={userId} trigger={0} />
       <ConsentBanner />
     </>

@@ -230,8 +230,8 @@ service cloud.firestore {
 
     // Configuração da app gerida pela consola (ex.: patrocinador do SponsorSlot)
     match /appConfig/{docId} {
-      allow read: if isSignedIn() || docId == 'fieldPhotos';
-      allow write: if docId == 'fieldPhotos' && isAppAdmin();
+      allow read: if isSignedIn() || docId == 'fieldPhotos' || docId == 'activeTournament';
+      allow write: if (docId == 'fieldPhotos' || docId == 'activeTournament') && isAppAdmin();
     }
 
     match /users/{userId} {
@@ -459,6 +459,32 @@ service cloud.firestore {
         allow read: if isSignedIn()
           && (isCommunityMatchMember(communityId) || isCommunityAdmin(communityId));
         allow write: if false;
+      }
+
+      // Pedido de um membro comum para o clube se inscrever na Joga Aí Cup.
+      // Permite vários pedidos (não é idempotente por design); só o admin
+      // resolve/atualiza; o cliente nunca pode criar já aprovado.
+      match /tournamentRequests/{requestId} {
+        allow read, update: if isCommunityAdmin(communityId);
+        allow create: if (isCommunityMatchMember(communityId) || isCommunityAdmin(communityId))
+          && request.resource.data.status == 'pendente';
+        allow delete: if isCommunityAdmin(communityId);
+      }
+    }
+
+    // Joga Aí Cup — torneio ativo. Status/config só o Admin SDK escreve.
+    match /tournaments/{tournamentId} {
+      allow read: if isSignedIn();
+      allow write: if isAppAdmin();
+
+      // Inscrição de um clube na Cup — o cliente só cria a própria (com
+      // status inicial "pendente"); confirmar/recusar é só o Admin SDK.
+      match /teams/{teamId} {
+        allow read: if isSignedIn();
+        allow create: if isCommunityAdmin(teamId)
+          && request.resource.data.clubId == teamId
+          && request.resource.data.status == 'pendente';
+        allow update, delete: if isAppAdmin();
       }
     }
   }

@@ -27,6 +27,7 @@ const PreJogo = lazyRoute(() => import("@/pages/PreJogo"));
 const AoVivo = lazyRoute(() => import("@/pages/AoVivo"));
 const PosJogo = lazyRoute(() => import("@/pages/PosJogo"));
 const Jogos = lazyRoute(() => import("@/pages/Jogos"));
+const JogaAiCup = lazyRoute(() => import("@/pages/JogaAiCup"));
 const Premium = lazyRoute(() => import("@/pages/Premium"));
 const Campos = lazyRoute(() => import("@/pages/Campos"));
 const Evolucao = lazyRoute(() => import("@/pages/Evolucao"));
@@ -88,6 +89,7 @@ function AnimatedRoutes() {
             <Route path="/termos" component={Termos} />
             <Route path="/demo-carta" component={DemoCarta} />
             <Route path="/jogos" component={Jogos} />
+            <Route path="/cup" component={JogaAiCup} />
             <Route path="/premium" component={Premium} />
             <Route path="/admin" component={Admin} />
             <Route path="/campos" component={Campos} />

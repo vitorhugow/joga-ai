@@ -48,6 +48,16 @@ import { getContrastTextColor } from "@/lib/colorContrast";
 import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import {
+  loadActiveTournamentConfig,
+  subscribeTournament,
+  subscribeTeamForCommunity,
+  registerCommunityForTournament,
+  requestToJoinTournament,
+  TournamentTeamAlreadyRegisteredError,
+  type Tournament as CupTournament,
+  type TournamentTeam,
+} from "@/lib/tournamentRepository";
 
 const gameTypeLabel: Record<string, string> = {
   futsal: "Futsal",
@@ -129,6 +139,30 @@ export default function ComunidadePage() {
   const [memberProfiles, setMemberProfiles] = useState<Map<string, PublicUserProfile>>(new Map());
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const [organizerProActive, setOrganizerProActive] = useState(false);
+  const [cupTournamentId, setCupTournamentId] = useState<string | null>(null);
+  const [cupTournament, setCupTournament] = useState<CupTournament | null>(null);
+  const [cupTeam, setCupTeam] = useState<TournamentTeam | null>(null);
+  const [cupBusy, setCupBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadActiveTournamentConfig().then((config) => {
+      if (!cancelled) setCupTournamentId(config?.tournamentId ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cupTournamentId || !id) return;
+    const unsubTournament = subscribeTournament(cupTournamentId, setCupTournament);
+    const unsubTeam = subscribeTeamForCommunity(cupTournamentId, id, setCupTeam);
+    return () => {
+      unsubTournament();
+      unsubTeam();
+    };
+  }, [cupTournamentId, id]);
 
   useEffect(() => {
     if (!userId) {
@@ -250,6 +284,7 @@ export default function ComunidadePage() {
   const isAdmin = isCommunityAdmin(community, userId);
   const joinPending = joinStatus === "pending" || Boolean((community as Community & { joinPending?: boolean }).joinPending);
   const hasAccess = isMember || isAdmin;
+  const cupRegistrationOpen = Boolean(cupTournamentId) && cupTournament?.registration?.aberta === true;
   const coverSrc = imageDisplaySrc(
     community.branding?.bannerUrl || resolveCommunityCover(community),
   );
@@ -348,6 +383,53 @@ export default function ComunidadePage() {
       });
     } finally {
       setInvitingBusy(false);
+    }
+  }
+
+  async function handleRegisterForCup() {
+    if (!cupTournamentId || !community || !userId) return;
+    setCupBusy(true);
+    try {
+      await registerCommunityForTournament(cupTournamentId, id, {
+        name: community.name,
+        crestUrl: community.branding?.logoUrl,
+        captainId: userId,
+      });
+      trackEvent("cup_team_registered", { communityId: id, tournamentId: cupTournamentId });
+      toast({ title: "Clube inscrito!", description: "A tua vaga entra em análise." });
+    } catch (err) {
+      if (err instanceof TournamentTeamAlreadyRegisteredError) {
+        toast({ title: "Já estás inscrito", description: err.message });
+      } else {
+        toast({
+          title: "Não foi possível inscrever",
+          description: err instanceof Error ? err.message : "Tenta outra vez.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setCupBusy(false);
+    }
+  }
+
+  async function handleRequestJoinCup() {
+    if (!cupTournamentId || !userId) return;
+    setCupBusy(true);
+    try {
+      await requestToJoinTournament(id, cupTournamentId, {
+        id: userId,
+        name: profile.displayName || "Jogador",
+      });
+      trackEvent("cup_join_requested", { communityId: id, tournamentId: cupTournamentId });
+      toast({ title: "Pedido enviado", description: "O teu capitão recebe o aviso e decide a inscrição." });
+    } catch (err) {
+      toast({
+        title: "Não foi possível enviar o pedido",
+        description: err instanceof Error ? err.message : "Tenta outra vez.",
+        variant: "destructive",
+      });
+    } finally {
+      setCupBusy(false);
     }
   }
 
@@ -494,6 +576,42 @@ export default function ComunidadePage() {
               </Link>
             )}
           </div>
+        )}
+
+        {hasAccess && cupRegistrationOpen && (
+          isAdmin ? (
+            cupTeam ? (
+              <div
+                className="rounded-2xl px-4 py-3 text-center text-sm font-semibold"
+                style={{ background: "rgba(230,193,92,0.08)", border: "1px solid rgba(230,193,92,0.25)", color: "#f2d47a" }}
+              >
+                🏆 Inscrição na Joga Aí Cup:{" "}
+                {cupTeam.status === "pendente" ? "pendente de confirmação" : cupTeam.status}
+              </div>
+            ) : (
+              <JogaButton
+                variant="gold"
+                size="md"
+                className="w-full"
+                disabled={cupBusy}
+                onClick={() => void handleRegisterForCup()}
+                data-testid="button-cup-register"
+              >
+                🏆 Inscrever na Joga Aí Cup
+              </JogaButton>
+            )
+          ) : (
+            <JogaButton
+              variant="ghost"
+              size="md"
+              className="w-full"
+              disabled={cupBusy}
+              onClick={() => void handleRequestJoinCup()}
+              data-testid="button-cup-join-request"
+            >
+              Pedir para entrar na Cup
+            </JogaButton>
+          )
         )}
 
         {hasAccess && <MensalistaCard community={community} userId={userId} />}

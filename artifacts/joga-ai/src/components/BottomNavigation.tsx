@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Home, Calendar, Users, Trophy, User } from "lucide-react";
+import { Home, Calendar, Users, Trophy, Award, User } from "lucide-react";
+import { subscribeActiveTournamentConfig } from "@/lib/tournamentRepository";
 
-const navItems = [
+const baseNavItems = [
   { path: "/", icon: Home, label: "Início" },
   { path: "/jogos", icon: Calendar, label: "Jogos" },
   { path: "/comunidades", icon: Users, label: "Comunidades" },
@@ -12,6 +14,20 @@ const navItems = [
 
 export function BottomNavigation() {
   const [location] = useLocation();
+  const [cupLabel, setCupLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    return subscribeActiveTournamentConfig((config) => setCupLabel(config?.tabLabel ?? null));
+  }, []);
+
+  const navItems = cupLabel
+    ? [
+        baseNavItems[0],
+        baseNavItems[1],
+        { path: "/cup", icon: Award, label: cupLabel },
+        ...baseNavItems.slice(2),
+      ]
+    : baseNavItems;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 safe-bottom" data-testid="bottom-navigation">

@@ -105,6 +105,15 @@ export type UserProfile = {
   stripeAccountId?: string;
   /** Saldo em cêntimos para pagar peladas futuras — escrito só por Functions */
   peladaBalanceCents?: number;
+  /** Tutorial de primeiro acesso concluído ou saltado */
+  onboardingDone?: boolean;
+  /** Apelido automático da última pelada (só PRO — escrito por Cloud Functions) */
+  lastMatchNickname?: {
+    label: string;
+    emoji?: string;
+    matchId: string;
+    earnedAt: string;
+  };
   updatedAt?: string;
 };
 

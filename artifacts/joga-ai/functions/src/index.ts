@@ -42,6 +42,7 @@ export {
   onMatchRatingsReleasedNotify,
   onLiveControllerChangedNotify,
 } from "./matchNotifications";
+export { onMatchRatingsReleasedNicknames } from "./matchNicknames";
 export {
   onJoinRequestCreatedNotifyAdmin,
   onCommunityMemberRemovedNotify,

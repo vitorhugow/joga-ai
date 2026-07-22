@@ -8,6 +8,8 @@ import {
   getDoc,
   setDoc,
   addDoc,
+  updateDoc,
+  deleteDoc,
   onSnapshot,
   serverTimestamp,
   type Unsubscribe,
@@ -224,6 +226,54 @@ export async function registerCommunityForTournament(
       crestUrl: team.crestUrl,
       captainId: team.captainId,
       status: "pendente",
+      players: [],
+      createdAt: serverTimestamp(),
+    }),
+  );
+}
+
+/** Painel /admin: muda o estado de uma inscrição (confirmar/recusar). */
+export async function adminUpdateTeamStatus(
+  tournamentId: string,
+  teamId: string,
+  status: TournamentTeam["status"],
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+  await updateDoc(doc(db, "tournaments", tournamentId, "teams", teamId), { status });
+}
+
+/** Painel /admin: remove uma inscrição por completo. */
+export async function adminDeleteTeam(tournamentId: string, teamId: string): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+  await deleteDoc(doc(db, "tournaments", tournamentId, "teams", teamId));
+}
+
+/**
+ * Painel /admin: inscreve um clube directamente, sem precisar que o admin do
+ * clube o faça — regras permitem isAppAdmin() criar com qualquer status.
+ */
+export async function adminRegisterTeam(
+  tournamentId: string,
+  communityId: string,
+  team: { name: string; crestUrl?: string; captainId?: string },
+  status: TournamentTeam["status"] = "confirmado",
+): Promise<void> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+
+  const teamRef = doc(db, "tournaments", tournamentId, "teams", communityId);
+  const existing = await getDoc(teamRef);
+  if (existing.exists()) {
+    throw new TournamentTeamAlreadyRegisteredError();
+  }
+
+  await setDoc(
+    teamRef,
+    stripUndefined({
+      clubId: communityId,
+      name: team.name,
+      crestUrl: team.crestUrl,
+      captainId: team.captainId,
+      status,
       players: [],
       createdAt: serverTimestamp(),
     }),

@@ -481,9 +481,10 @@ service cloud.firestore {
       // status inicial "pendente"); confirmar/recusar é só o Admin SDK.
       match /teams/{teamId} {
         allow read: if isSignedIn();
-        allow create: if isCommunityAdmin(teamId)
-          && request.resource.data.clubId == teamId
-          && request.resource.data.status == 'pendente';
+        allow create: if isAppAdmin()
+          || (isCommunityAdmin(teamId)
+              && request.resource.data.clubId == teamId
+              && request.resource.data.status == 'pendente');
         allow update, delete: if isAppAdmin();
       }
     }

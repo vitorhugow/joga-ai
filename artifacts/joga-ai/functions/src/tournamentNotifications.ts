@@ -8,6 +8,9 @@ import { notifyUser } from "./notify";
 
 const REGION = "europe-west1";
 
+/** Mesmo uid hardcoded em isAppAdmin() nas firestore.rules. */
+const APP_ADMIN_UID = "KrnnjgKclcPJm4In4W9ORp3iX6j2";
+
 /** Novo pedido de entrada na Cup → avisa os admins/capitão do clube. */
 export const onTournamentRequestCreatedNotifyAdmin = onDocumentCreated(
   { document: "communities/{communityId}/tournamentRequests/{requestId}", region: REGION },
@@ -43,5 +46,26 @@ export const onTournamentRequestCreatedNotifyAdmin = onDocumentCreated(
         }),
       ),
     );
+  },
+);
+
+/** Novo clube inscrito na Cup → avisa o admin da app para rever/confirmar. */
+export const onTournamentTeamCreatedNotifyAppAdmin = onDocumentCreated(
+  { document: "tournaments/{tournamentId}/teams/{teamId}", region: REGION },
+  async (event) => {
+    const team = event.data?.data();
+    if (!team) return;
+
+    const teamId = event.params.teamId;
+    const teamName = String(team.name ?? "Um clube");
+
+    await notifyUser(APP_ADMIN_UID, {
+      id: `cupteam-${teamId}`,
+      type: "community",
+      priority: "popup",
+      title: "Novo clube na Joga Aí Cup",
+      body: `«${teamName}» acabou de se inscrever — revê no painel /admin.`,
+      link: "/admin",
+    });
   },
 );

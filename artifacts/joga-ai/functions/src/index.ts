@@ -46,7 +46,10 @@ export {
   onJoinRequestCreatedNotifyAdmin,
   onCommunityMemberRemovedNotify,
 } from "./communityNotifications";
-export { onTournamentRequestCreatedNotifyAdmin } from "./tournamentNotifications";
+export {
+  onTournamentRequestCreatedNotifyAdmin,
+  onTournamentTeamCreatedNotifyAppAdmin,
+} from "./tournamentNotifications";
 export { onUserBadgesUpdatedNotify } from "./userNotifications";
 export { deleteMyAccount } from "./account";
 export { matchOgPreview } from "./matchOg";

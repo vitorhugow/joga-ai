@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Crown, Flag, Search, Shield, UserX } from "lucide-react";
+import { ArrowLeft, Crown, Flag, Search, Shield, Trophy, UserX } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAppAdmin } from "@/hooks/useAppAdmin";
@@ -18,6 +18,16 @@ import {
   type AdminUserRow,
   type AdminReport,
 } from "@/lib/adminRepository";
+import { loadCommunities, type Community } from "@/lib/communityRepository";
+import {
+  loadActiveTournamentConfig,
+  subscribeTournamentTeams,
+  adminUpdateTeamStatus,
+  adminDeleteTeam,
+  adminRegisterTeam,
+  TournamentTeamAlreadyRegisteredError,
+  type TournamentTeam,
+} from "@/lib/tournamentRepository";
 import { AdminFieldPhotos } from "@/components/admin/AdminFieldPhotos";
 import { toast } from "@/hooks/use-toast";
 
@@ -55,6 +65,12 @@ export default function Admin() {
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
 
+  const [cupTournamentId, setCupTournamentId] = useState<string | null>(null);
+  const [cupTeams, setCupTeams] = useState<TournamentTeam[]>([]);
+  const [cupCommunities, setCupCommunities] = useState<Community[]>([]);
+  const [cupSearch, setCupSearch] = useState("");
+  const [cupBusy, setCupBusy] = useState(false);
+
   useEffect(() => {
     if (!isAdmin) return;
     setReportsLoading(true);
@@ -62,6 +78,80 @@ export default function Admin() {
       .then(setReports)
       .finally(() => setReportsLoading(false));
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadActiveTournamentConfig().then((config) => setCupTournamentId(config?.tournamentId ?? null));
+    void loadCommunities().then(setCupCommunities);
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!cupTournamentId) return;
+    return subscribeTournamentTeams(cupTournamentId, setCupTeams);
+  }, [cupTournamentId]);
+
+  const cupTeamCommunityIds = new Set(cupTeams.map((t) => t.clubId));
+  const cupSearchResults = cupSearch.trim()
+    ? cupCommunities.filter(
+        (c) =>
+          !cupTeamCommunityIds.has(c.id) &&
+          c.name.toLowerCase().includes(cupSearch.trim().toLowerCase()),
+      )
+    : [];
+
+  async function handleCupTeamStatus(teamId: string, status: TournamentTeam["status"]) {
+    if (!cupTournamentId) return;
+    setCupBusy(true);
+    try {
+      await adminUpdateTeamStatus(cupTournamentId, teamId, status);
+      toast({ title: status === "confirmado" ? "Inscrição confirmada" : "Inscrição recusada" });
+    } catch (err) {
+      console.warn("[Admin] cup status:", err);
+      toast({ title: "Erro ao actualizar inscrição", variant: "destructive" });
+    } finally {
+      setCupBusy(false);
+    }
+  }
+
+  async function handleCupTeamDelete(teamId: string, name: string) {
+    if (!cupTournamentId) return;
+    if (!window.confirm(`Excluir a inscrição de «${name}»?`)) return;
+    setCupBusy(true);
+    try {
+      await adminDeleteTeam(cupTournamentId, teamId);
+      toast({ title: "Inscrição excluída" });
+    } catch (err) {
+      console.warn("[Admin] cup delete:", err);
+      toast({ title: "Erro ao excluir", variant: "destructive" });
+    } finally {
+      setCupBusy(false);
+    }
+  }
+
+  async function handleCupManualRegister(community: Community) {
+    if (!cupTournamentId) return;
+    setCupBusy(true);
+    try {
+      await adminRegisterTeam(cupTournamentId, community.id, {
+        name: community.name,
+        crestUrl: community.branding?.logoUrl,
+      });
+      setCupSearch("");
+      toast({ title: "Clube inscrito!", description: community.name });
+    } catch (err) {
+      if (err instanceof TournamentTeamAlreadyRegisteredError) {
+        toast({ title: "Já estava inscrito", description: err.message });
+      } else {
+        toast({
+          title: "Não foi possível inscrever",
+          description: err instanceof Error ? err.message : "Tenta outra vez.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setCupBusy(false);
+    }
+  }
 
   async function handleReportAction(reportId: string, status: "resolved" | "dismissed") {
     setBusy(true);
@@ -401,6 +491,115 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+
+        <div
+          className="rounded-2xl p-4 space-y-3"
+          style={{ background: "rgba(230,193,92,0.06)", border: "1px solid rgba(230,193,92,0.22)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <h2 className="font-display font-black text-white text-lg">Joga Aí Cup</h2>
+          </div>
+
+          {!cupTournamentId ? (
+            <p className="text-white/40 text-sm">Nenhum torneio activo.</p>
+          ) : (
+            <>
+              <p className="text-white/40 text-xs">
+                {cupTeams.length} clube{cupTeams.length !== 1 ? "s" : ""} inscrito{cupTeams.length !== 1 ? "s" : ""}
+              </p>
+
+              <div className="space-y-2">
+                {cupTeams.map((team) => (
+                  <div
+                    key={team.id}
+                    className="rounded-xl p-3 space-y-2"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-white text-sm font-bold">{team.name}</span>
+                      <span
+                        className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full shrink-0"
+                        style={
+                          team.status === "confirmado"
+                            ? { background: "rgba(74,222,128,0.15)", color: "#4ade80" }
+                            : team.status === "recusado"
+                              ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
+                              : { background: "rgba(251,191,36,0.12)", color: "#fbbf24" }
+                        }
+                      >
+                        {team.status}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {team.status !== "confirmado" && (
+                        <JogaButton
+                          variant="ghost"
+                          size="sm"
+                          disabled={cupBusy}
+                          onClick={() => void handleCupTeamStatus(team.id, "confirmado")}
+                        >
+                          Confirmar
+                        </JogaButton>
+                      )}
+                      {team.status !== "recusado" && (
+                        <JogaButton
+                          variant="ghost"
+                          size="sm"
+                          className="text-white/50"
+                          disabled={cupBusy}
+                          onClick={() => void handleCupTeamStatus(team.id, "recusado")}
+                        >
+                          Recusar
+                        </JogaButton>
+                      )}
+                      <JogaButton
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-300/90"
+                        disabled={cupBusy}
+                        onClick={() => void handleCupTeamDelete(team.id, team.name)}
+                      >
+                        Excluir
+                      </JogaButton>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                  Inscrever um clube manualmente
+                </p>
+                <input
+                  type="text"
+                  value={cupSearch}
+                  onChange={(e) => setCupSearch(e.target.value)}
+                  placeholder="Nome do clube"
+                  className={ADMIN_FIELD}
+                  data-testid="admin-cup-search-input"
+                />
+                {cupSearchResults.length > 0 && (
+                  <div className="space-y-1.5">
+                    {cupSearchResults.slice(0, 8).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        disabled={cupBusy}
+                        onClick={() => void handleCupManualRegister(c)}
+                        className="w-full text-left rounded-xl px-3 py-2 text-sm flex items-center justify-between gap-2"
+                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      >
+                        <span className="text-white">{c.name}</span>
+                        <span className="text-white/35 text-xs">{c.city}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>

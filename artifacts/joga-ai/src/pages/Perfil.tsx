@@ -31,6 +31,7 @@ import { useAppAdmin } from "@/hooks/useAppAdmin";
 import { useJogaConfirm } from "@/hooks/useJogaConfirm";
 import { DeleteAccountSection } from "@/components/DeleteAccountSection";
 import { ReportBlockActions } from "@/components/ReportBlockActions";
+import { ClubCrest } from "@/components/ClubCrest";
 import { loadBlockedIds } from "@/lib/blockRepository";
 import {
   Select,
@@ -926,9 +927,7 @@ export default function Perfil() {
             {myCommunities.slice(0, 6).map((c) => (
               <Link key={c.id} href={`/comunidades/${c.id}`} className="joga-tap shrink-0">
                 <JogaCard variant="arena" className="flex items-center gap-2.5 py-3!" data-testid={`community-tag-${c.id}`}>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 joga-btn-primary">
-                    <span className="font-display font-black text-white text-sm">{c.name[0]}</span>
-                  </div>
+                  <ClubCrest name={c.name} crestUrl={c.crestUrl} size={36} />
                   <div>
                     <p className="text-white text-xs font-semibold truncate max-w-[90px]">{c.name}</p>
                     <p className="text-white/40 text-[10px] font-medium">{c.memberCount} membros</p>

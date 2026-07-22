@@ -501,22 +501,31 @@ export default function ComunidadePage() {
         </Link>
         <div className="absolute bottom-4 left-4 right-4">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">
-                {community.name}
-                {organizerProActive && (
-                  <span className="ml-2 align-middle inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide bg-amber-400/15 text-amber-300 border border-amber-400/35">
-                    ✦ Clube PRO
-                  </span>
+            <div className="min-w-0 flex items-center gap-3">
+              <ClubCrest
+                name={community.name}
+                crestUrl={community.crestUrl}
+                primaryColor={brandColor}
+                size={48}
+                className="border-2 border-white/25 shrink-0"
+              />
+              <div className="min-w-0">
+                <h1 className="font-display font-bold text-white text-2xl leading-tight drop-shadow-md">
+                  {community.name}
+                  {organizerProActive && (
+                    <span className="ml-2 align-middle inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide bg-amber-400/15 text-amber-300 border border-amber-400/35">
+                      ✦ Clube PRO
+                    </span>
+                  )}
+                </h1>
+                {community.branding?.logoUrl && organizerProActive && (
+                  <img
+                    src={community.branding.logoUrl}
+                    alt=""
+                    className="h-8 w-8 rounded-lg object-cover mt-2 border border-white/20"
+                  />
                 )}
-              </h1>
-              {community.branding?.logoUrl && organizerProActive && (
-                <img
-                  src={community.branding.logoUrl}
-                  alt=""
-                  className="h-8 w-8 rounded-lg object-cover mt-2 border border-white/20"
-                />
-              )}
+              </div>
             </div>
             {userId && community.adminId !== userId ? (
               <ReportBlockActions
@@ -549,16 +558,6 @@ export default function ComunidadePage() {
       </div>
 
       <div className="px-4 pt-4 space-y-4">
-        <div className="w-fit" style={{ marginTop: -54 }}>
-          <ClubCrest
-            name={community.name}
-            crestUrl={community.crestUrl}
-            primaryColor={brandColor}
-            size={76}
-            className="border-4 border-[#0a0f1a]"
-          />
-        </div>
-
         {isAdmin && (
           <div className="flex gap-2">
             <Link href={`/comunidades/${id}/configuracoes`} className="flex-1">

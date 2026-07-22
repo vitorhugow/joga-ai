@@ -62,6 +62,13 @@ export async function uploadCommunityCover(
   return uploadImage(`communities/${communityId}/cover/${Date.now()}.webp`, file);
 }
 
+export async function uploadCommunityCrest(
+  communityId: string,
+  file: Blob | File | string,
+): Promise<string> {
+  return uploadImage(`communities/${communityId}/crest/${Date.now()}.webp`, file);
+}
+
 export async function uploadFieldPhoto(
   key: "futsal" | "f5" | "f7",
   file: Blob | File | string,

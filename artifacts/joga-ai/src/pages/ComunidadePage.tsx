@@ -4,6 +4,7 @@ import { Users, MapPin, ChevronLeft, Lock, Calendar } from "lucide-react";
 import { Link } from "wouter";
 import { MatchCard } from "@/components/MatchCard";
 import { PlayerMiniCard } from "@/components/PlayerMiniCard";
+import { ClubCrest } from "@/components/ClubCrest";
 import {
   loadCommunity,
   loadCommunityMatches,
@@ -392,7 +393,7 @@ export default function ComunidadePage() {
     try {
       await registerCommunityForTournament(cupTournamentId, id, {
         name: community.name,
-        crestUrl: community.branding?.logoUrl,
+        crestUrl: community.crestUrl,
         captainId: userId,
       });
       trackEvent("cup_team_registered", { communityId: id, tournamentId: cupTournamentId });
@@ -548,6 +549,16 @@ export default function ComunidadePage() {
       </div>
 
       <div className="px-4 pt-4 space-y-4">
+        <div className="w-fit" style={{ marginTop: -54 }}>
+          <ClubCrest
+            name={community.name}
+            crestUrl={community.crestUrl}
+            primaryColor={brandColor}
+            size={76}
+            className="border-4 border-[#0a0f1a]"
+          />
+        </div>
+
         {isAdmin && (
           <div className="flex gap-2">
             <Link href={`/comunidades/${id}/configuracoes`} className="flex-1">

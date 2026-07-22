@@ -30,7 +30,7 @@ import { isListedInPublicBrowse, isListedInCommunityFeed, resolveAccessMode, typ
 import { MAX_PROFILE_PHOTO_BYTES, loadUserProfile } from "./userRepository";
 import { isOrganizerProForCommunity } from "./entitlements";
 import { loadAllPostMatches } from "./postMatchStorage";
-import { uploadCommunityCover, deleteImageByUrl } from "./imageStorage";
+import { uploadCommunityCover, uploadCommunityCrest, deleteImageByUrl } from "./imageStorage";
 
 export class CommunityCoverTooLargeError extends Error {
   constructor() {
@@ -58,6 +58,8 @@ export type Community = {
   memberCount: number;
   coverImage?: string;
   coverUrl?: string;
+  /** Escudo/crest do clube — mostrado no cabeçalho, na Cup e nas imagens de resultado. */
+  crestUrl?: string;
   /** Admin principal — dono da subscrição Clube PRO (só ele herda o Jogador PRO pessoal). */
   adminId?: string;
   /** Admins adicionais — mesmos poderes de gestão, sem herdar Jogador PRO pessoal. */
@@ -183,6 +185,7 @@ export async function loadCommunities(userId?: string): Promise<Community[]> {
         memberCount: Number(data.memberCount ?? 1),
         coverImage: data.coverImage ? String(data.coverImage) : undefined,
         coverUrl: data.coverUrl ? String(data.coverUrl) : undefined,
+        crestUrl: data.crestUrl ? String(data.crestUrl) : undefined,
         adminId: data.adminId,
         adminIds: Array.isArray(data.adminIds) ? data.adminIds.map(String) : undefined,
         proActive: data.proActive === true,
@@ -228,6 +231,7 @@ function mapCommunityDoc(
     memberCount: Number(data.memberCount ?? 1),
     coverImage: data.coverImage ? String(data.coverImage) : undefined,
     coverUrl: data.coverUrl ? String(data.coverUrl) : undefined,
+    crestUrl: data.crestUrl ? String(data.crestUrl) : undefined,
     adminId: data.adminId ? String(data.adminId) : undefined,
     adminIds: Array.isArray(data.adminIds) ? data.adminIds.map(String) : undefined,
     isMember,
@@ -630,6 +634,7 @@ export type UpdateCommunityInput = {
   gameType?: Community["gameType"];
   isPrivate?: boolean;
   coverImage?: string;
+  crestImage?: string;
 };
 
 export async function loadPendingJoinRequests(communityId: string): Promise<JoinRequest[]> {
@@ -783,6 +788,22 @@ export async function updateCommunity(
       void deleteImageByUrl(prevStorageUrl);
     } else {
       patch.coverImage = validateCoverImageForFirestore(cover);
+    }
+  }
+
+  if (input.crestImage !== undefined) {
+    const crest = input.crestImage;
+    if (!crest) {
+      const snap = await getDoc(communityRef);
+      const data = snap.data();
+      void deleteImageByUrl(typeof data?.crestUrl === "string" ? data.crestUrl : undefined);
+      patch.crestUrl = deleteField();
+    } else if (crest.startsWith("data:")) {
+      const snap = await getDoc(communityRef);
+      const prevCrestUrl = snap.data()?.crestUrl;
+      const url = await uploadCommunityCrest(communityId, crest);
+      patch.crestUrl = url;
+      void deleteImageByUrl(typeof prevCrestUrl === "string" ? prevCrestUrl : undefined);
     }
   }
 

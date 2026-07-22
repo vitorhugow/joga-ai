@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { PhotoCropDialog } from "@/components/profile/PhotoCropDialog";
+import { ClubCrest } from "@/components/ClubCrest";
 import { imageDisplaySrc, resolveCommunityCover } from "@/lib/imageUtils";
 import {
   COMMUNITY_COVER_ASPECT,
@@ -29,6 +30,7 @@ import {
   COMMUNITY_COVER_OUTPUT_HEIGHT,
   COMMUNITY_COVER_OUTPUT_WIDTH,
 } from "@/lib/communityCover";
+import { COMMUNITY_CREST_OUTPUT_SIZE, COMMUNITY_CREST_LABEL } from "@/lib/communityCrest";
 import { toast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -59,10 +61,14 @@ export default function ComunidadeConfiguracoes() {
   const [gameType, setGameType] = useState<(typeof GAME_TYPES)[number]["value"]>("fut7");
   const [isPrivate, setIsPrivate] = useState(false);
   const [coverImage, setCoverImage] = useState("");
+  const [crestImage, setCrestImage] = useState("");
   const [saving, setSaving] = useState(false);
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
+  const [crestCropSource, setCrestCropSource] = useState<string | null>(null);
+  const [crestCropOpen, setCrestCropOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const crestFileInputRef = useRef<HTMLInputElement>(null);
   const { profile, refresh } = useUserProfile();
   const [proDialogOpen, setProDialogOpen] = useState(false);
   const [mensalistaEnabled, setMensalistaEnabled] = useState(false);
@@ -98,6 +104,7 @@ export default function ComunidadeConfiguracoes() {
       setGameType(c.gameType);
       setIsPrivate(c.isPrivate);
       setCoverImage(resolveCommunityCover(c) ?? "");
+      setCrestImage(c.crestUrl ?? "");
       setMensalistaEnabled(c.mensalista?.enabled === true);
       setMensalistaPrice(
         c.mensalista?.priceCents ? String(c.mensalista.priceCents / 100) : "10",
@@ -156,15 +163,17 @@ export default function ComunidadeConfiguracoes() {
     setSaving(true);
     try {
       const coverToSave = coverImage || undefined;
+      const crestToSave = crestImage || undefined;
       await updateCommunity(
         id,
-        { name, city, gameType, isPrivate, coverImage: coverToSave },
+        { name, city, gameType, isPrivate, coverImage: coverToSave, crestImage: crestToSave },
         { actorUserId: userId },
       );
       const refreshed = await loadCommunity(id, userId);
       if (refreshed) {
         setCommunity(refreshed);
         setCoverImage(resolveCommunityCover(refreshed) ?? "");
+        setCrestImage(refreshed.crestUrl ?? "");
       }
       toast({ title: "Clube actualizado" });
     } catch (err) {
@@ -190,6 +199,22 @@ export default function ComunidadeConfiguracoes() {
     reader.onload = () => {
       setCropSource(reader.result as string);
       setCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  }
+
+  function handleCrestFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Escolhe uma imagem (JPG, PNG ou WebP).", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCrestCropSource(reader.result as string);
+      setCrestCropOpen(true);
     };
     reader.readAsDataURL(file);
     event.target.value = "";
@@ -311,6 +336,61 @@ export default function ComunidadeConfiguracoes() {
               setCropSource(null);
             }}
           />
+
+          <div>
+            <label className="text-[10px] font-bold uppercase text-white/40">Escudo do clube</label>
+            <p className="text-white/35 text-xs mt-1 mb-2">
+              Imagem quadrada: <span className="text-emerald-300/90 font-semibold">{COMMUNITY_CREST_LABEL}</span>
+            </p>
+            <div className="flex items-center gap-3">
+              <ClubCrest name={name || community.name} crestUrl={crestImage} size={64} />
+              <div className="flex items-center gap-3 flex-wrap">
+                <input
+                  ref={crestFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleCrestFileChange}
+                />
+                <JogaButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => crestFileInputRef.current?.click()}
+                >
+                  <Camera className="w-4 h-4" />
+                  Carregar escudo
+                </JogaButton>
+                {crestImage && (
+                  <button
+                    type="button"
+                    className="text-xs text-red-300"
+                    onClick={() => setCrestImage("")}
+                  >
+                    Remover escudo
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+          <PhotoCropDialog
+            open={crestCropOpen}
+            onOpenChange={setCrestCropOpen}
+            imageSrc={crestCropSource}
+            outputWidth={COMMUNITY_CREST_OUTPUT_SIZE}
+            outputHeight={COMMUNITY_CREST_OUTPUT_SIZE}
+            jpegQuality={0.85}
+            cropTitle="Enquadrar escudo"
+            cropDescription={`Ajusta o escudo (${COMMUNITY_CREST_LABEL}).`}
+            applyLabel="Aplicar escudo"
+            onApply={(dataUrl) => {
+              setCrestImage(dataUrl);
+              setCrestCropOpen(false);
+              setCrestCropSource(null);
+            }}
+          />
+
           <label className="flex items-center gap-2 text-sm text-white/70">
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} className="accent-emerald-500" />
             Clube privado

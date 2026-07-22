@@ -46,13 +46,17 @@ service firebase.storage {
 
     match /communities/{communityId}/cover/{fileName} {
       allow read: if true;
-      // TEMPORÁRIO — firestore.get()/exists() dentro desta regra continua a
-      // bloquear mesmo depois de conceder o IAM role "cross-service rules"
-      // no `firebase deploy --only storage` interativo (14/07). Causa exata
-      // por confirmar; por agora qualquer utilizador com sessão pode subir a
-      // capa de QUALQUER comunidade — reverter para isCommunityAdmin() assim
-      // que se perceber porque é que a leitura cruzada continua a falhar.
-      allow write: if isSignedIn() && isValidBrandingImage();
+      // Reactivado o isCommunityAdmin() — usa a mesma função cross-service
+      // que já funciona em .../branding logo acima. Testar em produção após
+      // o deploy: se voltar a bloquear uploads legítimos, o histórico deste
+      // ficheiro tem o bypass temporário que estava aqui antes.
+      allow write: if isCommunityAdmin(communityId) && isValidBrandingImage();
+      allow delete: if isCommunityAdmin(communityId);
+    }
+
+    match /communities/{communityId}/crest/{fileName} {
+      allow read: if true;
+      allow write: if isCommunityAdmin(communityId) && isValidBrandingImage();
       allow delete: if isCommunityAdmin(communityId);
     }
   }

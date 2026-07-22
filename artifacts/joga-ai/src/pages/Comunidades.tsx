@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaChip, JogaPage } from "@/components/joga";
+import { ClubCrest } from "@/components/ClubCrest";
 import { imageDisplaySrc, resolveCommunityCover } from "@/lib/imageUtils";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
@@ -45,6 +46,7 @@ function CommunityCard({
   gameType,
   coverImage,
   coverUrl,
+  crestUrl,
   joined,
   proActive,
 }: {
@@ -55,11 +57,11 @@ function CommunityCard({
   gameType: string;
   coverImage?: string;
   coverUrl?: string;
+  crestUrl?: string;
   joined?: boolean;
   proActive?: boolean;
 }) {
   const accent = gameTypeAccent[gameType] || { color: "#9ca3af", bg: "rgba(156,163,175,0.2)" };
-  const abbr = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   const clubBg = clubColors[parseInt(id, 36) % clubColors.length];
   const coverSrc = resolveCommunityCover({ coverUrl, coverImage });
 
@@ -84,12 +86,12 @@ function CommunityCard({
             style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%)" }}
           />
           <div className="absolute left-3 bottom-3 flex items-end gap-2.5">
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center font-display font-black text-white shadow-lg shrink-0"
-              style={{ background: clubBg, border: "2px solid rgba(255,255,255,0.25)", fontSize: "0.9rem" }}
-            >
-              {abbr}
-            </div>
+            <ClubCrest
+              name={name}
+              crestUrl={crestUrl}
+              size={44}
+              className="border-2 border-white/25 shadow-lg"
+            />
             <div>
               <h3 className="font-display font-black text-white text-base leading-tight drop-shadow">
                 {name}

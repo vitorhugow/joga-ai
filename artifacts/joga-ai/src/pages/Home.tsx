@@ -23,6 +23,7 @@ import { JogaLogo } from "@/components/brand";
 import { JogaCard, JogaPage, JogaButton } from "@/components/joga";
 import { SponsorSlot } from "@/components/SponsorSlot";
 import { InstallAppBanner } from "@/components/InstallAppBanner";
+import { ClubCrest } from "@/components/ClubCrest";
 
 const PITCH_SVG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.05)' stroke-width='1'/%3E%3Cpath d='M40 0 L40 80' stroke='rgba(255,255,255,0.03)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='18' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
@@ -50,22 +51,11 @@ function HeroCard({ player }: {
   );
 }
 
-function CommunityPill({ c }: { c: { id: string; name: string; memberCount: number; city: string } }) {
-  const abbr = c.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-  const colors = [
-    "linear-gradient(135deg, #16a34a, #047857)",
-    "linear-gradient(135deg, #2563eb, #1d4ed8)",
-    "linear-gradient(135deg, #7c3aed, #6d28d9)",
-    "linear-gradient(135deg, #dc2626, #b91c1c)",
-    "linear-gradient(135deg, #d97706, #b45309)",
-  ];
-  const bg = colors[parseInt(c.id) % colors.length];
+function CommunityPill({ c }: { c: { id: string; name: string; memberCount: number; city: string; crestUrl?: string } }) {
   return (
     <Link href={`/comunidades/${c.id}`}>
       <div className="shrink-0 flex flex-col items-center gap-2 joga-tap" data-testid={`community-pill-${c.id}`}>
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: bg, boxShadow: "0 4px 12px rgba(0,0,0,0.35)" }}>
-          <span className="font-display font-black text-white text-xl">{abbr}</span>
-        </div>
+        <ClubCrest name={c.name} crestUrl={c.crestUrl} size={64} className="shadow-lg" />
         <p className="text-[11px] font-bold max-w-[60px] text-center leading-tight" style={{ color: "rgba(255,255,255,0.7)" }}>{c.name.split(" ")[0]}</p>
         <p className="text-[10px] font-medium -mt-1" style={{ color: "rgba(255,255,255,0.3)" }}>{c.memberCount}</p>
       </div>

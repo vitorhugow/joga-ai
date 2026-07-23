@@ -44,6 +44,11 @@ function getStats(attrs: PlayerAttributes): [string, number][] {
   ];
 }
 
+/** Firebase Storage / googleusercontent etc. — same-origin (/... e data:) fica de fora. */
+function isExternalImageUrl(url: string | undefined): boolean {
+  return typeof url === "string" && /^https?:\/\//.test(url);
+}
+
 function PortugalFlagInline() {
   return (
     <div className="joga-new-card-flag" aria-label="Bandeira de Portugal">
@@ -115,14 +120,23 @@ export function PlayerCard({
               <div className="joga-new-card-divider" />
 
               {flagUrl ? (
-                <img className="joga-new-card-flag" src={flagUrl} alt="Bandeira" />
+                <img
+                  className="joga-new-card-flag"
+                  src={flagUrl}
+                  alt="Bandeira"
+                  crossOrigin={isExternalImageUrl(flagUrl) ? "anonymous" : undefined}
+                />
               ) : (
                 <PortugalFlagInline />
               )}
             </aside>
 
             <div className="joga-new-card-photo">
-              <img src={photoUrl || "/demo-player.svg"} alt={name} />
+              <img
+                src={photoUrl || "/demo-player.svg"}
+                alt={name}
+                crossOrigin={isExternalImageUrl(photoUrl) ? "anonymous" : undefined}
+              />
             </div>
           </div>
 

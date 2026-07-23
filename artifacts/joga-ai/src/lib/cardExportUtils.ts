@@ -9,21 +9,64 @@ export type CardExportOptions = {
   pixelRatio?: number;
 };
 
+/** 1x1 transparente — usado pelo html-to-image se alguma imagem escapar ao
+ * pré-carregamento abaixo e mesmo assim falhar a embeber (nunca rebenta o
+ * export inteiro por causa de UMA imagem). */
+const TRANSPARENT_PLACEHOLDER =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+/** Fallback local (same-origin, nunca falha) para a foto do jogador quando
+ * o fetch da foto real falha (rede instável, etc.). */
+const FALLBACK_IMAGE_SRC = "/demo-player.svg";
+
+const IMAGE_LOAD_TIMEOUT_MS = 8000;
+
+/** Espera o load de UMA imagem; se falhar (ou nunca resolver — ligação
+ * pendurada), regista o URL exato e troca para um placeholder local em vez
+ * de deixar o export inteiro pendente/partido. */
+function loadImageForExport(img: HTMLImageElement): Promise<void> {
+  return new Promise((resolve) => {
+    if (img.complete && img.naturalWidth > 0) {
+      resolve();
+      return;
+    }
+
+    const originalSrc = img.src;
+    let settled = false;
+
+    const useFallback = (reason: string) => {
+      if (settled) return;
+      console.warn(`[cardExportUtils] Falha ao carregar imagem para export (${reason}, a usar placeholder): ${originalSrc}`);
+
+      if (originalSrc.endsWith(FALLBACK_IMAGE_SRC)) {
+        settled = true;
+        resolve();
+        return;
+      }
+
+      img.onload = () => {
+        settled = true;
+        resolve();
+      };
+      img.onerror = () => {
+        settled = true;
+        resolve();
+      };
+      img.src = FALLBACK_IMAGE_SRC;
+    };
+
+    img.onload = () => {
+      settled = true;
+      resolve();
+    };
+    img.onerror = () => useFallback("erro no load");
+    setTimeout(() => useFallback("timeout"), IMAGE_LOAD_TIMEOUT_MS);
+  });
+}
+
 async function waitForImages(root: HTMLElement): Promise<void> {
   const images = Array.from(root.querySelectorAll("img"));
-  await Promise.all(
-    images.map(
-      (img) =>
-        new Promise<void>((resolve) => {
-          if (img.complete) {
-            resolve();
-            return;
-          }
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
-        }),
-    ),
-  );
+  await Promise.all(images.map(loadImageForExport));
 }
 
 /** Clona o nó para o viewport com dimensões completas (evita corte e cores esvaziadas) */
@@ -79,6 +122,10 @@ export async function exportElementToPng(
       // SecurityError que a folha cross-origin do Google Fonts provocava.
       pixelRatio: options.pixelRatio ?? 3,
       cacheBust: true,
+      // Rede de segurança: se o html-to-image tentar embeber uma imagem que
+      // waitForImages não apanhou e o fetch interno falhar mesmo assim, usa
+      // este placeholder em vez de rebentar a exportação inteira.
+      imagePlaceholder: TRANSPARENT_PLACEHOLDER,
       backgroundColor: "#0a0f1a",
       width,
       height,

@@ -72,9 +72,9 @@
         }, true);
       })();
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Fontes auto-hospedadas (same-origin) — a exportação da carta (html-to-image)
+         não consegue ler cssRules de folhas cross-origin (Google Fonts) e rebentava. -->
+    <link rel="stylesheet" href="/fonts/fonts.css">
     <link rel="preload" as="image" href="/home/hero-ball.webp" type="image/webp">
   </head>
   <body>

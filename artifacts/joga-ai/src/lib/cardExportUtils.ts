@@ -74,7 +74,10 @@ export async function exportElementToPng(
     const height = Math.ceil(node.scrollHeight || node.getBoundingClientRect().height);
 
     const dataUrl = await toPng(node, {
-      pixelRatio: options.pixelRatio ?? 2,
+      // HD (3x) para a imagem aguentar uso em vídeo. As fontes agora são
+      // same-origin (/fonts/fonts.css) — o html-to-image embebe-as sem o
+      // SecurityError que a folha cross-origin do Google Fonts provocava.
+      pixelRatio: options.pixelRatio ?? 3,
       cacheBust: true,
       backgroundColor: "#0a0f1a",
       width,

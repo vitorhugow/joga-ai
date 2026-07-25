@@ -793,22 +793,35 @@ async function writeDelegatedRosterToFirestore(
 }
 
 function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<DocumentData> {
+  // Nunca gravar um plantel vazio: como esta escrita é `merge: true`, mandar
+  // `players: []` APAGA o plantel real no Firestore. Um cliente que ainda não
+  // hidratou (ou que hidratou mal) tem o plantel vazio em memória e destruía
+  // assim a pelada para toda a gente — já aconteceu em produção. Um plantel
+  // vazio nunca é informação nova que valha a pena propagar; omitir os campos
+  // deixa o documento remoto intacto.
+  const roster = sanitizeLivePlayers(data.players ?? []);
+  const rosterFields = roster.length
+    ? {
+        players: roster,
+        participantUserIds: Array.from(
+          new Set(
+            (data.players ?? [])
+              .map((p) => p.userId)
+              .filter((id): id is string => Boolean(id)),
+          ),
+        ),
+        playerTeams: data.playerTeams ?? {},
+        assignments: data.assignments ?? {},
+      }
+    : {};
+
   return stripUndefined({
     matchId: data.matchId,
     status: data.status,
     gameMode: data.gameMode,
     teamCount: data.teamCount,
     teamNames: data.teamNames,
-    players: sanitizeLivePlayers(data.players ?? []),
-    participantUserIds: Array.from(
-      new Set(
-        (data.players ?? [])
-          .map((p) => p.userId)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ),
-    playerTeams: data.playerTeams ?? {},
-    assignments: data.assignments ?? {},
+    ...rosterFields,
     currentPlayerId: data.currentPlayerId ?? "",
     miniGames: data.miniGames ?? [],
     createdAt: data.createdAt,
@@ -1089,24 +1102,33 @@ function mergeMatchSources(
 
   if (!remoteValid && !localValid && !preValid) return null;
 
+  // `parseSavedAt(undefined)` devolve AGORA (ver coerceFirestoreTimestampToIso),
+  // o que é correcto para uma fonte que existe mas não tem savedAt. Para uma
+  // fonte INEXISTENTE tem de ser 0: senão um candidato vazio (sem cache local)
+  // ficava com o savedAt mais recente de todos e ganhava ao plantel real do
+  // servidor — quem abrisse a pelada sem cache via 0 jogadores, e a escrita
+  // seguinte gravava esse plantel vazio por cima do Firestore, apagando-o.
+  const sourceSavedAt = (source: { savedAt?: unknown } | null) =>
+    source ? parseSavedAt(source.savedAt) : 0;
+
   const rosterCandidates = [
     {
       players: remoteValid?.players ?? [],
       playerTeams: remoteValid?.playerTeams ?? {},
       assignments: remoteValid?.assignments ?? {},
-      savedAt: parseSavedAt(remoteValid?.savedAt),
+      savedAt: sourceSavedAt(remoteValid),
     },
     {
       players: localValid?.players ?? [],
       playerTeams: localValid?.playerTeams ?? {},
       assignments: localValid?.assignments ?? {},
-      savedAt: parseSavedAt(localValid?.savedAt),
+      savedAt: sourceSavedAt(localValid),
     },
     {
       players: preValid?.players ?? [],
       playerTeams: preValid?.playerTeams ?? {},
       assignments: preValid?.assignments ?? {},
-      savedAt: parseSavedAt(preValid?.savedAt),
+      savedAt: sourceSavedAt(preValid),
     },
   ];
 

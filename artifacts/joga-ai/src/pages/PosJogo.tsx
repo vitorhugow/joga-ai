@@ -29,6 +29,7 @@ import {
 } from "@/lib/evolutionStorage";
 import { applyMatchResultToProfile, loadUserProfile } from "@/lib/userRepository";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAuthGate } from "@/contexts/AuthGateContext";
 import {
   saveMatchResult,
   saveUserMatchHistory,
@@ -227,6 +228,10 @@ export default function PosJogo() {
   const [, params] = useRoute("/partida/:id/pos-jogo");
   const { userId: authUserId } = useAuth();
   const userId = authUserId || currentMatchUserId();
+  // Votar sem conta ligada gravava o voto sob um uid anónimo descartável —
+  // só visível naquele dispositivo, nunca reconhecido noutro. Qualquer
+  // pessoa, mesmo sem conta, conseguia votar (inclusive em aba anónima).
+  const { isLinked, requireLinked } = useAuthGate();
   const matchId = resolveMatchId({ routeMatchId: params?.id });
   const summaryViewOnly = new URLSearchParams(window.location.search).get("view") === "summary";
   useMatchPhaseGuard(matchId, "pos-jogo");
@@ -498,8 +503,12 @@ export default function PosJogo() {
     if (!data) return;
     const isVoting =
       data.status === "aguardando_auditoria" || data.status === "auditada";
+    // Só entra em modo de voto sozinho para quem já tem conta ligada — sem
+    // isto, um visitante anónimo caía direto nas estrelas e o voto ficava
+    // preso a um uid descartável que nenhum outro dispositivo reconhece.
     if (
       isVoting &&
+      isLinked &&
       !gainsMode &&
       !hasVoted &&
       !summaryViewOnly &&
@@ -507,7 +516,7 @@ export default function PosJogo() {
     ) {
       setVoteMode(true);
     }
-  }, [data, gainsMode, hasVoted, userId, matchId, summaryViewOnly, ratingsReleased]);
+  }, [data, gainsMode, hasVoted, userId, matchId, summaryViewOnly, ratingsReleased, isLinked]);
 
   // Se a pelada for finalizada (por outra pessoa, noutro dispositivo, ou
   // por expiração de 24h) enquanto este utilizador está no ecrã de
@@ -954,6 +963,20 @@ export default function PosJogo() {
 
   function saveVote() {
     if (!data || !currentPlayer) return;
+
+    // Última barreira: sem conta ligada o voto fica preso a um uid
+    // descartável, só visível neste dispositivo — nunca reconhecido noutro
+    // aparelho nem contado como "já votaste" para a pessoa real.
+    if (!isLinked) {
+      setVoteMode(false);
+      requireLinked({
+        mode: "register",
+        title: "Cria conta para votar",
+        description: "O teu voto precisa de ficar ligado à tua conta, para contar em qualquer dispositivo.",
+        redirectTo: window.location.pathname + window.location.search,
+      });
+      return;
+    }
 
     // Última barreira: uma pelada já finalizada nunca aceita novos votos,
     // mesmo que a UI tenha ficado momentaneamente desatualizada.
@@ -1661,7 +1684,22 @@ export default function PosJogo() {
             </p>
           </div>
         ) : (
-          <JogaButton variant="gold" size="lg" onClick={() => setVoteMode(true)}>
+          <JogaButton
+            variant="gold"
+            size="lg"
+            onClick={() => {
+              if (
+                requireLinked({
+                  mode: "register",
+                  title: "Cria conta para votar",
+                  description: "O teu voto precisa de ficar ligado à tua conta, para contar em qualquer dispositivo.",
+                  redirectTo: window.location.pathname + window.location.search,
+                })
+              ) {
+                setVoteMode(true);
+              }
+            }}
+          >
             Ir para votação
           </JogaButton>
         )}

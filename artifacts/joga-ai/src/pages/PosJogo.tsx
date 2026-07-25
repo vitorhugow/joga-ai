@@ -239,10 +239,20 @@ export default function PosJogo() {
 
   // Hidrata dados do Firestore em background (não bloqueia render)
   // e verifica se a partida já expirou
+  //
+  // `data` arranca semeado do cache local (localStorage) antes deste fetch
+  // resolver — esse cache pode estar desatualizado (ex: status "concluida"
+  // gravado antes de uma correcção manual no Firestore). As redes de
+  // segurança abaixo fazem escritas no Firestore com base em `data.status`,
+  // por isso têm de esperar por este `remoteLoadedRef` antes de confiar
+  // nesse valor — caso contrário reescrevem o Firestore com dados obsoletos
+  // do cache local só de a página abrir.
+  const remoteLoadedRef = useRef(false);
   useEffect(() => {
     checkAndCloseExpiredMatch();
     if (!matchId || matchId === "default") return;
     loadMatchFromFirestore(matchId).then((remote) => {
+      remoteLoadedRef.current = true;
       if (!remote) return;
       setData((current) => {
         const applied = authUserId ? applyAuthToMatchData(remote, authUserId) : remote;
@@ -754,6 +764,7 @@ export default function PosJogo() {
   // a app antes da finalização terminar.
   const autoFinalizeInFlightRef = useRef(false);
   useEffect(() => {
+    if (!remoteLoadedRef.current) return;
     if (!data || isExpired || ratingsReleased || finalizeBusy) return;
     if (data.status === "concluida") return;
     if (!allVoted) return;
@@ -787,6 +798,7 @@ export default function PosJogo() {
   // reprocessar votos/atributos/badges outra vez.
   const statusFixInFlightRef = useRef(false);
   useEffect(() => {
+    if (!remoteLoadedRef.current) return;
     if (!data || data.status === "concluida") return;
     if (!ratingsReleased) return;
     if (statusFixInFlightRef.current) return;
@@ -808,6 +820,7 @@ export default function PosJogo() {
   // pelada "fechada" para sempre sem estatísticas.
   const missingRatingsFixInFlightRef = useRef(false);
   useEffect(() => {
+    if (!remoteLoadedRef.current) return;
     if (!data || isExpired || finalizeBusy) return;
     if (data.status !== "concluida" || ratingsReleased) return;
     if (missingRatingsFixInFlightRef.current) return;

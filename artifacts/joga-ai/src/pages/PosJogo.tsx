@@ -767,6 +767,9 @@ export default function PosJogo() {
     if (!remoteLoadedRef.current) return;
     if (!data || isExpired || ratingsReleased || finalizeBusy) return;
     if (data.status === "concluida") return;
+    // Sem jogadores carregados, `requiredVoters` fica vazio e `allVoted` é
+    // trivialmente true — fechava a pelada sozinha antes dos dados chegarem.
+    if (players.length === 0) return;
     if (!allVoted) return;
     if (autoFinalizeInFlightRef.current) return;
 
@@ -823,6 +826,13 @@ export default function PosJogo() {
     if (!remoteLoadedRef.current) return;
     if (!data || isExpired || finalizeBusy) return;
     if (data.status !== "concluida" || ratingsReleased) return;
+    // Só reparar quando há prova real de que a votação chegou ao fim: alguém
+    // votou, ou não havia ninguém com conta para votar. Sem esta condição,
+    // uma pelada reaberta manualmente (0 votos) era imediatamente re-fechada
+    // por qualquer dispositivo com a página em cache — o utilizador via
+    // "já foi finalizada" sem ninguém ter carregado em nada.
+    if (players.length === 0) return;
+    if (votedUserIds.length === 0 && requiredVoters.length > 0) return;
     if (missingRatingsFixInFlightRef.current) return;
 
     missingRatingsFixInFlightRef.current = true;

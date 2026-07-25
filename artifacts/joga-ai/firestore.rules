@@ -228,6 +228,17 @@ service cloud.firestore {
         && request.resource.data.votedUserIds.hasAny([request.auth.uid]);
     }
 
+    // Uma pelada que JÁ tem plantel nunca pode ficar sem ele. Um cliente com
+    // versão antiga (service worker por actualizar) que ainda não hidratou tem
+    // o plantel vazio em memória e, ao gravar com merge, mandava `players: []`
+    // — apagando jogadores, equipas e posições para toda a gente. Já destruiu
+    // peladas reais em produção. Nenhum fluxo legítimo esvazia um plantel:
+    // apagar a pelada apaga o documento inteiro (regra `delete`).
+    function keepsMatchRoster() {
+      return !(resource.data.get('players', []).size() > 0)
+        || request.resource.data.get('players', []).size() > 0;
+    }
+
     // Configuração da app gerida pela consola (ex.: patrocinador do SponsorSlot)
     match /appConfig/{docId} {
       allow read: if isSignedIn() || docId == 'fieldPhotos' || docId == 'activeTournament';
@@ -333,7 +344,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
         && request.resource.data.organizerId == request.auth.uid;
-      allow update: if isSignedIn() && (
+      allow update: if isSignedIn() && keepsMatchRoster() && (
         resource.data.organizerId == request.auth.uid
         || (
           resource.data.currentPlayerId == request.auth.uid

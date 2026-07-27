@@ -532,10 +532,18 @@ export default function PosJogo() {
     }
   }, [voteMode, data?.status]);
 
+  // `currentPlayerId` é um campo partilhado no documento da pelada — a
+  // última pessoa a gravar (ex: o organizador) deixa lá o seu próprio id.
+  // Usá-lo como primeira prioridade mostrava a evolução/nome de OUTRA
+  // pessoa a quem abrisse a página sem `isMe` resolvido ainda (ex: visitante
+  // anónimo antes de entrar na conta) — já aconteceu, mostrou a carta do
+  // organizador a outro jogador. `isMe` é sempre recalculado para o
+  // utilizador real desta sessão (`applyAuthToMatchData`), por isso manda
+  // sempre nele primeiro.
   const currentPlayer = useMemo(() => {
     return (
-      players.find((player: any) => player.id === data?.currentPlayerId) ||
       players.find((player: any) => player.isMe) ||
+      players.find((player: any) => player.id === data?.currentPlayerId) ||
       players[0]
     );
   }, [players, data]);

@@ -16,7 +16,8 @@ import {
   limit as fsLimit,
   arrayUnion,
 } from "firebase/firestore";
-import { db, isFirebaseConfigured } from "./firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import app, { db, isFirebaseConfigured } from "./firebase";
 import type { EntitlementPlan, Entitlements } from "./entitlements";
 import type { UserProfile } from "./userRepository";
 import type { FieldPhotoKey } from "./fieldPhotosConfig";
@@ -168,4 +169,22 @@ export async function adminSaveFieldPhoto(key: FieldPhotoKey, url: string): Prom
     { [key]: url, updatedAt: serverTimestamp() },
     { merge: true },
   );
+}
+
+/**
+ * Reabre uma partida para votação (ex: fechou/expirou antes de alguém votar).
+ * Corre via Cloud Function com Admin SDK — não depende de seres o organizador
+ * e não toca nas estatísticas (miniGames, players, votos já registados).
+ */
+export async function adminReopenMatchForVoting(
+  matchId: string,
+): Promise<{ ok: boolean; previousStatus: string }> {
+  if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
+  const functions = getFunctions(app, "europe-west1");
+  const fn = httpsCallable<{ matchId: string }, { ok: boolean; previousStatus: string }>(
+    functions,
+    "reopenMatchForVoting",
+  );
+  const res = await fn({ matchId: matchId.trim() });
+  return res.data;
 }

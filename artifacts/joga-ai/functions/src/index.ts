@@ -33,6 +33,7 @@ export {
 export { closeExpiredMatches } from "./closeExpiredMatches";
 export { paymentReminders } from "./paymentReminders";
 export { migrateMatchSetup } from "./matchSetup";
+export { reopenMatchForVoting } from "./matchAdmin";
 export {
   onMatchCreatedNotifyCommunity,
   onMatchUpdatedNotifyChanges,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Crown, Flag, Search, Shield, Trophy, UserX } from "lucide-react";
+import { ArrowLeft, Crown, Flag, RotateCcw, Search, Shield, Trophy, UserX } from "lucide-react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAppAdmin } from "@/hooks/useAppAdmin";
@@ -15,6 +15,7 @@ import {
   adminUnlockSkin,
   adminLoadOpenReports,
   adminUpdateReportStatus,
+  adminReopenMatchForVoting,
   type AdminUserRow,
   type AdminReport,
 } from "@/lib/adminRepository";
@@ -64,6 +65,9 @@ export default function Admin() {
   const [searched, setSearched] = useState(false);
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
+
+  const [reopenMatchId, setReopenMatchId] = useState("");
+  const [reopenBusy, setReopenBusy] = useState(false);
 
   const [cupTournamentId, setCupTournamentId] = useState<string | null>(null);
   const [cupTeams, setCupTeams] = useState<TournamentTeam[]>([]);
@@ -166,6 +170,29 @@ export default function Admin() {
       toast({ title: "Erro ao actualizar denúncia", variant: "destructive" });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleReopenMatch() {
+    const matchId = reopenMatchId.trim();
+    if (!matchId) return;
+    setReopenBusy(true);
+    try {
+      const { previousStatus } = await adminReopenMatchForVoting(matchId);
+      toast({
+        title: "Partida reaberta para votação",
+        description: `Estado anterior: ${previousStatus || "desconhecido"}`,
+      });
+      setReopenMatchId("");
+    } catch (err) {
+      console.warn("[Admin] reopen match:", err);
+      toast({
+        title: "Não foi possível reabrir",
+        description: err instanceof Error ? err.message : "Confirma o ID da partida.",
+        variant: "destructive",
+      });
+    } finally {
+      setReopenBusy(false);
     }
   }
 
@@ -439,6 +466,40 @@ export default function Admin() {
         {searched && results.length === 0 && !busy && (
           <p className="text-center text-white/35 text-sm">Nenhum utilizador encontrado.</p>
         )}
+
+        <div
+          className="rounded-2xl p-4 space-y-3"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <div className="flex items-center gap-2">
+            <RotateCcw className="w-4 h-4 text-emerald-400" />
+            <h2 className="font-display font-black text-white text-lg">Reabrir votação</h2>
+          </div>
+          <p className="text-white/50 text-xs leading-relaxed">
+            Para partidas finalizadas/expiradas sem ninguém ter votado. Não apaga estatísticas
+            nem votos já registados — só volta a abrir a página de votação.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={reopenMatchId}
+              onChange={(e) => setReopenMatchId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void handleReopenMatch()}
+              placeholder="ID da partida (ex: m-...)"
+              className={`flex-1 ${ADMIN_FIELD}`}
+            />
+            <JogaButton
+              variant="primary"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              disabled={reopenBusy || !reopenMatchId.trim()}
+              onClick={() => void handleReopenMatch()}
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reabrir
+            </JogaButton>
+          </div>
+        </div>
 
         <div
           className="rounded-2xl p-4 space-y-3"

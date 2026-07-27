@@ -5,6 +5,8 @@ import { MatchVoteReminderModal } from "@/components/MatchVoteReminderModal";
 import { MatchRatingReleasedModal } from "@/components/MatchRatingReleasedModal";
 import { CupJoinRequestModal } from "@/components/CupJoinRequestModal";
 import { ConsentBanner } from "@/components/ConsentBanner";
+import { PwaUpdateBanner } from "@/components/PwaUpdateBanner";
+import { PwaRefreshButton } from "@/components/PwaRefreshButton";
 import { PushPermissionPrompt } from "@/components/PushPermissionPrompt";
 import { initAppCheck } from "@/lib/firebase";
 import { setupForegroundPushListener, requestPushPermission } from "@/lib/pushNotifications";
@@ -35,6 +37,8 @@ function AppServicesInner() {
 
   return (
     <>
+      <PwaUpdateBanner />
+      <PwaRefreshButton />
       <ProfileSetupGate />
       <MatchVoteReminderModal />
       <MatchRatingReleasedModal />

@@ -11,6 +11,22 @@
 /firebase-messaging-sw.js
   Service-Worker-Allowed: /firebase-cloud-messaging-push-scope
 
+# App shell — nunca servir do cache do browser/TWA sem revalidar, senão o
+# service worker novo demora dias a ser sequer pedido (bug: app instalada
+# ficava presa em UI/dados antigos). /assets/* fica imutável (abaixo), só
+# estes ficheiros de entrada precisam de ser sempre revalidados.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 

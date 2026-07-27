@@ -80,6 +80,7 @@
   },
   "dependencies": {
     "firebase": "^12.15.0",
-    "html-to-image": "^1.11.13"
+    "html-to-image": "^1.11.13",
+    "workbox-window": "^7.4.1"
   }
 }

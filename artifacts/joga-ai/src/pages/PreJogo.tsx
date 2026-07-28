@@ -136,6 +136,26 @@ function toPreJogoPlayer(
   };
 }
 
+/**
+ * Merge campo a campo para o snapshot que chega durante a janela de
+ * localEditGrace (2s depois de uma escrita local via persistRosterImmediate,
+ * ex: togglePaid). A composição do roster (quem existe) vem sempre do
+ * remoto — entradas/saídas de jogadores nunca ficam bloqueadas por esta
+ * janela. Só paid/paidVia é que, para jogadores que já existiam nos dois
+ * lados (mesmo id), fica com o valor local — protege o toggle que acabou
+ * de ser escrito de ser pisado por um snapshot ainda desactualizado.
+ */
+function mergeRemoteRosterPreservingPayments(
+  remotePlayers: Player[],
+  localPlayers: Player[],
+): Player[] {
+  const localById = new Map(localPlayers.map((player) => [player.id, player]));
+  return remotePlayers.map((remotePlayer) => {
+    const local = localById.get(remotePlayer.id);
+    if (!local) return remotePlayer;
+    return { ...remotePlayer, paid: local.paid, paidVia: local.paidVia };
+  });
+}
 
 const teamNames: Record<TeamKey, string> = {
   A: "Time A",
@@ -557,19 +577,29 @@ export default function PreJogo() {
 
       if (merged) {
         skipNextPersist.current = true;
+
+        // Se acabámos de escrever localmente (ex: togglePaid via
+        // persistRosterImmediate), um snapshot que chegue nos 2s seguintes
+        // pode ainda não reflectir essa escrita. A composição do roster
+        // (quem existe) vem sempre do remoto — entradas/saídas nunca ficam
+        // bloqueadas por esta janela. Só paid/paidVia é preservado do
+        // estado local durante a janela, para o toggle recém-escrito não
+        // ser pisado por um snapshot desactualizado. Ver investigação do
+        // bug Pago/Pendente.
+        const localEditGrace = Date.now() - lastLocalRosterWriteMs.current < 2000;
         const mapped = merged.players.map((p) => toPreJogoPlayer(p, userId));
-        setPlayers(userId ? linkPlayersInRoster(mapped, userId) : mapped);
+        const nextRoster = localEditGrace
+          ? mergeRemoteRosterPreservingPayments(mapped, playersRef.current)
+          : mapped;
+        setPlayers(userId ? linkPlayersInRoster(nextRoster, userId) : nextRoster);
         setWaitlist(merged.waitlist ?? []);
 
         // Organizador/controlador: modo/equipas vêm de state/setup, não do match doc.
-        if (!canApplySetupRef.current) {
-          const localEditGrace = Date.now() - lastLocalRosterWriteMs.current < 2000;
-          if (!localEditGrace) {
-            setPlayerTeams(merged.playerTeams ?? {});
-            setAssignments(merged.assignments ?? {});
-            setGameMode(merged.gameMode ?? "fut5");
-            setTeamCount(merged.teamCount ?? 2);
-          }
+        if (!canApplySetupRef.current && !localEditGrace) {
+          setPlayerTeams(merged.playerTeams ?? {});
+          setAssignments(merged.assignments ?? {});
+          setGameMode(merged.gameMode ?? "fut5");
+          setTeamCount(merged.teamCount ?? 2);
         }
       }
 
@@ -1365,14 +1395,27 @@ export default function PreJogo() {
   }
 
   function togglePaid(playerId: string) {
-    setPlayers((current) =>
-      current.map((player) => {
-        if (player.id !== playerId) return player;
-        const paidOnline = player.paidVia === "app" || player.paidVia === "balance";
-        if (paidOnline) return player;
-        return { ...player, paid: !player.paid, paidVia: undefined };
-      }),
+    const target = players.find((player) => player.id === playerId);
+    if (!target) return;
+    const paidOnline = target.paidVia === "app" || target.paidVia === "balance";
+    if (paidOnline) return;
+
+    // Escrita imediata, não debounced: o caminho debounced (persistRoster)
+    // pode cair dentro da janela de skipNextPersist de um snapshot chegado
+    // entretanto e nunca chegar a gravar — ver investigação desta sessão.
+    // persistRosterImmediate já marca lastLocalRosterWriteMs e trata do
+    // skipNextPersist correctamente antes/depois da escrita.
+    const next = players.map((player) =>
+      player.id === playerId ? { ...player, paid: !player.paid, paidVia: undefined } : player,
     );
+    setPlayers(next);
+    // Síncrono, antes de qualquer coisa que ceda ao event loop: o efeito
+    // que normalmente sincroniza playersRef só corre depois do próximo
+    // render, e um snapshot podia chegar nesse intervalo e ler o
+    // playersRef ainda desactualizado dentro de
+    // mergeRemoteRosterPreservingPayments, sem proteger este toggle.
+    playersRef.current = next;
+    void persistRosterImmediate({ players: next });
   }
 
   function playerPaidOnline(player: Player): boolean {

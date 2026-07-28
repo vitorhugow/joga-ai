@@ -663,6 +663,7 @@ export default function PreJogo() {
   const [teamCount, setTeamCount] = useState<2 | 3 | 4>(2);
   const [players, setPlayers] = useState<Player[]>([]);
   const [manualName, setManualName] = useState("");
+  const manualNameInputRef = useRef<HTMLInputElement>(null);
 
   const resolvedOrganizerId =
     organizerId ??
@@ -1961,11 +1962,19 @@ export default function PreJogo() {
 
           <div className="flex gap-2">
             <input
+              ref={manualNameInputRef}
               value={manualName}
               onFocus={() => setShowCommunityList(true)}
               onChange={(event) => {
                 setManualName(event.target.value);
                 setShowCommunityList(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addManualPlayer();
+                  manualNameInputRef.current?.focus();
+                }
               }}
               placeholder="Buscar no clube ou adicionar manual"
               className="flex-1 rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white outline-hidden"

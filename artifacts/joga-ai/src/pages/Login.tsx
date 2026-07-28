@@ -650,7 +650,8 @@ function LoginModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  /** accountSwitched: true quando o email já pertencia a outra conta real — ver EmailAuthResult em lib/auth.ts */
+  onSuccess: (accountSwitched?: boolean) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -683,6 +684,15 @@ export default function Login() {
   const { isLinked, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [loginOpen, setLoginOpen] = useState(false);
+  // true quando o último login/registo nesta página trocou para uma conta
+  // real já existente (o email já pertencia a outra conta) — nesse caso o
+  // toast do LoginPanel precisa de tempo para ser visto, por isso nem
+  // handleSuccess nem o efeito abaixo (que redirecciona sozinho assim que
+  // isLinked fica true, independentemente do modal) podem navegar. Falso
+  // por omissão: cobre também o caso de chegar a /entrar já autenticado
+  // (sem passar pelo modal nesta sessão), que continua a redireccionar
+  // normalmente.
+  const [accountSwitched, setAccountSwitched] = useState(false);
 
   const redirect = new URLSearchParams(window.location.search).get("redirect") || "/";
 
@@ -694,14 +704,17 @@ export default function Login() {
   }, []);
 
   useEffect(() => {
-    if (!loading && isLinked) {
+    if (!loading && isLinked && !accountSwitched) {
       setLocation(redirect);
     }
-  }, [loading, isLinked, redirect, setLocation]);
+  }, [loading, isLinked, accountSwitched, redirect, setLocation]);
 
-  function handleSuccess() {
+  function handleSuccess(switchedAccount?: boolean) {
     setLoginOpen(false);
-    setLocation(redirect);
+    setAccountSwitched(Boolean(switchedAccount));
+    if (!switchedAccount) {
+      setLocation(redirect);
+    }
   }
 
   function openLogin() {

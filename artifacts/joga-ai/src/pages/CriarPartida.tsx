@@ -100,7 +100,7 @@ function StyledInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={inputClass}
+      className={props.className ? `${inputClass} ${props.className}` : inputClass}
       style={{ ...baseInputStyle, ...(focused ? focusInputStyle : {}) }}
       onFocus={(e) => { setFocused(true); props.onFocus?.(e); }}
       onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}

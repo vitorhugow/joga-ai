@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   ChevronLeft,
-  MessageCircle,
+  Download,
   Share,
   Plus,
   Check,
@@ -10,10 +10,8 @@ import {
 } from "lucide-react";
 import { JogaButton, JogaCard, JogaPage } from "@/components/joga";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import {
-  loadWhatsappSupportNumber,
-  WHATSAPP_SUPPORT_NUMBER_FALLBACK,
-} from "@/lib/installConfig";
+
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=pt.jogaai.app";
 
 type OS = "android" | "ios";
 
@@ -22,12 +20,6 @@ function detectOS(): OS {
   const ua = navigator.userAgent || "";
   if (/iPad|iPhone|iPod/.test(ua)) return "ios";
   return "android";
-}
-
-function buildWhatsappUrl(number: string): string {
-  const digits = number.replace(/[^\d+]/g, "");
-  const message = "Olá! Quero instalar o Joga AI no Android. O meu email do Google é: ";
-  return `https://wa.me/${digits.replace("+", "")}?text=${encodeURIComponent(message)}`;
 }
 
 function StepRow({ number, children }: { number: number; children: React.ReactNode }) {
@@ -47,13 +39,6 @@ function StepRow({ number, children }: { number: number; children: React.ReactNo
 export default function Instalar() {
   useDocumentTitle("Instalar a app");
   const [os, setOS] = useState<OS>(() => detectOS());
-  const [whatsappNumber, setWhatsappNumber] = useState(WHATSAPP_SUPPORT_NUMBER_FALLBACK);
-
-  useEffect(() => {
-    void loadWhatsappSupportNumber().then(setWhatsappNumber);
-  }, []);
-
-  const whatsappUrl = useMemo(() => buildWhatsappUrl(whatsappNumber), [whatsappNumber]);
 
   return (
     <JogaPage theme="dark" padded={false} bottomSpace>
@@ -113,41 +98,19 @@ export default function Instalar() {
         {os === "android" ? (
           <>
             <JogaCard variant="arena" padding="lg">
-              <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.18em]">
-                Closed testing
+              <p className="text-emerald-300 text-[10px] font-black uppercase tracking-[0.18em]">
+                Já disponível
               </p>
               <p className="text-white text-sm mt-2 leading-relaxed">
-                A app do Android está em testes fechados. Manda-me o teu email do Google que eu
-                adiciono-te à lista.
+                O Joga AI já está na Play Store — instala como qualquer outra app.
               </p>
 
-              <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="block mt-4">
-                <JogaButton variant="primary" size="lg" className="w-full gap-2" data-testid="button-whatsapp-android">
-                  <MessageCircle className="w-4.5 h-4.5" />
-                  Pedir acesso no WhatsApp
+              <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" className="block mt-4">
+                <JogaButton variant="primary" size="lg" className="w-full gap-2" data-testid="button-play-store">
+                  <Download className="w-4.5 h-4.5" />
+                  Descarregar no Google Play
                 </JogaButton>
               </a>
-
-              <div className="mt-5 space-y-3">
-                <p className="text-white/35 text-[10px] font-black uppercase tracking-[0.18em]">
-                  O que acontece depois
-                </p>
-                <StepRow number={1}>Recebes um convite por email.</StepRow>
-                <StepRow number={2}>Abres o link do convite no telemóvel.</StepRow>
-                <StepRow number={3}>Tocas em "Tornar-me testador".</StepRow>
-                <StepRow number={4}>Instalas a app pela Play Store, como qualquer outra.</StepRow>
-              </div>
-
-              {/* QR code do link de participação — preparado para quando o teste for
-                  aberto ao público. Descomentar e passar a URL real de
-                  https://play.google.com/apps/testing/pt.jogaai.app quando aplicável.
-              <div className="mt-5 flex flex-col items-center gap-2">
-                <div className="w-32 h-32 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }}>
-                  <QrCode className="w-10 h-10 text-white/30" />
-                </div>
-                <p className="text-white/35 text-[11px]">Digitaliza para entrar no teste</p>
-              </div>
-              */}
             </JogaCard>
 
             <JogaCard variant="arena" padding="lg">

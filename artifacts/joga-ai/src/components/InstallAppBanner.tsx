@@ -22,8 +22,9 @@ function AppleLogo({ className }: { className?: string }) {
   );
 }
 
-/** Logo do robô Android — monocromático. Nunca usar como badge oficial da
- * Google Play; a app está em closed testing e o badge oficial não se aplica. */
+/** Logo do robô Android — monocromático. Este banner é sobre instalar a PWA
+ * (adicionar ao ecrã principal), não sobre a Play Store — o link real para a
+ * app nativa fica em /instalar. */
 function AndroidLogo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">

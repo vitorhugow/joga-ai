@@ -91,6 +91,19 @@ Sem isto a app abre com barra de browser no topo — é o erro nº1.
 > só existe depois de obteres o SHA-256 (passo e). Se assinaste localmente
 > **e** o Play re-assina, podes precisar dos **dois** fingerprints no array.
 
+> **Terceira fingerprint (chave de assinatura anterior):** o array tem hoje
+> três entradas. A terceira (`FF:CD:50:...`) é uma chave de assinatura do
+> app **anterior**, registada em Play Console → App integrity → App signing
+> → "Chaves de assinatura do app anteriores" (entrada de 15/07/2026) —
+> confirmada por download directo do certificado `.der` dessa página e
+> verificação com `openssl x509`/`keytool`, não é uma chave de teste. É
+> provavelmente a chave gerada pela Google no momento da inscrição inicial
+> no Play App Signing, antes de a chave de upload actual (a segunda
+> fingerprint do array) assumir. Mantida no ficheiro por segurança, para
+> instalações/caches de dispositivos que ainda possam estar associadas a
+> essa chave anterior — remove-la só reduziria a superfície do ficheiro,
+> não corrige nenhum problema activo.
+
 ### A3. Build de teste local
 ```bash
 # APK para instalar num Android físico

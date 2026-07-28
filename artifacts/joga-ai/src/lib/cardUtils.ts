@@ -282,12 +282,10 @@ export function applyVoteGainsToCard(
   if (events.voted) ritmoDelta += 1;
   ritmoDelta -= fouls + yellowCards;
 
-  let finalizacaoGain = events.goals > 0 ? events.goals : 0;
-  const defesaGain = events.saves;
-
-  if (events.isTopScorer) {
-    finalizacaoGain += 1;
-  }
+  const finalizacaoGain = events.goals > 0 ? events.goals : 0;
+  // Defesa sobe +1 a cada 2 defesas, arredondado para baixo (7 defesas = +3).
+  const defesaGain = Math.floor(events.saves / 2);
+  const fisicoGain = events.isTopScorer ? 1 : 0;
 
   // Aplica cada delta em sequência: ganhos positivos usam addAttributePoints
   // (transbordam para o atributo mais baixo ao atingir 99); perdas só
@@ -296,6 +294,7 @@ export function applyVoteGainsToCard(
   result = applyStatDelta(result, "finalizacao", finalizacaoGain);
   result = applyStatDelta(result, "passe", events.assists);
   result = applyStatDelta(result, "defesa", defesaGain);
+  result = applyStatDelta(result, "fisico", fisicoGain);
   return result;
 }
 
@@ -318,16 +317,17 @@ export function revertVoteGainsFromCard(
   if (events.voted) ritmoDelta -= 1;
   ritmoDelta += fouls + yellowCards;
 
-  let finalizacaoLoss = events.goals > 0 ? events.goals : 0;
-  if (events.isTopScorer) finalizacaoLoss += 1;
+  const finalizacaoLoss = events.goals > 0 ? events.goals : 0;
+  const defesaLoss = Math.floor(events.saves / 2);
+  const fisicoLoss = events.isTopScorer ? 1 : 0;
 
   return {
     ritmo: clampStat(currentAttrs.ritmo + ritmoDelta),
     finalizacao: clampStat(currentAttrs.finalizacao - finalizacaoLoss),
     passe: clampStat(currentAttrs.passe - events.assists),
-    defesa: clampStat(currentAttrs.defesa - events.saves),
+    defesa: clampStat(currentAttrs.defesa - defesaLoss),
     drible: currentAttrs.drible,
-    fisico: currentAttrs.fisico,
+    fisico: clampStat(currentAttrs.fisico - fisicoLoss),
   };
 }
 

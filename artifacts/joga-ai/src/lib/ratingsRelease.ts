@@ -11,7 +11,7 @@ import {
   type UserMatchHistoryEntry,
 } from "./matchHistoryRepository";
 import { loadMatchFromFirestore, updateMatchStatus } from "./matchRepository";
-import { applyDelayedRatingToProfile } from "./userRepository";
+import { applyDelayedRatingToProfile, applyMatchResultToProfile } from "./userRepository";
 import { checkAndUnlockBadges } from "./badgeService";
 import { trackRivalriesFromMatchResult } from "./communityStatsRepository";
 import { getCurrentUserId } from "./auth";
@@ -21,6 +21,7 @@ import {
   computePlayerMatchStats,
   computeRatingByPlayer,
   computeTopScorers,
+  isPlayerTopScorer,
   type MatchEvent,
 } from "./evolutionUtils";
 
@@ -51,6 +52,8 @@ export function buildMatchPlayerResults(
       goals: stats.goals,
       assists: stats.assists,
       saves: stats.saves,
+      fouls: stats.fouls,
+      yellowCards: stats.cards,
       rating: averageRatingsForPlayer(ratingByPlayer, player.id),
     };
   });
@@ -89,34 +92,55 @@ export async function buildMatchResultPayload(input: {
 }
 
 /**
- * Escreve a nota/badges/histórico no PRÓPRIO perfil do utilizador. Só pode
- * ser chamado para o utilizador actualmente autenticado — escrever no doc
- * de outro user (users/{outroId}, matchHistory/{outroId}) é negado pelas
- * firestore.rules (allow write: if isOwner(userId)).
+ * Escreve os ganhos de atributos, a nota e os badges no PRÓPRIO perfil do
+ * utilizador. Só pode ser chamado para o utilizador actualmente autenticado
+ * — escrever no doc de outro user (users/{outroId}, matchHistory/{outroId})
+ * é negado pelas firestore.rules (allow write: if isOwner(userId)).
  */
 async function releaseRatingForUser(
   userId: string,
-  playerId: string,
+  player: MatchPlayerResult,
   matchId: string,
-  title: string,
-  rating: number,
+  isTopScorer: boolean,
 ): Promise<void> {
   const history = await loadUserMatchHistory(userId);
   const entry = history.find((row) => row.matchId === matchId);
 
   if (entry?.ratingReleased) return;
 
-  if (rating > 0) {
-    await applyDelayedRatingToProfile(userId, rating, matchId);
-    await checkAndUnlockBadges(userId, { lastRating: rating });
+  // Golos/assistências/defesas/faltas sobem sempre, quer tenhas votado ou
+  // não — votar só dá o bónus extra de Ritmo (aplicado no momento do voto,
+  // ver saveVote() em PosJogo.tsx). Quem já votou já recebeu isto ali
+  // (voteEvolutionApplied:true) — aplicar outra vez aqui duplicava o ganho.
+  if (!entry?.voteEvolutionApplied) {
+    await applyMatchResultToProfile(userId, {
+      matchId,
+      goals: player.goals,
+      assists: player.assists,
+      saves: player.saves,
+      fouls: player.fouls,
+      yellowCards: player.yellowCards,
+      mvp: false,
+      deferRating: true,
+      voted: false,
+      isTopScorer,
+    });
+  }
+
+  if (player.rating > 0) {
+    await applyDelayedRatingToProfile(userId, player.rating, matchId);
+    await checkAndUnlockBadges(userId, { lastRating: player.rating });
   }
 
   if (entry) {
     await saveUserMatchHistory(userId, {
       ...entry,
-      rating: rating > 0 ? rating : entry.rating,
+      rating: player.rating > 0 ? player.rating : entry.rating,
+      goals: player.goals,
+      assists: player.assists,
       ratingPending: false,
       ratingReleased: true,
+      voteEvolutionApplied: true,
     });
   }
 }
@@ -213,10 +237,9 @@ export async function releaseMatchRatings(
       if (player.userId === currentUid) {
         await releaseRatingForUser(
           player.userId,
-          player.playerId,
+          player,
           matchId,
-          result.title,
-          player.rating,
+          isPlayerTopScorer(result.topScorers, { id: player.playerId, name: player.name }),
         );
       }
     } catch (err) {
@@ -293,8 +316,16 @@ async function tryReleaseRatingForMatch(
 
   if (result?.ratingsReleased) {
     const player = result.players.find((p) => p.userId === userId);
-    if (player && player.rating > 0 && entry.ratingReleased !== true) {
-      await releaseRatingForUser(userId, player.playerId, entry.matchId, entry.title, player.rating);
+    // Não exige player.rating > 0: os ganhos de golos/assistências/defesas
+    // aplicam-se mesmo sem nota nenhuma (ex: ninguém votou nesse jogador).
+    // releaseRatingForUser trata a parte da nota à parte, só se rating > 0.
+    if (player && entry.ratingReleased !== true) {
+      await releaseRatingForUser(
+        userId,
+        player,
+        entry.matchId,
+        isPlayerTopScorer(result.topScorers, { id: player.playerId, name: player.name }),
+      );
     }
     return;
   }

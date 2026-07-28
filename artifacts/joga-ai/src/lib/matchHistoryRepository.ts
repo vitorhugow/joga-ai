@@ -28,6 +28,8 @@ export type MatchPlayerResult = {
   goals: number;
   assists: number;
   saves: number;
+  fouls?: number;
+  yellowCards?: number;
   rating: number;
   mvp?: boolean;
 };

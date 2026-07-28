@@ -105,9 +105,9 @@ export function computePlayerGains(
 
   if (isTopScorer) {
     list.push({
-      title: isGoalkeeper ? "Saída (artilheiro)" : "Artilheiro",
+      title: isGoalkeeper ? "Reflexos" : "Físico",
       value: "+1",
-      reason: "Mais golos da pelada",
+      reason: "Artilheiro da pelada",
       type: hasVoted ? "up" : "pending",
     });
   }
@@ -121,11 +121,12 @@ export function computePlayerGains(
     });
   }
 
-  if (saves > 0) {
+  const defesaGain = Math.floor(saves / 2);
+  if (defesaGain > 0) {
     list.push({
       title: "Defesa",
-      value: `+${saves}`,
-      reason: "Defesas nesta pelada",
+      value: `+${defesaGain}`,
+      reason: `${saves} defesa(s) — +1 Defesa a cada 2`,
       type: hasVoted ? "up" : "pending",
     });
   }

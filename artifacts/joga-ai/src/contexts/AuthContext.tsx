@@ -33,8 +33,10 @@ type AuthState = {
   isLinked: boolean;
   displayName: string | null;
   signInWithGoogle: () => Promise<void>;
-  loginWithEmail: (email: string, password: string) => Promise<void>;
-  registerWithEmail: (email: string, password: string, name?: string) => Promise<void>;
+  /** accountSwitched: true quando entrou numa conta real já existente em vez de ligar a sessão anónima — ver EmailAuthResult em lib/auth.ts */
+  loginWithEmail: (email: string, password: string) => Promise<{ accountSwitched: boolean }>;
+  /** accountSwitched: idem, mas no fluxo de registo (a "conta nova" afinal já existia) */
+  registerWithEmail: (email: string, password: string, name?: string) => Promise<{ accountSwitched: boolean }>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -47,8 +49,8 @@ const AuthContext = createContext<AuthState>({
   isLinked: false,
   displayName: null,
   signInWithGoogle: async () => {},
-  loginWithEmail: async () => {},
-  registerWithEmail: async () => {},
+  loginWithEmail: async () => ({ accountSwitched: false }),
+  registerWithEmail: async () => ({ accountSwitched: false }),
   resetPassword: async () => {},
   logout: async () => {},
 });
@@ -74,6 +76,14 @@ function applyUserState(user: User | null, localUserId: string) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const localUserIdRef = useRef(getLocalUserId());
   const bootstrappedRef = useRef(false);
+  // Último uid anónimo visto nesta sessão do browser. `localUserIdRef` é um
+  // UUID de fallback (só usado quando o Firebase não está configurado) —
+  // nunca coincide com o uid da sessão anónima real do Firebase, por isso
+  // não serve para encontrar o perfil local que "Montar carta" gravou sob
+  // esse uid. onAuthStateChanged dispara uma vez para a sessão anónima e
+  // de novo para a conta real — capturamos aqui na primeira, para termos o
+  // valor certo disponível quando a segunda invocação tentar migrar.
+  const lastAnonUidRef = useRef<string | null>(null);
 
   const [state, setState] = useState<Omit<AuthState,
     "signInWithGoogle" | "loginWithEmail" | "registerWithEmail" | "resetPassword" | "logout"
@@ -105,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const current = auth.currentUser ?? user;
 
+        if (current?.isAnonymous) {
+          lastAnonUidRef.current = current.uid;
+        }
+
         // Actualiza o estado de auth IMEDIATAMENTE. `waitForAccountLinked()`
         // (usado pelo LoginPanel para saber quando fechar/navegar após o
         // login) resolve através do seu PRÓPRIO onAuthStateChanged, mais
@@ -115,7 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState(applyUserState(current, localUserIdRef.current));
 
         if (current && !current.isAnonymous) {
-          void migrateLocalProfileIfNeeded(localUserIdRef.current, current.uid);
+          void migrateLocalProfileIfNeeded(
+            lastAnonUidRef.current ?? localUserIdRef.current,
+            current.uid,
+          );
           void processPendingRatings(current.uid);
           void processPendingNotifications(current.uid);
 
@@ -149,10 +166,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithGoogle();
     },
     loginWithEmail: async (email, password) => {
-      await loginWithEmail(email, password);
+      const { accountSwitched } = await loginWithEmail(email, password);
+      return { accountSwitched };
     },
     registerWithEmail: async (email, password, name) => {
-      await registerWithEmail(email, password, name);
+      const { accountSwitched } = await registerWithEmail(email, password, name);
+      return { accountSwitched };
     },
     resetPassword: async (email) => {
       await resetPassword(email);

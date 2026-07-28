@@ -93,13 +93,6 @@ async function linkGoogleWithPopupOrRedirect(user: User): Promise<UserCredential
   }
 }
 
-export class AuthAccountSwitchError extends Error {
-  constructor(message = "Esta conta Google já existe. Os dados da sessão anterior podem não transferir.") {
-    super(message);
-    this.name = "AuthAccountSwitchError";
-  }
-}
-
 // ─── Sessão anónima ───────────────────────────────────────────────────────────
 
 /**
@@ -151,30 +144,44 @@ export async function signInWithGoogle(): Promise<UserCredential> {
 
 // ─── Login Email/Password ─────────────────────────────────────────────────────
 
+export type EmailAuthResult = {
+  credential: UserCredential;
+  /**
+   * true quando a sessão era anónima, o email já pertencia a outra conta
+   * real, e por isso entrámos NESSA conta em vez de ligar a anónima. O
+   * login/registo continua a funcionar normalmente — isto é só informação
+   * para o chamador poder avisar que o que estava montado na sessão
+   * anónima (ex: carta feita em "Montar carta" antes de ter conta) ficou
+   * só localmente, não passou para a conta em que entrou. No ramo
+   * credential-already-in-use isto é sempre true por definição — o email
+   * já pertence a outra conta que não a anónima atual, não há uid nenhum
+   * para comparar.
+   */
+  accountSwitched: boolean;
+};
+
 /** Regista nova conta com email + password */
 export async function registerWithEmail(
   email: string,
   password: string,
   displayName?: string,
-): Promise<UserCredential> {
+): Promise<EmailAuthResult> {
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
   let cred: UserCredential;
+  let accountSwitched = false;
 
   if (auth.currentUser?.isAnonymous) {
     const credential = EmailAuthProvider.credential(email, password);
-    const previousUid = auth.currentUser.uid;
     try {
       cred = await linkWithCredential(auth.currentUser, credential);
     } catch (err) {
       const code = (err as { code?: string })?.code ?? "";
       if (credentialAlreadyInUse(code)) {
+        // Conta real já existe para este email — quem estava a "registar-se"
+        // afinal já tinha conta. Entra nela normalmente.
         cred = await signInWithEmailAndPassword(auth, email, password);
-        if (cred.user.uid !== previousUid) {
-          throw new AuthAccountSwitchError(
-            "Este email já está noutra conta. Entraste nessa conta — a carta anónima anterior não foi transferida.",
-          );
-        }
+        accountSwitched = true;
       } else {
         throw err;
       }
@@ -187,37 +194,35 @@ export async function registerWithEmail(
     await updateProfile(cred.user, { displayName });
   }
 
-  return cred;
+  return { credential: cred, accountSwitched };
 }
 
 /** Login com email + password */
 export async function loginWithEmail(
   email: string,
   password: string,
-): Promise<UserCredential> {
+): Promise<EmailAuthResult> {
   if (!isFirebaseConfigured()) throw new Error("Firebase não configurado");
 
   if (auth.currentUser?.isAnonymous) {
     const credential = EmailAuthProvider.credential(email, password);
-    const previousUid = auth.currentUser.uid;
     try {
-      return await linkWithCredential(auth.currentUser, credential);
+      const cred = await linkWithCredential(auth.currentUser, credential);
+      return { credential: cred, accountSwitched: false };
     } catch (err) {
       const code = (err as { code?: string })?.code ?? "";
       if (credentialAlreadyInUse(code)) {
+        // Conta real já existe para este email — é o caso normal de login
+        // de um utilizador que regressa. A sessão anónima é descartada.
         const cred = await signInWithEmailAndPassword(auth, email, password);
-        if (cred.user.uid !== previousUid) {
-          throw new AuthAccountSwitchError(
-            "Este email já está noutra conta. Entraste nessa conta — a carta anónima anterior não foi transferida.",
-          );
-        }
-        return cred;
+        return { credential: cred, accountSwitched: true };
       }
       throw err;
     }
   }
 
-  return signInWithEmailAndPassword(auth, email, password);
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  return { credential: cred, accountSwitched: false };
 }
 
 /** Aguarda a sessão deixar de ser anónima (após login/registo) */

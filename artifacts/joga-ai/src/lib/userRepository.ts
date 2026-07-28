@@ -484,7 +484,15 @@ export async function migrateLocalProfileIfNeeded(
     const userRef = doc(db, "users", toUserId);
     const snap = await getDoc(userRef);
     if (snap.exists() && snap.data()?.profileComplete) {
-      writeLocalProfile(migrated);
+      // A conta de destino já tem perfil próprio e completo no Firestore —
+      // não é uma migração, é uma troca para uma conta que já existia.
+      // Escrever aqui a carta da sessão anónima (`migrated`) sob o uid desta
+      // conta arriscava aparecer, por instantes ou em caso de falha de rede
+      // no próximo loadUserProfile (que nesse caso cai no catch e devolve
+      // `local ?? seed`), como se pertencesse a esta conta. Acontece tanto
+      // no caminho de email (accountSwitched) como no de login por Google
+      // (signInWithGoogle tem o mesmo padrão de "credencial já pertence a
+      // outra conta", sem nenhum sinal equivalente a accountSwitched).
       return;
     }
 

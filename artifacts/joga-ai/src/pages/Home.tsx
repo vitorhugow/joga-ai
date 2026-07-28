@@ -234,6 +234,7 @@ export default function Home() {
                   mode: "register",
                   title: "Cria conta para guardar a carta",
                   description: "Podes ver a carta no Perfil. Para sincronizar na nuvem, regista-te.",
+                  redirectTo: "/perfil",
                 })}
               >
                 Montar carta
@@ -251,6 +252,7 @@ export default function Home() {
               mode: "register",
               title: "Guardar na nuvem",
               description: "A tua carta está neste dispositivo. Cria conta para sincronizar e jogar com a malta.",
+              redirectTo: "/perfil",
             })}
           >
             <div className="flex items-center justify-between gap-3">
@@ -292,6 +294,7 @@ export default function Home() {
                 mode: "register",
                 title: "Cria conta para organizar partidas",
                 description: "Visitantes podem ver jogos. Para criar peladas, regista-te grátis.",
+                redirectTo: "/criar-partida",
               })) {
                 window.location.href = "/criar-partida";
               }

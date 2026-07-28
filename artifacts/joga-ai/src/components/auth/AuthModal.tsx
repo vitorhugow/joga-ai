@@ -11,7 +11,7 @@ import { LoginPanel } from "./LoginPanel";
 export type AuthModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess?: () => void;
+  onSuccess?: (accountSwitched?: boolean) => void;
   initialMode?: "login" | "register";
   title?: string;
   description?: string;
@@ -48,8 +48,8 @@ export function AuthModal({
           bare
           compact
           initialMode={initialMode}
-          onSuccess={() => {
-            onSuccess?.();
+          onSuccess={(accountSwitched) => {
+            onSuccess?.(accountSwitched);
             onOpenChange(false);
           }}
         />

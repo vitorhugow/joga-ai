@@ -7,6 +7,8 @@ type OpenAuthOptions = {
   mode?: "login" | "register";
   title?: string;
   description?: string;
+  /** Caminho para navegar automaticamente assim que o login/registo tiver sucesso */
+  redirectTo?: string;
 };
 
 type AuthGateContextValue = {
@@ -65,7 +67,20 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
         initialMode={options.mode ?? "register"}
         title={options.title}
         description={options.description}
-        onSuccess={() => setOpen(false)}
+        onSuccess={(accountSwitched) => {
+          setOpen(false);
+          // Sem redirect quando trocou de conta: a pessoa "criou conta" ou
+          // "entrou" mas o email já pertencia a outra conta real — o que
+          // tinha montado (ex: carta anónima) ficou só neste dispositivo,
+          // não passou para essa conta. Arrastá-la de imediato para
+          // redirectTo (ex: /perfil) escondia essa informação antes de dar
+          // tempo ao toast aparecer. Fica onde estava, toast visível (o
+          // <Toaster/> vive na raiz da app, sobrevive ao fecho do modal),
+          // livre para navegar ela própria.
+          if (options.redirectTo && !accountSwitched) {
+            window.location.href = options.redirectTo;
+          }
+        }}
       />
     </AuthGateContext.Provider>
   );

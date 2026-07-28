@@ -3,6 +3,7 @@ import { Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { waitForAccountLinked } from "@/lib/auth";
 import { trackEvent } from "@/lib/analytics";
+import { toast } from "@/hooks/use-toast";
 import { getAuth } from "firebase/auth";
 import app from "@/lib/firebase";
 import { JogaButton, JogaCard } from "@/components/joga";
@@ -44,16 +45,14 @@ function mapAuthError(err: unknown): string {
   if (code.includes("auth/email-already-in-use")) return "Este email já está registado.";
   if (code.includes("auth/weak-password")) return "A password deve ter pelo menos 6 caracteres.";
   if (code.includes("auth/popup-closed-by-user")) return "Login cancelado.";
-  if ((err as Error)?.name === "AuthAccountSwitchError") {
-    return (err as Error).message;
-  }
   if (code.includes("auth/too-many-requests")) return "Muitas tentativas. Tenta mais tarde.";
   if (import.meta.env.DEV) console.warn("[auth]", err);
   return "Não foi possível entrar. Tenta outra vez.";
 }
 
 type LoginPanelProps = {
-  onSuccess?: () => void;
+  /** accountSwitched: true quando o email já pertencia a outra conta real — ver EmailAuthResult em lib/auth.ts */
+  onSuccess?: (accountSwitched?: boolean) => void;
   compact?: boolean;
   bare?: boolean;
   initialMode?: "login" | "register";
@@ -106,15 +105,22 @@ export function LoginPanel({ onSuccess, compact = false, bare = false, initialMo
 
     setLoading("email");
     try {
+      let accountSwitched = false;
       if (mode === "register") {
-        await registerWithEmail(email.trim(), password, name.trim() || undefined);
+        ({ accountSwitched } = await registerWithEmail(email.trim(), password, name.trim() || undefined));
         trackEvent("sign_up");
       } else {
-        await loginWithEmail(email.trim(), password);
+        ({ accountSwitched } = await loginWithEmail(email.trim(), password));
         trackEvent("login");
       }
+      if (accountSwitched) {
+        toast({
+          title: "Já existe uma conta com este email",
+          description: "Entraste nela. A carta que tinhas começado a montar ficou só neste dispositivo.",
+        });
+      }
       await waitForAccountLinked();
-      onSuccess?.();
+      onSuccess?.(accountSwitched);
     } catch (err) {
       setError(mapAuthError(err));
     } finally {

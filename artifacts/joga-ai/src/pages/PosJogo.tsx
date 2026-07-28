@@ -35,10 +35,10 @@ import {
   saveUserMatchHistory,
   hasVoteEvolutionApplied,
   hasParticipationApplied,
-  loadMatchResult,
+  watchMatchResult,
   type MatchResult,
 } from "@/lib/matchHistoryRepository";
-import { PlayerRankingBoard } from "@/components/PlayerRankingBoard";
+import { MatchNotesPodium } from "@/components/MatchNotesPodium";
 import { getVotes } from "@/lib/auditRepository";
 import {
   buildMatchResultPayload,
@@ -287,13 +287,33 @@ export default function PosJogo() {
     return unsub;
   }, [matchId]);
 
+  // `resultLoadedRef` distingue "ainda não sabemos" de "já confirmámos que
+  // não há notas publicadas" — as redes de segurança de reparação (abaixo)
+  // não podem confiar em `ratingsReleased` antes deste primeiro snapshot
+  // chegar, senão disparam sempre no valor inicial `false` em qualquer
+  // refresh, mesmo quando as notas já tinham saído.
+  const resultLoadedRef = useRef(false);
+  // Incrementar isto força o efeito abaixo a re-subscrever — é o "tentar
+  // novamente" do estado de erro no pódio (um onSnapshot com erro, ex.
+  // permission-denied, não se recupera sozinho).
+  const [resultWatchRetryKey, setResultWatchRetryKey] = useState(0);
   useEffect(() => {
     if (!matchId) return;
-    loadMatchResult(matchId).then((result) => {
-      if (result?.ratingsReleased) setRatingsReleased(true);
-      setMatchResult(result);
+    // onSnapshot em vez de um fetch pontual: o pódio reage em direto assim
+    // que as notas saem (ou assim que alguém as corrige), sem depender de
+    // um refresh manual da página.
+    const unsub = watchMatchResult(matchId, (outcome) => {
+      resultLoadedRef.current = true;
+      if (!outcome.ok) {
+        setMatchResultError(true);
+        return;
+      }
+      setMatchResultError(false);
+      if (outcome.result?.ratingsReleased) setRatingsReleased(true);
+      setMatchResult(outcome.result);
     });
-  }, [matchId]);
+    return unsub;
+  }, [matchId, resultWatchRetryKey]);
 
   useEffect(() => {
     if (!data || !authUserId) return;
@@ -340,6 +360,7 @@ export default function PosJogo() {
   const [voteRecords, setVoteRecords] = useState<MatchVoteRecord[]>([]);
   const [ratingsReleased, setRatingsReleased] = useState(false);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [matchResultError, setMatchResultError] = useState(false);
   const [showNotesPodium, setShowNotesPodium] = useState(false);
   const [finalizeBusy, setFinalizeBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -716,7 +737,24 @@ export default function PosJogo() {
   ) {
     if (!data || ratingsReleased) return;
 
-    const votes = await getVotes(matchId);
+    // Só finaliza com votos confirmados no servidor. Uma leitura vinda da
+    // cache (offline, ou persistentLocalCache por sincronizar) pode devolver
+    // 0 votos sem erro nenhum — tratar isso como "ninguém votou" já zerou
+    // notas publicadas noutra sessão. Sem rede a sério, é melhor não
+    // finalizar do que finalizar errado.
+    const { votes, source } = await getVotes(matchId);
+    if (source !== "server") {
+      console.warn(
+        "[PosJogo] finalização abortada — votos vieram de cache local, não do servidor:",
+        matchId,
+      );
+      toast({
+        title: "Sem ligação ao servidor",
+        description: "Não foi possível confirmar os votos agora. Tenta outra vez quando tiveres rede.",
+        variant: "destructive",
+      });
+      return;
+    }
     const completedAt = new Date().toISOString();
     const payload = await buildMatchResultPayload({
       matchId: data.matchId,
@@ -744,7 +782,6 @@ export default function PosJogo() {
     } catch (err) {
       console.warn("[PosJogo] releaseMatchRatings:", err);
     }
-    setRatingsReleased(true);
   }
 
   async function handleOrganizerFinalizeVoting() {
@@ -795,7 +832,17 @@ export default function PosJogo() {
       try {
         // Confirma com a fonte autoritativa (subcoleção votes) antes de
         // finalizar — evita disparar cedo demais com um snapshot desatualizado.
-        const freshVotes = await getVotes(matchId);
+        const { votes: freshVotes, source } = await getVotes(matchId);
+        if (source !== "server") {
+          // Não são dados fiáveis (cache/offline) — não tenta finalizar
+          // nesta passagem. Não é erro: o próximo gatilho (onSnapshot,
+          // próximo voto, refresh) tenta outra vez com dados frescos.
+          console.warn(
+            "[PosJogo] auto-finalização adiada — votos vieram de cache local, não do servidor:",
+            matchId,
+          );
+          return;
+        }
         const freshVotedIds = new Set(freshVotes.map((v) => v.userId));
         const allRequiredVoted =
           requiredVoters.length === 0 ||
@@ -819,6 +866,11 @@ export default function PosJogo() {
   const statusFixInFlightRef = useRef(false);
   useEffect(() => {
     if (!remoteLoadedRef.current) return;
+    // `ratingsReleased` só reflecte o summary/result depois de resolver pelo
+    // menos uma vez — sem esta guarda, o valor inicial `false` (antes do
+    // primeiro snapshot chegar) fazia este efeito e o seguinte disputarem
+    // uma corrida em qualquer refresh, escrevendo por cima um do outro.
+    if (!resultLoadedRef.current) return;
     if (!data || data.status === "concluida") return;
     if (!ratingsReleased) return;
     if (statusFixInFlightRef.current) return;
@@ -841,6 +893,9 @@ export default function PosJogo() {
   const missingRatingsFixInFlightRef = useRef(false);
   useEffect(() => {
     if (!remoteLoadedRef.current) return;
+    // Idem — não repara nada antes de saber de facto se o summary/result já
+    // tem (ou não) as notas publicadas.
+    if (!resultLoadedRef.current) return;
     if (!data || isExpired || finalizeBusy) return;
     if (data.status !== "concluida" || ratingsReleased) return;
     // Só reparar quando há prova real de que a votação chegou ao fim: alguém
@@ -1113,15 +1168,25 @@ export default function PosJogo() {
       // sobrescrita) — evita não finalizar quando o listener local ainda não
       // tinha recebido o voto de outro jogador no momento do clique.
       try {
-        const freshVotes = await getVotes(data.matchId);
-        const freshVotedIds = new Set(freshVotes.map((v) => v.userId));
-        freshVotedIds.add(userId);
-        const allRequiredVoted =
-          requiredVoters.length === 0 ||
-          requiredVoters.every((uid) => freshVotedIds.has(uid));
+        const { votes: freshVotes, source } = await getVotes(data.matchId);
+        if (source !== "server") {
+          // Não são dados fiáveis (cache/offline) — não tenta finalizar
+          // nesta passagem. Não é erro: o próximo gatilho (onSnapshot,
+          // próximo voto, refresh) tenta outra vez com dados frescos.
+          console.warn(
+            "[PosJogo] confirmação de votos adiada — votos vieram de cache local, não do servidor:",
+            data.matchId,
+          );
+        } else {
+          const freshVotedIds = new Set(freshVotes.map((v) => v.userId));
+          freshVotedIds.add(userId);
+          const allRequiredVoted =
+            requiredVoters.length === 0 ||
+            requiredVoters.every((uid) => freshVotedIds.has(uid));
 
-        if (allRequiredVoted) {
-          await persistMatchResultAndMaybeReleaseRatings("all_voted");
+          if (allRequiredVoted) {
+            await persistMatchResultAndMaybeReleaseRatings("all_voted");
+          }
         }
       } catch (err) {
         console.warn("[PosJogo] verificação final de votos:", err);
@@ -1189,25 +1254,12 @@ export default function PosJogo() {
 
         {showNotesPodium && (
           <JogaCard variant="arena" padding="lg" className="mt-3">
-            {ratingsReleased && matchResult ? (
-              <PlayerRankingBoard
-                entries={[...matchResult.players]
-                  .filter((p) => p.rating > 0)
-                  .sort((a, b) => b.rating - a.rating)
-                  .map((p) => ({
-                    id: p.playerId,
-                    userId: p.userId,
-                    name: p.name,
-                    value: p.rating.toFixed(1),
-                  }))}
-                valueLabel="nota"
-              />
-            ) : (
-              <p className="text-white/45 text-sm text-center py-4">
-                As notas ainda não saíram — aparecem aqui quando todos votarem, o organizador
-                finalizar, ou 24h após o fim da pelada.
-              </p>
-            )}
+            <MatchNotesPodium
+              hasError={matchResultError}
+              ratingsReleased={ratingsReleased}
+              matchResult={matchResult}
+              onRetry={() => setResultWatchRetryKey((k) => k + 1)}
+            />
           </JogaCard>
         )}
 
@@ -1439,25 +1491,12 @@ export default function PosJogo() {
 
       {showNotesPodium && (
         <JogaCard variant="arena" padding="lg" className="mt-3">
-          {ratingsReleased && matchResult ? (
-            <PlayerRankingBoard
-              entries={[...matchResult.players]
-                .filter((p) => p.rating > 0)
-                .sort((a, b) => b.rating - a.rating)
-                .map((p) => ({
-                  id: p.playerId,
-                  userId: p.userId,
-                  name: p.name,
-                  value: p.rating.toFixed(1),
-                }))}
-              valueLabel="nota"
-            />
-          ) : (
-            <p className="text-white/45 text-sm text-center py-4">
-              As notas ainda não saíram — aparecem aqui quando todos votarem, o organizador
-              finalizar, ou 24h após o fim da pelada.
-            </p>
-          )}
+          <MatchNotesPodium
+            hasError={matchResultError}
+            ratingsReleased={ratingsReleased}
+            matchResult={matchResult}
+            onRetry={() => setResultWatchRetryKey((k) => k + 1)}
+          />
         </JogaCard>
       )}
 

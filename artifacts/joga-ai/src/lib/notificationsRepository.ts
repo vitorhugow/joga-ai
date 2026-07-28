@@ -292,7 +292,7 @@ export async function processPendingNotifications(userId: string): Promise<void>
     const inRoster = match.players?.some((p) => p.userId === userId || p.id === userId);
     if (!inRoster) continue;
 
-    const votes = await getVotes(entry.matchId);
+    const { votes } = await getVotes(entry.matchId);
     const hasVoted = votes.some((v) => v.userId === userId);
     if (hasVoted) continue;
 

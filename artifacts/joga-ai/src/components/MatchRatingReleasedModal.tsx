@@ -112,8 +112,9 @@ export function MatchRatingReleasedModal() {
       void Promise.all(
         pending.map(async (notification) => {
           const matchId = parseMatchIdFromEvoNotification(notification.id);
-          const result = await loadMatchResult(matchId);
-          if (!result?.ratingsReleased) return null;
+          const loaded = await loadMatchResult(matchId);
+          if (!loaded.ok || !loaded.result?.ratingsReleased) return null;
+          const result = loaded.result;
 
           const playerRating = result.players.find((p) => p.userId === userId)?.rating ?? 0;
           if (playerRating <= 0) return null;

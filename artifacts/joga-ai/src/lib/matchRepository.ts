@@ -553,10 +553,11 @@ export async function deleteMatch(matchId: string, requesterId: string): Promise
     throw new MatchDeleteForbiddenError();
   }
 
-  const matchResult = await loadMatchResult(matchId);
+  const loadedResult = await loadMatchResult(matchId);
+  const matchResult = loadedResult.ok ? loadedResult.result : null;
   const events = collectAllEvents(match.miniGames ?? []);
   const topScorers = matchResult?.topScorers ?? computeTopScorers(events);
-  const votes = await getVotes(matchId);
+  const { votes } = await getVotes(matchId);
   const votedUserIds = [
     ...new Set([
       ...(match.votedUserIds ?? []),

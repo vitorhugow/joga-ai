@@ -69,8 +69,9 @@ export default function Evolucao() {
           : current,
       );
     });
-    void loadMatchResult(pendingMatchId).then((result) => {
-      if (!cancelled) setRatingsReleased(Boolean(result?.ratingsReleased));
+    void loadMatchResult(pendingMatchId).then((loaded) => {
+      if (cancelled || !loaded.ok) return; // erro: mantém o estado anterior
+      setRatingsReleased(Boolean(loaded.result?.ratingsReleased));
     });
     return () => {
       cancelled = true;

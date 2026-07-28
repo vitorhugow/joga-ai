@@ -3,6 +3,7 @@ import type { MatchVoteRecord } from "./matchFlowStorage";
 import {
   loadMatchResult,
   loadUserMatchHistory,
+  markRatingsReleased,
   saveMatchResult,
   saveUserMatchHistory,
   type MatchPlayerResult,
@@ -125,10 +126,30 @@ export async function releaseMatchRatings(
   matchId: string,
   reason: RatingReleaseReason,
 ): Promise<boolean> {
-  let result = await loadMatchResult(matchId);
+  const loaded = await loadMatchResult(matchId);
+  if (!loaded.ok) {
+    console.warn(
+      "[ratingsRelease] releaseMatchRatings abortado — falha ao ler summary/result:",
+      matchId,
+      loaded.errorCode,
+    );
+    return false;
+  }
+  let result = loaded.result;
   if (result?.ratingsReleased) return false;
 
-  const votes = await getVotes(matchId);
+  // Só recalcula/grava notas com votos confirmados no servidor. Uma leitura
+  // vinda da cache (offline, ou persistentLocalCache por sincronizar) pode
+  // devolver 0 votos sem erro nenhum — tratar isso como "ninguém votou"
+  // zerava notas já publicadas na próxima vez que este código corresse.
+  const { votes, source } = await getVotes(matchId);
+  if (source !== "server") {
+    console.warn(
+      "[ratingsRelease] releaseMatchRatings abortado — votos vieram de cache local, não do servidor:",
+      matchId,
+    );
+    return false;
+  }
   const ratingByPlayer = computeRatingByPlayer(votes);
 
   if (!result) {
@@ -158,17 +179,26 @@ export async function releaseMatchRatings(
     };
   }
 
-  // Grava o summary com ratingsReleased:true PRIMEIRO — é a fonte de verdade
-  // partilhada (matches/{id}/summary/result, leitura/escrita permitida a
-  // qualquer signed-in user) que permite a CADA jogador aplicar a própria
-  // nota via "pull" (processPendingRatings) quando abrir a app. Tem de ficar
-  // gravado mesmo que o resto abaixo falhe parcialmente.
-  await saveMatchResult({
-    ...result,
-    ratingsReleased: true,
-    ratingsReleasedAt: new Date().toISOString(),
-    ratingsReleaseReason: reason,
-  });
+  // Grava primeiro os dados (players/topScorers/etc, com a guarda
+  // anti-regressão de saveMatchResult), e só depois marca ratingsReleased —
+  // nunca no mesmo write, para markRatingsReleased nunca poder apagar dados
+  // que ainda não chegaram a ser gravados. É a fonte de verdade partilhada
+  // (matches/{id}/summary/result, leitura/escrita permitida a qualquer
+  // signed-in user) que permite a CADA jogador aplicar a própria nota via
+  // "pull" (processPendingRatings) quando abrir a app.
+  const saved = await saveMatchResult(result);
+  if (!saved) {
+    // Guarda anti-regressão abortou, ou o write falhou — não marca
+    // ratingsReleased sobre dados que não ficaram confirmados no Firestore.
+    // A próxima tentativa (próximo onSnapshot, próximo voto, refresh) repete
+    // do zero em vez de ficar presa com a flag ligada sem dados por trás.
+    console.warn(
+      "[ratingsRelease] releaseMatchRatings abortado — saveMatchResult não confirmou a escrita:",
+      matchId,
+    );
+    return false;
+  }
+  await markRatingsReleased(matchId, reason);
 
   // Fan-out best-effort: só quem está a correr este código pode escrever no
   // PRÓPRIO perfil (users/{uid}, matchHistory/{uid} — allow write: if
@@ -257,7 +287,9 @@ async function tryReleaseRatingForMatch(
   userId: string,
   entry: UserMatchHistoryEntry,
 ): Promise<void> {
-  const result = await loadMatchResult(entry.matchId);
+  const loaded = await loadMatchResult(entry.matchId);
+  if (!loaded.ok) return; // erro a ler — tenta noutra altura, não assume nada
+  const result = loaded.result;
 
   if (result?.ratingsReleased) {
     const player = result.players.find((p) => p.userId === userId);

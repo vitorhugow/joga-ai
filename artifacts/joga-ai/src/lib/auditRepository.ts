@@ -104,12 +104,26 @@ export async function submitVote(
   }
 }
 
+export type VotesResult = {
+  votes: MatchVoteRecord[];
+  /**
+   * "server": a leitura confirmou junto do Firestore — 0 documentos aqui
+   * significa mesmo "ninguém votou". "cache": veio da cache local (offline,
+   * ou persistentLocalCache ainda por sincronizar) ou do fallback em erro —
+   * 0 documentos aqui NÃO prova que ninguém votou, só que não conseguimos
+   * confirmar agora. Esta distinção existe porque tratar os dois casos como
+   * iguais já corrompeu notas publicadas (recalculadas para 0 a partir de
+   * uma leitura vazia que só estava vazia por estar offline).
+   */
+  source: "server" | "cache";
+};
+
 /** Lê todos os votos (Firestore + cache local) */
-export async function getVotes(matchId: string): Promise<MatchVoteRecord[]> {
+export async function getVotes(matchId: string): Promise<VotesResult> {
   const store = createMatchFlowStore(matchId);
   const local = store.readVotes();
 
-  if (!isFirebaseConfigured()) return local;
+  if (!isFirebaseConfigured()) return { votes: local, source: "cache" };
 
   try {
     const snap = await getDocs(collection(db, "matches", matchId, "votes"));
@@ -120,10 +134,26 @@ export async function getVotes(matchId: string): Promise<MatchVoteRecord[]> {
         d.data().createdAt?.toDate?.()?.toISOString() ??
         new Date().toISOString(),
     }));
-    return remote.length > 0 ? store.mergeRemoteVotes(remote) : local;
+
+    if (snap.metadata.fromCache) {
+      // Não confirmámos junto do servidor — não sabemos se "remote" reflecte
+      // a realidade. Preferimos a cache local (que pelo menos sabemos de
+      // onde veio) só para exibição, mas o `source: "cache"` impede que isto
+      // seja usado para calcular/gravar notas.
+      return { votes: remote.length > 0 ? remote : local, source: "cache" };
+    }
+
+    // O servidor confirmou esta leitura — se disse 0 votos, são mesmo 0.
+    // `local` pode ter sobras de outra sessão/dispositivo (mergeRemoteVotes
+    // é union, nunca remove o que falta no remote); devolvê-lo aqui rotulava
+    // votos nunca confirmados nesta leitura como "source: server".
+    return {
+      votes: remote.length > 0 ? store.mergeRemoteVotes(remote) : remote,
+      source: "server",
+    };
   } catch (err) {
     console.warn("[auditRepository] getVotes:", err);
-    return local;
+    return { votes: local, source: "cache" };
   }
 }
 

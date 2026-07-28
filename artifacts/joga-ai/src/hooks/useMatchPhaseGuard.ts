@@ -41,8 +41,11 @@ async function canStayOnPosJogo(matchId: string, status: MatchStatus): Promise<b
   const userId = getCurrentUserId();
   if (userId && (await hasUserVoted(matchId, userId))) return true;
 
-  const result = await loadMatchResult(matchId);
-  if (result?.ratingsReleased || result?.completedAt) return true;
+  const loaded = await loadMatchResult(matchId);
+  // Erro a ler (permissão/rede) não deve expulsar quem já está na página —
+  // falha aberto, fica onde está, em vez de redirecionar sem certeza.
+  if (!loaded.ok) return true;
+  if (loaded.result?.ratingsReleased || loaded.result?.completedAt) return true;
 
   return false;
 }

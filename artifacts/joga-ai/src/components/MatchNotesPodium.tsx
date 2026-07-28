@@ -43,8 +43,8 @@ export function MatchNotesPodium({
   if (!ratingsReleased || !matchResult) {
     return (
       <p className="text-white/45 text-sm text-center py-4">
-        As notas ainda não saíram — aparecem aqui quando todos votarem, o organizador
-        finalizar, ou 24h após o fim da pelada.
+        As notas ainda não saíram — aparecem aqui quando o organizador finalizar,
+        ou 24h após o fim da pelada.
       </p>
     );
   }

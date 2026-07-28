@@ -26,7 +26,7 @@ import {
 
 export const RATINGS_RELEASE_MS = 24 * 60 * 60 * 1000;
 
-export type RatingReleaseReason = "all_voted" | "organizer" | "24h";
+export type RatingReleaseReason = "organizer" | "24h";
 
 export function ratingsReleaseAt(completedAt: string): string {
   return new Date(new Date(completedAt).getTime() + RATINGS_RELEASE_MS).toISOString();

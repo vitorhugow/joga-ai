@@ -827,6 +827,7 @@ function buildMatchDocPayload(data: SavedPostMatch): PartialWithFieldValue<Docum
     miniGames: data.miniGames ?? [],
     createdAt: data.createdAt,
     expiresAt: data.expiresAt,
+    ...(data.matchEndedAt !== undefined ? { matchEndedAt: data.matchEndedAt } : {}),
     votedUserIds: data.votedUserIds ?? [],
     waitlist: data.waitlist ?? [],
     paidUserIds: data.paidUserIds ?? [],

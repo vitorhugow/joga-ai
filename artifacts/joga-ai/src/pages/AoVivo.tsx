@@ -455,6 +455,7 @@ export default function AoVivo() {
       status: "aguardando_auditoria" as const,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       expiresAt: existing?.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      matchEndedAt: existing?.matchEndedAt ?? new Date().toISOString(),
       gameMode: preMatch?.gameMode || existing?.gameMode || "fut5",
       teamCount: preMatch?.teamCount || existing?.teamCount || 2,
       teamNames: {

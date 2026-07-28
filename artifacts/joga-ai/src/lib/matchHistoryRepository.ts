@@ -39,7 +39,7 @@ export type MatchResult = {
   ratingsReleaseAt?: string;
   ratingsReleased?: boolean;
   ratingsReleasedAt?: string;
-  ratingsReleaseReason?: "all_voted" | "organizer" | "24h";
+  ratingsReleaseReason?: "organizer" | "24h";
   communityId?: string;
   organizerId?: string;
   players: MatchPlayerResult[];
@@ -158,7 +158,7 @@ export async function saveMatchResult(result: MatchResult): Promise<boolean> {
  */
 export async function markRatingsReleased(
   matchId: string,
-  reason: "all_voted" | "organizer" | "24h",
+  reason: "organizer" | "24h",
 ): Promise<void> {
   if (!isFirebaseConfigured()) return;
 

@@ -37,6 +37,11 @@ export type SavedPostMatch = {
   createdAt: string;
   expiresAt: string;
   savedAt: string;
+  /** Quando a pelada ao vivo terminou (transição ao_vivo -> aguardando_auditoria).
+   * Gravado uma única vez, nunca reescrito — é a referência usada pela Cloud
+   * Function de finalização às 24h, ao contrário de `savedAt` (reescrito a
+   * cada voto). */
+  matchEndedAt?: string;
   gameMode: "fut5" | "fut7";
   teamCount: 2 | 3 | 4;
   teamNames: Record<"A" | "B" | "C" | "D", string>;

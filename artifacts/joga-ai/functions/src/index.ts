@@ -31,6 +31,7 @@ export {
   updateCommunityClubSettings,
 } from "./mensalistas";
 export { closeExpiredMatches } from "./closeExpiredMatches";
+export { finalizeExpiredVoting } from "./finalizeExpiredVoting";
 export { paymentReminders } from "./paymentReminders";
 export { migrateMatchSetup } from "./matchSetup";
 export {

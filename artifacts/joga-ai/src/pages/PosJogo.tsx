@@ -39,6 +39,7 @@ import {
   type MatchResult,
 } from "@/lib/matchHistoryRepository";
 import { MatchNotesPodium } from "@/components/MatchNotesPodium";
+import { OrganizerVotingPanel } from "@/components/OrganizerVotingPanel";
 import { getVotes } from "@/lib/auditRepository";
 import {
   buildMatchResultPayload,
@@ -728,13 +729,12 @@ export default function PosJogo() {
     voteRecords.forEach((vote) => ids.add(vote.userId));
     return [...ids];
   }, [data?.votedUserIds, voteRecords]);
-  const allVoted =
-    requiredVoters.length === 0 ||
-    requiredVoters.every((uid) => votedUserIds.includes(uid));
 
-  async function persistMatchResultAndMaybeReleaseRatings(
-    reason: "all_voted" | "organizer",
-  ) {
+  // Único gatilho de finalização a partir do cliente: o organizador (ou
+  // admin do clube) a clicar em "Finalizar". A finalização às 24h corre
+  // sozinha, server-side, na Cloud Function finalizeExpiredVoting — não há
+  // mais finalização automática por "todos votaram" no cliente.
+  async function persistMatchResultAndMaybeReleaseRatings() {
     if (!data || ratingsReleased) return;
 
     // Só finaliza com votos confirmados no servidor. Uma leitura vinda da
@@ -778,7 +778,7 @@ export default function PosJogo() {
     updateData({ ...data, status: "concluida", votedUserIds });
 
     try {
-      await releaseMatchRatings(data.matchId, reason);
+      await releaseMatchRatings(data.matchId, "organizer");
     } catch (err) {
       console.warn("[PosJogo] releaseMatchRatings:", err);
     }
@@ -786,18 +786,28 @@ export default function PosJogo() {
 
   async function handleOrganizerFinalizeVoting() {
     if (!data || !canFinalize || ratingsReleased || finalizeBusy) return;
+
+    const pendingNames = players
+      .filter((player: { id: string; userId?: string }) => {
+        const voterId = player.userId ?? (player.id === data.organizerId ? data.organizerId : "");
+        return voterId && !votedUserIds.includes(voterId);
+      })
+      .map((player: { name: string }) => player.name);
+
     const ok = await confirm({
       description:
         votedUserIds.length === 0
           ? "Finalizar a pelada e a votação agora, mesmo sem nenhum voto? As notas ficam pendentes para quem não votou."
-          : "Finalizar a pelada e a votação agora e publicar as notas com os votos actuais?",
+          : pendingNames.length > 0
+            ? `Finalizar agora e publicar as notas com os votos actuais? Ainda não votaram: ${pendingNames.join(", ")}.`
+            : "Finalizar a pelada e a votação agora e publicar as notas com os votos actuais?",
       confirmLabel: "Finalizar",
     });
     if (!ok) return;
 
     setFinalizeBusy(true);
     try {
-      await persistMatchResultAndMaybeReleaseRatings("organizer");
+      await persistMatchResultAndMaybeReleaseRatings();
     } catch (err) {
       console.warn("[PosJogo] finalize voting:", err);
       toast({
@@ -809,55 +819,6 @@ export default function PosJogo() {
       setFinalizeBusy(false);
     }
   }
-
-  // Auto-finalização: assim que todos os votos obrigatórios estiverem
-  // reunidos, fecha a pelada (status -> "concluida" + notas publicadas) para
-  // QUALQUER pessoa que tenha esta página aberta nesse momento — organizador,
-  // último votante ou apenas alguém a rever o resumo. Isto evita partidas
-  // presas em "auditada" quando o dispositivo de quem votou por último fechou
-  // a app antes da finalização terminar.
-  const autoFinalizeInFlightRef = useRef(false);
-  useEffect(() => {
-    if (!remoteLoadedRef.current) return;
-    if (!data || isExpired || ratingsReleased || finalizeBusy) return;
-    if (data.status === "concluida") return;
-    // Sem jogadores carregados, `requiredVoters` fica vazio e `allVoted` é
-    // trivialmente true — fechava a pelada sozinha antes dos dados chegarem.
-    if (players.length === 0) return;
-    if (!allVoted) return;
-    if (autoFinalizeInFlightRef.current) return;
-
-    autoFinalizeInFlightRef.current = true;
-    void (async () => {
-      try {
-        // Confirma com a fonte autoritativa (subcoleção votes) antes de
-        // finalizar — evita disparar cedo demais com um snapshot desatualizado.
-        const { votes: freshVotes, source } = await getVotes(matchId);
-        if (source !== "server") {
-          // Não são dados fiáveis (cache/offline) — não tenta finalizar
-          // nesta passagem. Não é erro: o próximo gatilho (onSnapshot,
-          // próximo voto, refresh) tenta outra vez com dados frescos.
-          console.warn(
-            "[PosJogo] auto-finalização adiada — votos vieram de cache local, não do servidor:",
-            matchId,
-          );
-          return;
-        }
-        const freshVotedIds = new Set(freshVotes.map((v) => v.userId));
-        const allRequiredVoted =
-          requiredVoters.length === 0 ||
-          requiredVoters.every((uid) => freshVotedIds.has(uid));
-        if (allRequiredVoted) {
-          await persistMatchResultAndMaybeReleaseRatings("all_voted");
-        }
-      } catch (err) {
-        console.warn("[PosJogo] auto-finalização da votação:", err);
-      } finally {
-        autoFinalizeInFlightRef.current = false;
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.matchId, data?.status, isExpired, ratingsReleased, finalizeBusy, allVoted, matchId]);
 
   // Rede de segurança: se as notas já foram publicadas (summary com
   // ratingsReleased=true) mas o campo status do match ficou por atualizar
@@ -908,7 +869,7 @@ export default function PosJogo() {
     if (missingRatingsFixInFlightRef.current) return;
 
     missingRatingsFixInFlightRef.current = true;
-    void persistMatchResultAndMaybeReleaseRatings("all_voted")
+    void persistMatchResultAndMaybeReleaseRatings()
       .catch((err) => console.warn("[PosJogo] reparação de notas em falta:", err))
       .finally(() => {
         missingRatingsFixInFlightRef.current = false;
@@ -1088,18 +1049,10 @@ export default function PosJogo() {
     // isolado) evita perder votantes quando dois votos chegam quase ao mesmo
     // tempo (cada cliente só via o seu próprio snapshot desatualizado).
     const nextVotedUserIds = [...new Set([...votedUserIds, userId])];
-    const nextAllVoted =
-      requiredVoters.length === 0 ||
-      requiredVoters.every((uid) => nextVotedUserIds.includes(uid));
 
-    // NUNCA marcar "concluida" aqui directamente: isso saltava por completo
-    // a publicação de notas/badges/resumo (persistMatchResultAndMaybeReleaseRatings),
-    // porque o efeito de auto-finalização vê `status === "concluida"` e desiste
-    // logo — a pelada ficava com o status certo mas sem notas/estatísticas
-    // publicadas para ninguém. Deixa o status como está; o efeito de
-    // auto-finalização (abaixo) observa `allVoted`/`votedUserIds`, confirma
-    // com a fonte autoritativa de votos e só então publica tudo e muda o
-    // status para "concluida".
+    // NUNCA marcar "concluida" aqui directamente: só o organizador (botão
+    // "Finalizar") ou a Cloud Function das 24h publicam notas e fecham a
+    // pelada — votar sozinho nunca finaliza nada.
     updateData({ ...data, votedUserIds: nextVotedUserIds, status: data.status ?? "auditada" });
 
     setVoteMode(false);
@@ -1162,38 +1115,6 @@ export default function PosJogo() {
       }
 
       await refresh();
-
-      // Confirmação final a partir da fonte autoritativa (subcoleção `votes`,
-      // onde cada jogador escreve o seu próprio documento sem risco de
-      // sobrescrita) — evita não finalizar quando o listener local ainda não
-      // tinha recebido o voto de outro jogador no momento do clique.
-      try {
-        const { votes: freshVotes, source } = await getVotes(data.matchId);
-        if (source !== "server") {
-          // Não são dados fiáveis (cache/offline) — não tenta finalizar
-          // nesta passagem. Não é erro: o próximo gatilho (onSnapshot,
-          // próximo voto, refresh) tenta outra vez com dados frescos.
-          console.warn(
-            "[PosJogo] confirmação de votos adiada — votos vieram de cache local, não do servidor:",
-            data.matchId,
-          );
-        } else {
-          const freshVotedIds = new Set(freshVotes.map((v) => v.userId));
-          freshVotedIds.add(userId);
-          const allRequiredVoted =
-            requiredVoters.length === 0 ||
-            requiredVoters.every((uid) => freshVotedIds.has(uid));
-
-          if (allRequiredVoted) {
-            await persistMatchResultAndMaybeReleaseRatings("all_voted");
-          }
-        }
-      } catch (err) {
-        console.warn("[PosJogo] verificação final de votos:", err);
-        if (nextAllVoted) {
-          await persistMatchResultAndMaybeReleaseRatings("all_voted");
-        }
-      }
     })();
   }
 
@@ -1225,7 +1146,7 @@ export default function PosJogo() {
           <h1 className="font-display font-black text-white text-3xl mt-2">Atributos ganhos</h1>
           <p className="text-white/55 text-sm mt-2">
             {currentPlayer?.name || "Jogador"}, estes ganhos já entram no perfil.
-            A nota dos colegas sai quando todos votarem, o organizador finalizar, ou 24h após o fim.
+            A nota dos colegas sai quando o organizador finalizar, ou 24h após o fim da pelada.
           </p>
         </JogaHero>
 
@@ -1287,6 +1208,18 @@ export default function PosJogo() {
           >
             Gerir votação da pelada
           </JogaButton>
+        )}
+
+        {canFinalize && (
+          <OrganizerVotingPanel
+            players={players}
+            organizerId={data.organizerId}
+            votedUserIds={votedUserIds}
+            ratingsReleased={ratingsReleased}
+            isOrganizer={isOrganizer}
+            finalizeBusy={finalizeBusy}
+            onFinalize={() => void handleOrganizerFinalizeVoting()}
+          />
         )}
 
         <JogaButton
@@ -1410,6 +1343,18 @@ export default function PosJogo() {
             Voltar ao resumo
           </JogaButton>
         </section>
+
+        {canFinalize && (
+          <OrganizerVotingPanel
+            players={players}
+            organizerId={data.organizerId}
+            votedUserIds={votedUserIds}
+            ratingsReleased={ratingsReleased}
+            isOrganizer={isOrganizer}
+            finalizeBusy={finalizeBusy}
+            onFinalize={() => void handleOrganizerFinalizeVoting()}
+          />
+        )}
       </JogaPage>
     );
   }
@@ -1513,86 +1458,28 @@ export default function PosJogo() {
       <SponsorSlot className="mt-4" />
 
       {canFinalize && (
-        <section
-          className="mt-4 rounded-3xl p-4"
-          style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.22)" }}
-          data-testid="organizer-voting-panel"
+        <OrganizerVotingPanel
+          players={players}
+          organizerId={data.organizerId}
+          votedUserIds={votedUserIds}
+          ratingsReleased={ratingsReleased}
+          isOrganizer={isOrganizer}
+          finalizeBusy={finalizeBusy}
+          onFinalize={() => void handleOrganizerFinalizeVoting()}
+        />
+      )}
+
+      {canFinalize && isOrganizer && (
+        <JogaButton
+          variant="danger"
+          size="md"
+          className="w-full mt-4"
+          disabled={deleteBusy}
+          onClick={() => void handleDeleteMatch()}
+          data-testid="organizer-delete-match"
         >
-          <p className="text-blue-200/70 text-[10px] font-black uppercase tracking-[0.2em]">
-            {isOrganizer ? "Admin da pelada" : "Admin do clube"}
-          </p>
-          <h2 className="font-display font-black text-white text-xl mt-1">Estado da votação</h2>
-          <p className="text-white/45 text-xs mt-1">
-            {votedUserIds.length}/{requiredVoters.length || players.length} jogadores com conta já votaram
-            {ratingsReleased ? " · Notas publicadas" : ""}
-          </p>
-
-          <div className="mt-3 space-y-2">
-            {players
-              .filter((player: { userId?: string; id: string }) =>
-                player.userId || player.id === data.organizerId,
-              )
-              .map((player: { id: string; name: string; userId?: string }) => {
-                const voterId = player.userId ?? (player.id === data.organizerId ? data.organizerId : "");
-                const voted = voterId ? votedUserIds.includes(voterId) : false;
-                return (
-                  <div
-                    key={player.id}
-                    className="flex items-center justify-between rounded-2xl px-3 py-2"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-                  >
-                    <span className="text-white text-sm font-semibold">{player.name}</span>
-                    <span
-                      className="text-xs font-black px-2 py-1 rounded-full"
-                      style={
-                        voted
-                          ? { background: "rgba(74,222,128,0.15)", color: "#4ade80" }
-                          : { background: "rgba(251,191,36,0.12)", color: "#fbbf24" }
-                      }
-                    >
-                      {voted ? "Votou" : "Pendente"}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-
-          {!ratingsReleased && (
-            <JogaButton
-              variant="primary"
-              size="md"
-              className="w-full mt-4"
-              disabled={finalizeBusy}
-              onClick={() => void handleOrganizerFinalizeVoting()}
-              data-testid="organizer-finalize-match"
-            >
-              {finalizeBusy ? "A finalizar…" : "Finalizar pelada e votação"}
-            </JogaButton>
-          )}
-          {!ratingsReleased && votedUserIds.length === 0 && (
-            <p className="text-white/35 text-xs mt-2 text-center">
-              Como {isOrganizer ? "organizador" : "admin do clube"}, podes finalizar a qualquer momento — mesmo sem votos.
-            </p>
-          )}
-          {allVoted && !ratingsReleased && (
-            <p className="text-emerald-300 text-xs mt-2 text-center font-semibold">
-              Todos votaram — a pelada está a ser finalizada automaticamente.
-            </p>
-          )}
-
-          {isOrganizer && (
-            <JogaButton
-              variant="danger"
-              size="md"
-              className="w-full mt-4"
-              disabled={deleteBusy}
-              onClick={() => void handleDeleteMatch()}
-              data-testid="organizer-delete-match"
-            >
-              {deleteBusy ? "A excluir…" : "Excluir pelada e reverter estatísticas"}
-            </JogaButton>
-          )}
-        </section>
+          {deleteBusy ? "A excluir…" : "Excluir pelada e reverter estatísticas"}
+        </JogaButton>
       )}
 
       <section className="mt-4 space-y-3">

@@ -189,6 +189,23 @@
   textarea {
     cursor: text;
   }
+
+  /* TWA Android: long-press abre o menu nativo de seleção/tradução do
+     Chrome sobre qualquer texto. Bloqueia globalmente e reabre só onde
+     é preciso copiar (inputs, contenteditable, .selectable). */
+  * {
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable],
+  .selectable {
+    -webkit-touch-callout: default;
+    user-select: text;
+  }
 }
 
 @layer utilities {

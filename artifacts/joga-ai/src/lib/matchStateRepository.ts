@@ -284,49 +284,6 @@ export async function updateSetup(
   );
 }
 
-export type SetupFieldPatch = {
-  gameMode?: MatchSetupState["gameMode"];
-  teamCount?: MatchSetupState["teamCount"];
-  playerTeams?: Record<string, LiveTeamKey>;
-  assignments?: Record<string, string | null>;
-};
-
-/**
- * Como updateSetup, mas grava só as chaves indicadas de playerTeams/
- * assignments (dot-notation) em vez do mapa inteiro — para mutações
- * isoladas (ex: mover 1 jogador de equipa) que não devem apagar o que
- * outro dispositivo tenha escrito nas outras chaves entretanto. setDoc
- * com merge:true (não updateDoc) porque o doc pode ainda não existir
- * (ver ensureSetupMigrated) — merge:true cria-o se faltar, sem apagar
- * campos que já lá estejam.
- */
-export async function updateSetupFields(
-  matchId: string,
-  patch: SetupFieldPatch,
-): Promise<void> {
-  if (!isFirebaseConfigured()) return;
-
-  const uid = getCurrentUserId();
-  const flat: Record<string, unknown> = {
-    updatedAt: serverTimestamp(),
-    updatedBy: uid ?? null,
-  };
-  if (patch.gameMode !== undefined) flat.gameMode = patch.gameMode;
-  if (patch.teamCount !== undefined) flat.teamCount = patch.teamCount;
-  if (patch.playerTeams) {
-    for (const [playerId, team] of Object.entries(patch.playerTeams)) {
-      flat[`playerTeams.${playerId}`] = team;
-    }
-  }
-  if (patch.assignments) {
-    for (const [slotId, playerId] of Object.entries(patch.assignments)) {
-      flat[`assignments.${slotId}`] = playerId;
-    }
-  }
-
-  await setDoc(setupRef(matchId), flat, { merge: true });
-}
-
 export async function updateLive(
   matchId: string,
   patch: Partial<MatchLiveState>,

@@ -706,39 +706,6 @@ export async function saveMatchRoster(
   }
 }
 
-export type RosterFieldPatch = {
-  playerTeams?: Record<string, LiveTeamKey>;
-  assignments?: Record<string, string | null>;
-};
-
-/**
- * Escreve só as chaves indicadas de playerTeams/assignments em
- * matches/{id}, por dot-notation — ao contrário de saveMatchRoster, não
- * reescreve o mapa inteiro (nem toca em players). Para mutações isoladas
- * (mover 1 jogador de equipa/slot); reescritas em bloco (sortear equipas,
- * mudar modo de jogo) continuam a usar saveMatchRoster.
- */
-export async function patchMatchRosterFields(
-  matchId: string,
-  patch: RosterFieldPatch,
-): Promise<void> {
-  if (!isFirebaseConfigured()) return;
-
-  const flat: Record<string, unknown> = { savedAt: serverTimestamp() };
-  if (patch.playerTeams) {
-    for (const [playerId, team] of Object.entries(patch.playerTeams)) {
-      flat[`playerTeams.${playerId}`] = team;
-    }
-  }
-  if (patch.assignments) {
-    for (const [slotId, playerId] of Object.entries(patch.assignments)) {
-      flat[`assignments.${slotId}`] = playerId;
-    }
-  }
-
-  await updateDoc(doc(db, "matches", matchId), flat);
-}
-
 /**
  * O SDK do Firestore usado aqui (getFirestore, sem ignoreUndefinedProperties)
  * rejeita QUALQUER campo com valor `undefined` — o setDoc lança logo no

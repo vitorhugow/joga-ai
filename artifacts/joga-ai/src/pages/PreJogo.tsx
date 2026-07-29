@@ -731,6 +731,16 @@ export default function PreJogo() {
       gameMode?: GameMode;
       teamCount?: 2 | 3 | 4;
     }) => {
+      // DIAGNÓSTICO TEMPORÁRIO — remover depois de confirmar a causa do
+      // bug de equipas revertendo sozinhas (ver sessão de 2026-07-29).
+      console.log("[PreJogo][diag] persistRosterImmediate guard:", {
+        matchId,
+        canManageMatch,
+        isOrganizer,
+        isLiveController,
+        userId,
+        resolvedOrganizerId,
+      });
       if (!matchId || !canManageMatch) return false;
 
       lastLocalRosterWriteMs.current = Date.now();

@@ -2,17 +2,17 @@
  * matchRsvpRepository — confirmação de presença, saída e lista de espera
  */
 
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
-import { sanitizeLivePlayers } from "./firestoreUtils";
+import { sanitizeLivePlayers, isOfflineFirestoreError } from "./firestoreUtils";
 import {
   loadMatchFromFirestore,
   saveMatchRoster,
   type MatchRosterData,
 } from "./matchRepository";
-import { loadPreMatch, savePreMatch } from "./preMatchStorage";
+import { savePreMatch } from "./preMatchStorage";
 import { loadPostMatch, savePostMatch, type SavedPostMatch } from "./postMatchStorage";
-import type { LivePlayer } from "./preMatchStorage";
+import type { LivePlayer, LiveTeamKey } from "./preMatchStorage";
 import { getCurrentUserId } from "./auth";
 import { MANUAL_PLAYER_OVR } from "./rosterUtils";
 import { loadCommunityMembers, loadCommunity, isCommunityOrganizerPro } from "./communityRepository";
@@ -77,40 +77,121 @@ async function loadMatchState(matchId: string): Promise<SavedPostMatch | null> {
   return (await loadMatchFromFirestore(matchId, { preferRemote: true })) ?? loadPostMatch(matchId);
 }
 
-async function persistRsvpState(
+type RosterSnapshot = {
+  players: LivePlayer[];
+  playerTeams: Record<string, LiveTeamKey>;
+  assignments: Record<string, string | null>;
+  waitlist: WaitlistEntry[];
+};
+
+function snapshotFromMatchDoc(remote: Record<string, unknown> | undefined): RosterSnapshot {
+  return {
+    players: (remote?.players as LivePlayer[] | undefined) ?? [],
+    playerTeams: (remote?.playerTeams as Record<string, LiveTeamKey> | undefined) ?? {},
+    assignments: (remote?.assignments as Record<string, string | null> | undefined) ?? {},
+    waitlist: (remote?.waitlist as WaitlistEntry[] | undefined) ?? [],
+  };
+}
+
+/**
+ * Aplica uma mutação ao roster dentro de uma transação — lê matches/{id}
+ * FRESCO no momento da escrita (não o `match` possivelmente desactualizado
+ * carregado no início da função chamadora) e só grava a diferença dessa
+ * mutação específica. Corrige a perda silenciosa de alterações quando dois
+ * dispositivos mexem na mesma pelada quase ao mesmo tempo — antes, cada um
+ * escrevia o array `players` inteiro por cima do outro. O Firestore repete a
+ * transação sozinho se o documento mudar entre a leitura e a escrita, por
+ * isso `mutate` tem de ser puro e pode correr mais do que uma vez por
+ * chamada — nunca depende de estado de fora que não venha do `fresh` lido
+ * aqui dentro.
+ *
+ * `mutate` devolve a MESMA referência `fresh` (não uma cópia) quando não há
+ * nada para gravar — sinaliza a `persistRsvpMutation` para não fazer
+ * nenhuma escrita (nem no Firestore nem na cache local), tal como as
+ * funções antigas evitavam escritas sem efeito.
+ */
+async function persistRsvpMutation(
   matchId: string,
   match: SavedPostMatch,
-  roster: MatchRosterData,
-  waitlist: WaitlistEntry[],
-): Promise<void> {
-  const updated: SavedPostMatch = {
-    ...match,
-    waitlist,
-    players: roster.players,
-    playerTeams: roster.playerTeams,
-    assignments: roster.assignments ?? {},
-  };
-  savePostMatch(updated);
+  mutate: (fresh: RosterSnapshot) => RosterSnapshot,
+): Promise<RosterSnapshot> {
+  let result: RosterSnapshot;
+  let changed: boolean;
 
   if (isFirebaseConfigured()) {
+    const ref = doc(db, "matches", matchId);
+    // Capturado de dentro do callback da transação — o Firestore pode
+    // repetir o callback inteiro em caso de contenção, por isso esta
+    // variável fica sempre com o valor da ÚLTIMA tentativa (a que
+    // realmente comitou), nunca de uma tentativa descartada.
+    let didWrite = false;
     try {
-      await updateDoc(doc(db, "matches", matchId), {
-        players: sanitizeLivePlayers(roster.players),
-        participantUserIds: participantUserIdsFrom(roster.players),
-        playerTeams: roster.playerTeams,
-        assignments: roster.assignments ?? {},
-        waitlist,
-        savedAt: serverTimestamp(),
+      result = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        const fresh = snapshotFromMatchDoc(snap.exists() ? snap.data() : undefined);
+        const next = mutate(fresh);
+        if (next === fresh) {
+          didWrite = false;
+          return fresh;
+        }
+
+        tx.update(ref, {
+          players: sanitizeLivePlayers(next.players),
+          participantUserIds: participantUserIdsFrom(next.players),
+          playerTeams: next.playerTeams,
+          assignments: next.assignments,
+          waitlist: next.waitlist,
+          savedAt: serverTimestamp(),
+        });
+        didWrite = true;
+        return next;
       });
     } catch (err) {
-      console.warn("[matchRsvp] firestore update:", err);
+      console.warn("[matchRsvp] transação:", err);
       const code = (err as { code?: string })?.code;
       if (code === "permission-denied") {
         throw new Error("Sem permissão para confirmar presença nesta pelada.");
       }
+      // runTransaction não beneficia do persistentLocalCache (ao contrário
+      // do updateDoc que esta função substituiu) — falha logo quando não
+      // há ligação, em vez de ficar em fila e sincronizar mais tarde.
+      if (isOfflineFirestoreError(err)) {
+        throw new Error("Sem ligação. Tenta outra vez quando tiveres rede.");
+      }
       throw err;
     }
+    changed = didWrite;
+  } else {
+    const fresh: RosterSnapshot = {
+      players: match.players ?? [],
+      playerTeams: match.playerTeams ?? {},
+      assignments: match.assignments ?? {},
+      waitlist: match.waitlist ?? [],
+    };
+    result = mutate(fresh);
+    changed = result !== fresh;
   }
+
+  if (!changed) return result;
+
+  const updated: SavedPostMatch = {
+    ...match,
+    players: result.players,
+    playerTeams: result.playerTeams,
+    assignments: result.assignments,
+    waitlist: result.waitlist,
+  };
+  savePostMatch(updated);
+
+  const roster: MatchRosterData = {
+    gameMode: match.gameMode,
+    teamCount: match.teamCount,
+    teamNames: match.teamNames,
+    players: result.players,
+    playerTeams: result.playerTeams,
+    assignments: result.assignments,
+    waitlist: result.waitlist,
+  };
 
   const uid = getCurrentUserId();
   if (uid && match.organizerId === uid) {
@@ -118,6 +199,8 @@ async function persistRsvpState(
   } else {
     syncLocalPreMatchFromRoster(matchId, roster);
   }
+
+  return result;
 }
 
 function syncLocalPreMatchFromRoster(matchId: string, roster: MatchRosterData) {
@@ -198,50 +281,53 @@ export async function confirmPresence(
     }
   }
 
-  const waitlist: WaitlistEntry[] = [...(match.waitlist ?? [])];
-  const players: LivePlayer[] = [...(match.players ?? [])];
-  const playerTeams = { ...(match.playerTeams ?? {}) };
-
-  if (findPlayerIndex(players, userId) >= 0) return "confirmed";
-  if (findWaitlistIndex(waitlist, userId) >= 0) return "waitlist";
-
   const maxPlayers = getMaxPlayers(match, details?.maxPlayers);
 
-  const roster: MatchRosterData = {
-    gameMode: match.gameMode,
-    teamCount: match.teamCount,
-    teamNames: match.teamNames,
-    players,
-    playerTeams,
-    assignments: match.assignments ?? loadPreMatch(matchId)?.assignments ?? {},
-  };
+  // A decisão "já confirmado? já em espera? há vaga?" corre aqui dentro,
+  // sobre o `fresh` lido no momento da escrita — não sobre o `players`/
+  // `waitlist` de `match` (carregado no início da função, pode já estar
+  // desactualizado se outro dispositivo mexeu na pelada entretanto).
+  let outcome: "confirmed" | "waitlist" = "confirmed";
+  await persistRsvpMutation(matchId, match, (fresh) => {
+    if (findPlayerIndex(fresh.players, userId) >= 0) {
+      outcome = "confirmed";
+      return fresh;
+    }
+    if (findWaitlistIndex(fresh.waitlist, userId) >= 0) {
+      outcome = "waitlist";
+      return fresh;
+    }
 
-  if (players.length < maxPlayers) {
-    const newPlayer: LivePlayer = {
-      id: userId,
+    if (fresh.players.length < maxPlayers) {
+      const newPlayer: LivePlayer = {
+        id: userId,
+        userId,
+        name: profile.displayName.trim() || "Jogador",
+        position: profile.position || "MEI",
+        overall: profile.overall > MANUAL_PLAYER_OVR ? profile.overall : MANUAL_PLAYER_OVR,
+        paid: paymentsRequired && !isOrganizer ? true : false,
+        isMe: true,
+      };
+      outcome = "confirmed";
+      return {
+        ...fresh,
+        players: [...fresh.players, newPlayer],
+        playerTeams: { ...fresh.playerTeams, [userId]: "BENCH" },
+      };
+    }
+
+    const entry: WaitlistEntry = {
       userId,
       name: profile.displayName.trim() || "Jogador",
       position: profile.position || "MEI",
       overall: profile.overall > MANUAL_PLAYER_OVR ? profile.overall : MANUAL_PLAYER_OVR,
-      paid: paymentsRequired && !isOrganizer ? true : false,
-      isMe: true,
+      joinedAt: new Date().toISOString(),
     };
-    roster.players = [...players, newPlayer];
-    roster.playerTeams = { ...playerTeams, [userId]: "BENCH" };
-    await persistRsvpState(matchId, match, roster, waitlist);
-    return "confirmed";
-  }
+    outcome = "waitlist";
+    return { ...fresh, waitlist: [...fresh.waitlist, entry] };
+  });
 
-  const entry: WaitlistEntry = {
-    userId,
-    name: profile.displayName.trim() || "Jogador",
-    position: profile.position || "MEI",
-    overall: profile.overall > MANUAL_PLAYER_OVR ? profile.overall : MANUAL_PLAYER_OVR,
-    joinedAt: new Date().toISOString(),
-  };
-  waitlist.push(entry);
-  await persistRsvpState(matchId, match, roster, waitlist);
-  return "waitlist";
+  return outcome;
 }
 
 /** Sai da pelada ou da lista de espera */
@@ -252,47 +338,50 @@ export async function leaveMatch(matchId: string, userId: string): Promise<void>
     throw new Error("O organizador não pode sair da própria pelada.");
   }
 
-  const waitlist: WaitlistEntry[] = [...(match.waitlist ?? [])];
-  let players: LivePlayer[] = [...(match.players ?? [])];
-  const playerTeams = { ...(match.playerTeams ?? {}) };
-  const assignments = { ...(match.assignments ?? {}) };
+  // `freedSlot` só é true quando um jogador (não alguém em espera) sai —
+  // é a única situação em que vale a pena tentar promover da lista de
+  // espera a seguir. Capturado dentro de `mutate`, sobre o `fresh` lido no
+  // momento da escrita — mesma razão de ser do `outcome` em confirmPresence.
+  let freedSlot = false;
+  await persistRsvpMutation(matchId, match, (fresh) => {
+    const waitlist = [...fresh.waitlist];
+    const wlIdx = findWaitlistIndex(waitlist, userId);
+    if (wlIdx >= 0) {
+      waitlist.splice(wlIdx, 1);
+      freedSlot = false;
+      return { ...fresh, waitlist };
+    }
 
-  const wlIdx = findWaitlistIndex(waitlist, userId);
-  if (wlIdx >= 0) {
-    waitlist.splice(wlIdx, 1);
-    const roster: MatchRosterData = {
-      gameMode: match.gameMode,
-      teamCount: match.teamCount,
-      teamNames: match.teamNames,
-      players,
-      playerTeams,
-      assignments,
-    };
-    await persistRsvpState(matchId, match, roster, waitlist);
-    return;
+    const players = [...fresh.players];
+    const pIdx = findPlayerIndex(players, userId);
+    if (pIdx < 0) {
+      freedSlot = false;
+      return fresh;
+    }
+
+    const removedId = players[pIdx].id;
+    const nextPlayers = players.filter((_, i) => i !== pIdx);
+    const playerTeams = { ...fresh.playerTeams };
+    delete playerTeams[removedId];
+    const assignments = { ...fresh.assignments };
+    for (const key of Object.keys(assignments)) {
+      if (assignments[key] === removedId) assignments[key] = null;
+    }
+
+    freedSlot = true;
+    return { players: nextPlayers, playerTeams, assignments, waitlist };
+  });
+
+  if (freedSlot) {
+    // Passo "bónus" à parte — se falhar (ex: rede caiu mesmo depois do
+    // "sair" ter sido gravado com sucesso), não deve fazer esta função
+    // parecer ter falhado por inteiro nem accionar um revert no chamador.
+    try {
+      await promoteFromWaitlist(matchId);
+    } catch (err) {
+      console.warn("[matchRsvp] promoteFromWaitlist após leaveMatch:", err);
+    }
   }
-
-  const pIdx = findPlayerIndex(players, userId);
-  if (pIdx < 0) return;
-
-  const removedId = players[pIdx].id;
-  players = players.filter((_, i) => i !== pIdx);
-  delete playerTeams[removedId];
-  for (const key of Object.keys(assignments)) {
-    if (assignments[key] === removedId) assignments[key] = null;
-  }
-
-  const roster: MatchRosterData = {
-    gameMode: match.gameMode,
-    teamCount: match.teamCount,
-    teamNames: match.teamNames,
-    players,
-    playerTeams,
-    assignments,
-  };
-
-  await persistRsvpState(matchId, match, roster, waitlist);
-  await promoteFromWaitlist(matchId);
 }
 
 /** Promove o primeiro da lista de espera para o plantel */
@@ -300,35 +389,35 @@ export async function promoteFromWaitlist(matchId: string): Promise<WaitlistEntr
   const match = await loadMatchState(matchId);
   if (!match) return null;
 
-  const waitlist: WaitlistEntry[] = [...(match.waitlist ?? [])];
-  if (!waitlist.length) return null;
-
   const details = loadMatchDetails(matchId);
   const maxPlayers = getMaxPlayers(match, details?.maxPlayers);
-  const players: LivePlayer[] = [...(match.players ?? [])];
-  if (players.length >= maxPlayers) return null;
 
-  const promoted = waitlist.shift()!;
-  const playerTeams = { ...(match.playerTeams ?? {}) };
-  const newPlayer: LivePlayer = {
-    id: promoted.userId,
-    userId: promoted.userId,
-    name: promoted.name,
-    position: promoted.position,
-    overall: promoted.overall,
-    paid: false,
-  };
+  let promoted: WaitlistEntry | null = null;
+  await persistRsvpMutation(matchId, match, (fresh) => {
+    if (!fresh.waitlist.length || fresh.players.length >= maxPlayers) {
+      promoted = null;
+      return fresh;
+    }
 
-  const roster: MatchRosterData = {
-    gameMode: match.gameMode,
-    teamCount: match.teamCount,
-    teamNames: match.teamNames,
-    players: [...players, newPlayer],
-    playerTeams: { ...playerTeams, [promoted.userId]: "BENCH" },
-    assignments: match.assignments ?? {},
-  };
+    const waitlist = [...fresh.waitlist];
+    const entry = waitlist.shift()!;
+    promoted = entry;
+    const newPlayer: LivePlayer = {
+      id: entry.userId,
+      userId: entry.userId,
+      name: entry.name,
+      position: entry.position,
+      overall: entry.overall,
+      paid: false,
+    };
 
-  await persistRsvpState(matchId, match, roster, waitlist);
+    return {
+      players: [...fresh.players, newPlayer],
+      playerTeams: { ...fresh.playerTeams, [entry.userId]: "BENCH" },
+      assignments: fresh.assignments,
+      waitlist,
+    };
+  });
 
   return promoted;
 }
@@ -341,25 +430,24 @@ export async function removePlayerAndPromote(
   const match = await loadMatchState(matchId);
   if (!match) return;
 
-  const players = (match.players ?? []).filter((p) => p.id !== playerId);
-  const playerTeams = { ...(match.playerTeams ?? {}) };
-  delete playerTeams[playerId];
-  const assignments = { ...(match.assignments ?? {}) };
-  for (const key of Object.keys(assignments)) {
-    if (assignments[key] === playerId) assignments[key] = null;
+  await persistRsvpMutation(matchId, match, (fresh) => {
+    const players = fresh.players.filter((p) => p.id !== playerId);
+    const playerTeams = { ...fresh.playerTeams };
+    delete playerTeams[playerId];
+    const assignments = { ...fresh.assignments };
+    for (const key of Object.keys(assignments)) {
+      if (assignments[key] === playerId) assignments[key] = null;
+    }
+    return { players, playerTeams, assignments, waitlist: fresh.waitlist };
+  });
+
+  // Idem leaveMatch — não deixar uma falha aqui parecer que a remoção
+  // (já gravada) falhou.
+  try {
+    await promoteFromWaitlist(matchId);
+  } catch (err) {
+    console.warn("[matchRsvp] promoteFromWaitlist após removePlayerAndPromote:", err);
   }
-
-  const roster: MatchRosterData = {
-    gameMode: match.gameMode,
-    teamCount: match.teamCount,
-    teamNames: match.teamNames,
-    players,
-    playerTeams,
-    assignments,
-  };
-
-  await persistRsvpState(matchId, match, roster, match.waitlist ?? []);
-  await promoteFromWaitlist(matchId);
 }
 
 export async function isCommunityMember(communityId: string, userId: string): Promise<boolean> {

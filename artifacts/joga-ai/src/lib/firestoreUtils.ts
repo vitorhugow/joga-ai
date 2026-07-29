@@ -5,6 +5,17 @@ function isFirestoreFieldValue(value: unknown): boolean {
   return Boolean(value && typeof value === "object" && "_methodName" in (value as object));
 }
 
+/**
+ * runTransaction() (ao contrário de setDoc/updateDoc) não tem suporte a
+ * persistentLocalCache — não fica em fila offline, falha logo com um destes
+ * códigos quando não há ligação ao servidor. Usar para dar uma mensagem
+ * clara em vez do texto cru do Firebase.
+ */
+export function isOfflineFirestoreError(err: unknown): boolean {
+  const code = (err as { code?: string })?.code;
+  return code === "unavailable" || code === "deadline-exceeded";
+}
+
 /** Converte Timestamp/string do Firestore para ISO — evita parseSavedAt=0 no merge. */
 export function coerceFirestoreTimestampToIso(value: unknown): string {
   if (!value) return new Date().toISOString();

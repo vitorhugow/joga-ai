@@ -606,7 +606,7 @@ export type MatchRosterData = {
 export async function saveMatchRoster(
   matchId: string,
   roster: MatchRosterData,
-  options?: { throwOnError?: boolean; forceRosterPatch?: boolean },
+  options?: { throwOnError?: boolean },
 ): Promise<void> {
   const now = new Date().toISOString();
 

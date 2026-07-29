@@ -733,15 +733,6 @@ export default function PreJogo() {
     }) => {
       if (!matchId || !canManageMatch) return false;
 
-      const orgId = organizerIdRef.current;
-      const delegateWrite = Boolean(
-        userId && orgId && userId !== orgId &&
-        isUserLiveController(userId, {
-          liveControllerIds: liveControllerIdsRef.current,
-          organizerId: orgId,
-        }),
-      );
-
       lastLocalRosterWriteMs.current = Date.now();
       skipNextPersist.current = true;
       setSetupSyncState("saving");
@@ -759,7 +750,6 @@ export default function PreJogo() {
           },
           {
             throwOnError: true,
-            forceRosterPatch: delegateWrite,
           },
         );
         setSetupSyncState("saved");
@@ -779,7 +769,7 @@ export default function PreJogo() {
         }, 700);
       }
     },
-    [matchId, canManageMatch, waitlist, userId, teamNames],
+    [matchId, canManageMatch, waitlist, teamNames],
   );
 
   const teamSetupWarning = useMemo(() => {
@@ -849,30 +839,17 @@ export default function PreJogo() {
   const persistRoster = useCallback(() => {
     if (!matchId || skipNextPersist.current || !canManageMatch) return;
 
-    const orgId = organizerIdRef.current;
-    const delegateWrite = Boolean(
-      userId && orgId && userId !== orgId &&
-      isUserLiveController(userId, {
-        liveControllerIds: liveControllerIdsRef.current,
-        organizerId: orgId,
-      }),
-    );
-
     setSetupSyncState("saving");
-    void saveMatchRoster(
-      matchId,
-      {
-        gameMode,
-        teamCount,
-        teamNames,
-        players,
-        playerTeams,
-        assignments,
-        waitlist,
-      },
-      { forceRosterPatch: delegateWrite },
-    ).then(() => setSetupSyncState("saved"));
-  }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist, canManageMatch, userId, teamNames]);
+    void saveMatchRoster(matchId, {
+      gameMode,
+      teamCount,
+      teamNames,
+      players,
+      playerTeams,
+      assignments,
+      waitlist,
+    }).then(() => setSetupSyncState("saved"));
+  }, [matchId, gameMode, teamCount, players, playerTeams, assignments, waitlist, canManageMatch, teamNames]);
 
   useEffect(() => {
     if (!rosterHydrated) return;
@@ -1355,6 +1332,10 @@ export default function PreJogo() {
   }
 
   function removePlayer(playerId: string) {
+    const previousPlayers = players;
+    const previousAssignments = assignments;
+    const previousPlayerTeams = playerTeams;
+
     const nextPlayers = players.filter((player) => player.id !== playerId);
     const nextAssignments = { ...assignments };
     for (const key of Object.keys(nextAssignments)) {
@@ -1368,13 +1349,29 @@ export default function PreJogo() {
     setPlayerTeams(nextTeams);
 
     if (canManageMatch) {
-      void removePlayerAndPromote(matchId, playerId).then(async () => {
-        // preferRemote: true — o Firestore já reflete a remoção que acabámos
-        // de escrever; sem isto, o merge local-vs-remoto podia preferir uma
-        // cópia local ainda desatualizada e "ressuscitar" o jogador.
-        const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
-        if (merged?.waitlist) setWaitlist(merged.waitlist);
-      });
+      void removePlayerAndPromote(matchId, playerId)
+        .then(async () => {
+          // preferRemote: true — o Firestore já reflete a remoção que acabámos
+          // de escrever; sem isto, o merge local-vs-remoto podia preferir uma
+          // cópia local ainda desatualizada e "ressuscitar" o jogador.
+          const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
+          if (merged?.waitlist) setWaitlist(merged.waitlist);
+        })
+        .catch((err) => {
+          // Reverte o optimismo acima — removePlayerAndPromote agora usa
+          // runTransaction, que ao contrário do updateDoc anterior não fica
+          // em fila offline: falha logo, e sem isto a UI ficava a mostrar o
+          // jogador removido mesmo que o servidor nunca tenha aceitado.
+          console.warn("[PreJogo] removePlayerAndPromote:", err);
+          setPlayers(previousPlayers);
+          setAssignments(previousAssignments);
+          setPlayerTeams(previousPlayerTeams);
+          toast({
+            title: "Não foi possível remover o jogador",
+            description: err instanceof Error ? err.message : "Tenta novamente.",
+            variant: "destructive",
+          });
+        });
     } else {
       void persistRosterImmediate({
         players: nextPlayers,

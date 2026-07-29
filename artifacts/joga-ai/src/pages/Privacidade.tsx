@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { JogaPage } from "@/components/joga";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const SECTIONS = [
   {
@@ -199,6 +200,10 @@ const SECTIONS = [
 ];
 
 export default function Privacidade() {
+  usePageMeta({
+    title: "Privacidade",
+    description: "Política de privacidade do Joga AI — como tratamos os teus dados.",
+  });
   return (
     <JogaPage theme="dark" className="py-5 max-w-lg mx-auto space-y-5">
       <div className="flex items-center gap-3">

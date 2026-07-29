@@ -8,7 +8,7 @@ import {
   type Tournament,
   type TournamentTeam,
 } from "@/lib/tournamentRepository";
-import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const PITCH_BG = `url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40 L80 40' stroke='rgba(255,255,255,0.04)' stroke-width='1'/%3E%3Ccircle cx='40' cy='40' r='20' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`;
 
@@ -28,7 +28,10 @@ export default function JogaAiCup() {
   const [teams, setTeams] = useState<TournamentTeam[]>([]);
   const [loadedConfig, setLoadedConfig] = useState(false);
 
-  useDocumentTitle(tournament?.name ?? "Joga Aí Cup");
+  usePageMeta({
+    title: tournament?.name ?? "Joga Aí Cup",
+    description: tournament?.landing?.heroDescription || FALLBACK_DESCRIPTION,
+  });
 
   useEffect(() => {
     let cancelled = false;

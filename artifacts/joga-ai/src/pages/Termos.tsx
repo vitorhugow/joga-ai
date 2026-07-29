@@ -1,8 +1,13 @@
 import { Link } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { JogaPage } from "@/components/joga";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 export default function Termos() {
+  usePageMeta({
+    title: "Termos",
+    description: "Termos e condições de utilização do Joga AI.",
+  });
   return (
     <JogaPage theme="dark" className="py-5 max-w-lg mx-auto space-y-5">
       <div className="flex items-center gap-3">

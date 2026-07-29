@@ -7,7 +7,7 @@ import { loadMyCommunities, type Community } from "@/lib/communityRepository";
 import { useEffect, useRef, useState } from "react";
 import { JogaButton, JogaPage } from "@/components/joga";
 import { JogaLogo } from "@/components/brand";
-import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { trackEvent } from "@/lib/analytics";
 import { monthlyEquivalentFromAnnual, PRICING } from "@/lib/entitlements";
 import type { EntitlementPlan } from "@/lib/entitlements";
@@ -156,7 +156,10 @@ export default function Premium() {
   const [activatingPlan, setActivatingPlan] = useState<EntitlementPlan | null>(null);
   const checkoutHandled = useRef(false);
   const subscriptionPanelRef = useRef<HTMLDivElement>(null);
-  useDocumentTitle("Premium");
+  usePageMeta({
+    title: "Premium",
+    description: "PRO Jogador e Clube PRO — stats avançadas, histórico completo, skins premium e ferramentas de organização para o teu clube.",
+  });
 
   // Quem já tem PRO Jogador + Clube PRO não tem mais nenhum plano para ver —
   // ao entrar em /premium (ex.: clicar em "Premium" no topo), vai direto para

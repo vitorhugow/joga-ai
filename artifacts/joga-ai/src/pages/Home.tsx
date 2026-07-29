@@ -16,6 +16,7 @@ import { matchSummaryPath } from "@/lib/voteStatusRepository";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAuthGate } from "@/contexts/AuthGateContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { profileToPlayerCard } from "@/lib/userRepository";
 import { toast } from "@/hooks/use-toast";
 import { PlayerCard } from "@/components/PlayerCard";
@@ -64,6 +65,11 @@ function CommunityPill({ c }: { c: { id: string; name: string; memberCount: numb
 }
 
 export default function Home() {
+  // Sem title: o "Joga AI" estático do index.html já é o título certo para
+  // a raiz — usePageMeta sufixaria " · Joga AI" e duplicava a marca.
+  usePageMeta({
+    description: "Organiza peladas, monta a tua carta FIFA e evolui a cada jogo com o Joga AI.",
+  });
   const { isLinked, loading: authLoading, userId } = useAuth();
   const { openAuth, requireLinked } = useAuthGate();
   const { profile, needsSetup } = useUserProfile();

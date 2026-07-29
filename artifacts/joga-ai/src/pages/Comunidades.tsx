@@ -12,7 +12,7 @@ import { useAuthGate } from "@/contexts/AuthGateContext";
 import { JogaChip, JogaPage } from "@/components/joga";
 import { ClubCrest } from "@/components/ClubCrest";
 import { imageDisplaySrc, resolveCommunityCover } from "@/lib/imageUtils";
-import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const gameTypeLabel: Record<string, string> = {
   futsal: "Futsal",
@@ -139,7 +139,10 @@ function CommunityCard({
 }
 
 export default function Comunidades() {
-  useDocumentTitle("Clubes");
+  usePageMeta({
+    title: "Clubes",
+    description: "Descobre clubes e comunidades de futebol amador, junta-te e acompanha rankings, estatísticas e peladas.",
+  });
   const { userId } = useAuth();
   const { requireLinked } = useAuthGate();
   const [, setLocation] = useLocation();

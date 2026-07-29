@@ -15,7 +15,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const GENERIC_PLAYER_PHOTO = "/landing/player-generic.png";
 
@@ -680,7 +680,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function Login() {
-  useDocumentTitle("Entrar");
+  usePageMeta({
+    title: "Entrar",
+    description: "Entra ou cria conta no Joga AI para montar a tua carta, organizar peladas e evoluir a cada jogo.",
+  });
   const { isLinked, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [loginOpen, setLoginOpen] = useState(false);

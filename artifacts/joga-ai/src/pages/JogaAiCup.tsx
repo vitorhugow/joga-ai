@@ -55,26 +55,18 @@ export default function JogaAiCup() {
     };
   }, [tournamentId]);
 
-  if (loadedConfig && !tournamentId) {
-    return (
-      <JogaPage theme="dark" className="py-16 text-center">
-        <p className="text-white/50">Ainda não há nenhum torneio ativo.</p>
-      </JogaPage>
-    );
-  }
-
-  if (!tournament) {
-    return (
-      <JogaPage theme="dark" className="py-16 text-center">
-        <p className="text-white/50">A carregar…</p>
-      </JogaPage>
-    );
-  }
-
-  const heroDescription = tournament.landing?.heroDescription || FALLBACK_DESCRIPTION;
-  const rules = tournament.landing?.rules?.length ? tournament.landing.rules : FALLBACK_RULES;
-  const maxTimes = tournament.registration?.maxTimes ?? 8;
-  const registrationOpen = tournament.registration?.aberta ?? false;
+  // Tudo abaixo usa tournament?.campo com fallback — nunca bloqueia a
+  // página inteira à espera do Firestore. O Googlebot não completa a
+  // ligação de streaming do Firestore (Listen/channel) no seu ambiente de
+  // render; a página ficava presa em "A carregar…" para sempre aos olhos
+  // dele (visto no Search Console). Só o contador de inscrições, no fundo,
+  // fica com um estado de carregamento próprio, escrito mais abaixo.
+  const heroDescription = tournament?.landing?.heroDescription || FALLBACK_DESCRIPTION;
+  const rules = tournament?.landing?.rules?.length ? tournament.landing.rules : FALLBACK_RULES;
+  const maxTimes = tournament?.registration?.maxTimes ?? 8;
+  const registrationOpen = tournament?.registration?.aberta ?? false;
+  const noActiveTournament = loadedConfig && !tournamentId;
+  const loadingTournament = !noActiveTournament && !tournament;
 
   return (
     <JogaPage theme="dark" padded={false}>
@@ -118,12 +110,12 @@ export default function JogaAiCup() {
             className="font-black uppercase leading-[0.92] text-[46px] tracking-tight mt-2"
             style={{ color: "#f1d477", textShadow: "0 2px 5px rgba(0,0,0,.75), 0 1px 1px rgba(0,0,0,.6)" }}
           >
-            {tournament.name}
+            {tournament?.name ?? "Joga Aí Cup"}
           </h1>
           <div className="flex items-center gap-2.5 mt-3">
             <span className="h-px w-6" style={{ background: "linear-gradient(90deg,#12d16a,transparent)" }} />
             <span className="text-[17px] font-bold" style={{ color: "#eaf3ed" }}>
-              Edição <b style={{ color: "#12d16a" }}>{tournament.edition || "Entre Igrejas"}</b>
+              Edição <b style={{ color: "#12d16a" }}>{tournament?.edition || "Entre Igrejas"}</b>
             </span>
           </div>
           <p className="mt-3.5 text-sm leading-relaxed max-w-[36ch]" style={{ color: "#cfdad4" }}>
@@ -142,6 +134,32 @@ export default function JogaAiCup() {
       </div>
 
       <div className="px-4 pt-5 space-y-3.5">
+        {/* Conteúdo estático, hardcoded — explica o torneio em geral, não
+            uma edição específica. Renderiza sempre, sem esperar por nada. */}
+        <section
+          className="rounded-2xl p-[18px]"
+          style={{ background: "#0e1512", border: "1px solid #1b2520" }}
+        >
+          <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.14em] mb-1">O torneio</p>
+          <h2 className="text-white text-xl font-black tracking-tight">O que é a Joga Aí Cup</h2>
+          <div className="mt-3 space-y-2.5 text-sm leading-relaxed" style={{ color: "#cfdad4" }}>
+            <p>
+              A Joga Aí Cup é o campeonato entre clubes do Joga AI — equipas
+              formadas por jogadores com carta na app competem em fase de
+              grupos seguida de eliminatórias diretas.
+            </p>
+            <p>
+              É para qualquer clube com jogadores ligados no Joga AI,
+              independentemente do nível — recreativo, misto ou competitivo.
+            </p>
+            <p>
+              Para participar, o organizador do clube inscreve a equipa
+              enquanto as inscrições estiverem abertas; número de vagas e
+              prazo variam por edição.
+            </p>
+          </div>
+        </section>
+
         <CupRegistrationSteps />
 
         <section
@@ -165,7 +183,18 @@ export default function JogaAiCup() {
           </ul>
         </section>
 
-        <CupCounter current={teams.length} max={maxTimes} />
+        {/* Único bloco que ainda depende do Firestore — inscrições reais
+            por equipa. Fica com o próprio estado de carregamento, nunca
+            bloqueia o resto da página. */}
+        {noActiveTournament ? (
+          <p className="text-white/50 text-sm text-center py-6">
+            Não há nenhuma edição com inscrições abertas neste momento — volta a espreitar em breve.
+          </p>
+        ) : loadingTournament ? (
+          <p className="text-white/40 text-sm text-center py-6">A carregar inscrições…</p>
+        ) : (
+          <CupCounter current={teams.length} max={maxTimes} />
+        )}
       </div>
     </JogaPage>
   );

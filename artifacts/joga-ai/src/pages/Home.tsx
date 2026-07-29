@@ -70,6 +70,22 @@ export default function Home() {
   usePageMeta({
     description: "Organiza peladas, monta a tua carta FIFA e evolui a cada jogo com o Joga AI.",
   });
+  // Preload da imagem do hero (loading="eager" logo abaixo) só enquanto a
+  // Home está montada — o index.html tinha isto fixo para todas as rotas,
+  // e o Search Console avisava "preloaded but not used" em quase todas
+  // (só Home carrega esta imagem eager; as outras páginas que a usam
+  // fazem loading="lazy", que preload contradiz).
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = "/home/hero-ball.webp";
+    link.type = "image/webp";
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, []);
   const { isLinked, loading: authLoading, userId } = useAuth();
   const { openAuth, requireLinked } = useAuthGate();
   const { profile, needsSetup } = useUserProfile();

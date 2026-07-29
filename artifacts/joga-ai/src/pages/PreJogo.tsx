@@ -26,10 +26,11 @@ import {
   ensureSetupMigrated,
   requestServerSetupMigration,
   subscribeToSetup,
+  updateSetupFields,
   type MatchSetupState,
 } from "@/lib/matchStateRepository";
 import { resetMatchFlowSession, resolveMatchId } from "@/lib/matchFlowStorage";
-import { loadMatchDetails, type MatchDetails } from "@/lib/matchRepository";
+import { loadMatchDetails, patchMatchRosterFields, type MatchDetails } from "@/lib/matchRepository";
 import { formatMatchPriceAmount } from "@/lib/formatMatchPrice";
 import { accessModeLabel, resolveAccessMode } from "@/lib/matchAccess";
 import { payPelada, leavePeladaMatch, openOrganizerCaixa, startConnectOnboarding } from "@/lib/peladaBilling";
@@ -214,6 +215,21 @@ function getSlotTeam(slotId: string): TeamKey {
 
 function getPlayerSlot(assignments: Record<string, string | null>, playerId: string) {
   return Object.entries(assignments).find(([, value]) => value === playerId)?.[0] || null;
+}
+
+/** Só as chaves cujo valor mudou entre `prev` e `next` — para gravar por dot-notation em vez do mapa inteiro. */
+function diffRecord<T>(prev: Record<string, T>, next: Record<string, T>): Record<string, T> {
+  const patch: Record<string, T> = {};
+  const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+  for (const key of keys) {
+    // Se uma chave existir em `prev` e não em `next`, entra aqui com valor
+    // undefined — e o updateDoc/setDoc rejeita a escrita inteira no cliente.
+    // Hoje é inalcançável (assignPlayerToSlot/clearSlot/moveToTeam nunca
+    // apagam chaves, só põem null/"BENCH"). Se alguma vez for preciso
+    // remover uma chave a sério, mapear undefined -> deleteField() aqui.
+    if (prev[key] !== next[key]) patch[key] = next[key];
+  }
+  return patch;
 }
 
 function getTeamSortRank(team?: PlayerStatus) {
@@ -772,6 +788,56 @@ export default function PreJogo() {
     [matchId, canManageMatch, waitlist, teamNames],
   );
 
+  /**
+   * Para mutações isoladas em playerTeams/assignments (mover 1 jogador de
+   * slot/equipa) — grava só as chaves que mudaram, nos dois documentos que
+   * as guardam (matches/{id} e matches/{id}/state/setup; ver investigação
+   * desta sessão), em vez do mapa inteiro via persistRosterImmediate. As
+   * duas escritas correm em paralelo: se uma falhar e a outra não, os dois
+   * documentos podem divergir brevemente — aceite aqui porque ambas passam
+   * pela mesma verificação de permissão (organizador/controlador), por isso
+   * falha parcial só é plausível em erro de rede transitório assimétrico.
+   * updateDoc/setDoc (ao contrário de runTransaction) continuam a beneficiar
+   * do persistentLocalCache — funcionam offline, ficam em fila.
+   */
+  const persistRosterFieldsImmediate = useCallback(
+    async (patch: {
+      playerTeams?: Record<string, PlayerStatus>;
+      assignments?: Record<string, string | null>;
+    }): Promise<boolean> => {
+      if (!matchId || !canManageMatch) return false;
+      if (!Object.keys(patch.playerTeams ?? {}).length && !Object.keys(patch.assignments ?? {}).length) {
+        return true;
+      }
+
+      lastLocalRosterWriteMs.current = Date.now();
+      skipNextPersist.current = true;
+      setSetupSyncState("saving");
+      try {
+        await Promise.all([
+          patchMatchRosterFields(matchId, patch),
+          updateSetupFields(matchId, patch),
+        ]);
+        setSetupSyncState("saved");
+        return true;
+      } catch (err) {
+        console.warn("[PreJogo] persistRosterFieldsImmediate:", err);
+        setSetupSyncState("saved");
+        toast({
+          title: "Não foi possível sincronizar o plantel",
+          description: "Verifica a ligação e tenta outra vez.",
+          variant: "destructive",
+        });
+        return false;
+      } finally {
+        window.setTimeout(() => {
+          skipNextPersist.current = false;
+        }, 700);
+      }
+    },
+    [matchId, canManageMatch],
+  );
+
   const teamSetupWarning = useMemo(() => {
     const emptyTeams = activeTeams.filter(
       (team) => !players.some((player) => playerTeams[player.id] === team),
@@ -903,6 +969,8 @@ export default function PreJogo() {
   function assignPlayerToSlot(slotId: string, playerId: string) {
     const team = getSlotTeam(slotId);
     const previousPlayerId = assignments[slotId];
+    const previousAssignments = assignments;
+    const previousPlayerTeams = playerTeams;
 
     const nextAssignments = { ...assignments };
     for (const key of Object.keys(nextAssignments)) {
@@ -921,14 +989,22 @@ export default function PreJogo() {
     setAssignments(nextAssignments);
     setPlayerTeams(nextPlayerTeams);
     setPickerSlot(null);
-    void persistRosterImmediate({
-      playerTeams: nextPlayerTeams,
-      assignments: nextAssignments,
+
+    void persistRosterFieldsImmediate({
+      playerTeams: diffRecord(previousPlayerTeams, nextPlayerTeams),
+      assignments: diffRecord(previousAssignments, nextAssignments),
+    }).then((ok) => {
+      if (!ok) {
+        setAssignments(previousAssignments);
+        setPlayerTeams(previousPlayerTeams);
+      }
     });
   }
 
   function clearSlot(slotId: string) {
     const currentPlayer = assignments[slotId];
+    const previousAssignments = assignments;
+    const previousPlayerTeams = playerTeams;
 
     const nextAssignments = {
       ...assignments,
@@ -943,13 +1019,20 @@ export default function PreJogo() {
     if (currentPlayer) setPlayerTeams(nextPlayerTeams);
     setPickerSlot(null);
 
-    void persistRosterImmediate({
-      playerTeams: nextPlayerTeams,
-      assignments: nextAssignments,
+    void persistRosterFieldsImmediate({
+      playerTeams: diffRecord(previousPlayerTeams, nextPlayerTeams),
+      assignments: diffRecord(previousAssignments, nextAssignments),
+    }).then((ok) => {
+      if (!ok) {
+        setAssignments(previousAssignments);
+        if (currentPlayer) setPlayerTeams(previousPlayerTeams);
+      }
     });
   }
 
   function moveToTeam(playerId: string, team: PlayerStatus) {
+    const previousAssignments = assignments;
+    const previousPlayerTeams = playerTeams;
     const nextAssignments = { ...assignments };
 
     for (const key of Object.keys(nextAssignments)) {
@@ -977,9 +1060,14 @@ export default function PreJogo() {
     };
     setPlayerTeams(nextPlayerTeams);
 
-    void persistRosterImmediate({
-      playerTeams: nextPlayerTeams,
-      assignments: nextAssignments,
+    void persistRosterFieldsImmediate({
+      playerTeams: diffRecord(previousPlayerTeams, nextPlayerTeams),
+      assignments: diffRecord(previousAssignments, nextAssignments),
+    }).then((ok) => {
+      if (!ok) {
+        setAssignments(previousAssignments);
+        setPlayerTeams(previousPlayerTeams);
+      }
     });
   }
 
@@ -1348,37 +1436,29 @@ export default function PreJogo() {
     setAssignments(nextAssignments);
     setPlayerTeams(nextTeams);
 
-    if (canManageMatch) {
-      void removePlayerAndPromote(matchId, playerId)
-        .then(async () => {
-          // preferRemote: true — o Firestore já reflete a remoção que acabámos
-          // de escrever; sem isto, o merge local-vs-remoto podia preferir uma
-          // cópia local ainda desatualizada e "ressuscitar" o jogador.
-          const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
-          if (merged?.waitlist) setWaitlist(merged.waitlist);
-        })
-        .catch((err) => {
-          // Reverte o optimismo acima — removePlayerAndPromote agora usa
-          // runTransaction, que ao contrário do updateDoc anterior não fica
-          // em fila offline: falha logo, e sem isto a UI ficava a mostrar o
-          // jogador removido mesmo que o servidor nunca tenha aceitado.
-          console.warn("[PreJogo] removePlayerAndPromote:", err);
-          setPlayers(previousPlayers);
-          setAssignments(previousAssignments);
-          setPlayerTeams(previousPlayerTeams);
-          toast({
-            title: "Não foi possível remover o jogador",
-            description: err instanceof Error ? err.message : "Tenta novamente.",
-            variant: "destructive",
-          });
+    void removePlayerAndPromote(matchId, playerId)
+      .then(async () => {
+        // preferRemote: true — o Firestore já reflete a remoção que acabámos
+        // de escrever; sem isto, o merge local-vs-remoto podia preferir uma
+        // cópia local ainda desatualizada e "ressuscitar" o jogador.
+        const merged = await loadMatchFromFirestore(matchId, { preferRemote: true });
+        if (merged?.waitlist) setWaitlist(merged.waitlist);
+      })
+      .catch((err) => {
+        // Reverte o optimismo acima — removePlayerAndPromote agora usa
+        // runTransaction, que ao contrário do updateDoc anterior não fica
+        // em fila offline: falha logo, e sem isto a UI ficava a mostrar o
+        // jogador removido mesmo que o servidor nunca tenha aceitado.
+        console.warn("[PreJogo] removePlayerAndPromote:", err);
+        setPlayers(previousPlayers);
+        setAssignments(previousAssignments);
+        setPlayerTeams(previousPlayerTeams);
+        toast({
+          title: "Não foi possível remover o jogador",
+          description: err instanceof Error ? err.message : "Tenta novamente.",
+          variant: "destructive",
         });
-    } else {
-      void persistRosterImmediate({
-        players: nextPlayers,
-        playerTeams: nextTeams,
-        assignments: nextAssignments,
       });
-    }
   }
 
   async function handleRemovePlayer(playerId: string, playerName: string) {

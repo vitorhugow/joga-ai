@@ -45,6 +45,7 @@ const planFeatures = {
     "Histórico completo de partidas com filtros",
     "Evolução sem limite de 90 dias",
     "Título/alcunha e campo Instagram na carta",
+    "Apelido automático a cada pelada",
     "Download da carta em HD (4x)",
   ],
 };
